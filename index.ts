@@ -45,8 +45,9 @@ const root: Group = {
         void main() {
           vec2 uv = vec2(v_pos.x, v_pos.y * iResolution.y / iResolution.x);
           float r = length(uv);
-          float theta = atan(uv.y, uv.x);   
-          gl_FragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - iTime) < 0.5 ? vec4(1.0) : vec4(0.0,0.0,0.0,1.0);
+          float theta = atan(uv.y, uv.x);
+          vec4 prev = texture2D(previousLayer, (v_pos.yx + vec2(1.0, 1.0)) * 0.5);
+          gl_FragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - iTime) < 0.5 ? vec4(1.0) : prev;
         }
       `,
       blendMode: "normal",
@@ -64,7 +65,8 @@ const root: Group = {
         void main() {
           float radians = (v_pos.y * 0.5 + 0.5 + iTime) * (2.0 * 3.14159265359) * lines;
           float value = sin(radians);
-          gl_FragColor = vec4(vec3(value), 1.0);
+          vec4 prev = texture2D(previousLayer, (v_pos.xy + vec2(1.0, 1.0)) * 0.5);
+          gl_FragColor = vec4(vec3(value), 1.0) + prev;
         }
       `,
       blendMode: "normal",
