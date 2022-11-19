@@ -55,43 +55,6 @@ interface RenderTarget {
   buffer: WebGLFramebuffer;
 }
 
-const textureCache: Record<string, WebGLTexture> = {};
-const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
-  const foundTexture = textureCache[url];
-  if (foundTexture) {
-    return foundTexture;
-  }
-
-  const texture = gl.createTexture();
-  if (!texture) {
-    throw new Error("Unable to create RenderTarget WebGLTexture");
-  }
-  textureCache[url] = texture;
-
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-  (async () => {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const img = document.createElement("img");
-    img.onload = () => {
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      URL.revokeObjectURL(objectUrl);
-    };
-    img.src = objectUrl;
-  })();
-
-  return texture;
-}
-
 const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   // Handle default values when undefined
   if (value === undefined) {
@@ -119,11 +82,14 @@ const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
+export type GetTextureFunction = (url: string, gl: WebGLRenderingContext) => WebGLTexture;
+
 export class RaverieVisualizer {
   private width: number;
   private height: number;
   private readonly gl: WebGLRenderingContext;
   private readonly renderTargets: [RenderTarget, RenderTarget];
+  private readonly getTexture: GetTextureFunction;
 
   private compiledGroup: CompiledGroup | null = null;
 
@@ -131,10 +97,11 @@ export class RaverieVisualizer {
   private readonly copyProgram: WebGLProgram;
   private readonly textureToCopy: WebGLUniformLocation;
 
-  public constructor(gl: WebGLRenderingContext, width: number, height: number) {
+  public constructor(gl: WebGLRenderingContext, getTexture: GetTextureFunction, width: number, height: number) {
+    this.gl = gl;
+    this.getTexture = getTexture;
     this.width = width;
     this.height = height;
-    this.gl = gl;
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
@@ -382,7 +349,7 @@ export class RaverieVisualizer {
             break;
           case "sampler2D": {
             const shaderTexture = validatedValue as ShaderTexture;
-            const texture = getTexture(shaderTexture.url, gl);
+            const texture = this.getTexture(shaderTexture.url, gl);
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(uniform.location, textureSamplerIndex);

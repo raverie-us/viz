@@ -86,7 +86,44 @@ if (!gl) {
   throw new Error("Unable to initialze WebGl");
 }
 
-const visualizer = new RaverieVisualizer(gl, canvas.width, canvas.height);
+const textureCache: Record<string, WebGLTexture> = {};
+const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
+  const foundTexture = textureCache[url];
+  if (foundTexture) {
+    return foundTexture;
+  }
+
+  const texture = gl.createTexture();
+  if (!texture) {
+    throw new Error("Unable to create RenderTarget WebGLTexture");
+  }
+  textureCache[url] = texture;
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  (async () => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const img = document.createElement("img");
+    img.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
+  })();
+
+  return texture;
+}
+
+const visualizer = new RaverieVisualizer(gl, getTexture, canvas.width, canvas.height);
 visualizer.compile(root);
 
 const onUpdate = () => {
