@@ -41,7 +41,7 @@ const root: Group = {
     {
       type: "shader",
       code: `
-        uniform float centerWarp; // [0,1]
+        uniform float centerWarp; // default: 0.4
         void main() {
           vec2 uv = vec2(v_pos.x, v_pos.y * iResolution.y / iResolution.x);
           float r = length(uv);
@@ -60,7 +60,7 @@ const root: Group = {
     {
       type: "shader",
       code: `
-        uniform float lines; // [0,1)
+        uniform float lines; // default: 3
         void main() {
           float radians = (v_pos.y * 0.5 + 0.5 + iTime) * (2.0 * 3.14159265359) * lines;
           float value = sin(radians);
@@ -94,20 +94,41 @@ const root: Group = {
   ]
 };
 
-type CompiledUniformGlslType = "float";
+type GLSLType = "float";
+type TSType = number;
 interface CompiledUniform {
   name: string;
-  type: CompiledUniformGlslType;
+  type: GLSLType;
   location: WebGLUniformLocation;
-  // min
-  // max
-  // default
+  defaultValue: TSType;
+  minValue?: TSType;
+  maxValue?: TSType;
+}
+
+interface ParsedComment {
+  default?: TSType;
+  min?: TSType;
+  max?: TSType;
 }
 
 interface CompiledShaderLayer {
   shaderLayer: ShaderLayer;
   uniforms: CompiledUniform[];
   program: WebGLProgram;
+}
+
+const validateGLSLValue = (glslType: GLSLType, value: any): TSType  => {
+  // Handle default values when undefined
+  if (value === undefined) {
+    switch (glslType) {
+      case "float": return 0;
+    }
+  }
+
+  switch (glslType) {
+    case "float": return Number(value);
+  }
+  throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
 const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
@@ -200,7 +221,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
     const program = createProgram(vertexShader, `${fragmentShaderHeader}\n${shaderLayer.code}`);
 
-    const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gum;
+    const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
     
     const uniforms: CompiledUniform[] = [];
 
@@ -217,10 +238,39 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
         throw new Error(`Unable to find uniform of name '${name}'`);
       }
 
+      let parsedComment: ParsedComment = {};
+
+      const afterUniform = result[3];
+      const commentStart = afterUniform.indexOf("//");
+      if (commentStart !== -1) {
+        // Check if we can parse the comment as JSON (skip 2 characters for the //)
+        const commentText = afterUniform.substring(commentStart + 2);
+        const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*/gum, (found) => {
+          if (found === "true" || found === "false") {
+            return found;
+          }
+          return `"${found}"`;
+        });
+
+        const json = `{${innerJson}}`;
+        try {
+          parsedComment = JSON.parse(json);
+        } catch {
+        }
+      }
+
+      const type = result[1] as GLSLType;
+      const defaultValue = validateGLSLValue(type, parsedComment.default);
+      const minValue = validateGLSLValue(type, parsedComment.min);
+      const maxValue = validateGLSLValue(type, parsedComment.max);
+
       uniforms.push({
-        type: result[1] as CompiledUniformGlslType,
+        type,
         name,
-        location
+        location,
+        defaultValue,
+        minValue,
+        maxValue
       });
     }
 
