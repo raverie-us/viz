@@ -172,10 +172,11 @@ export class RaverieVisualizer {
       gl.shaderSource(shader, str);
       gl.compileShader(shader);
 
-      const status = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-      console.log('Shader compile status:', status);
-      const compilationLog = gl.getShaderInfoLog(shader);
-      console.log('Shader compiler log:', compilationLog);
+      const status = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
+      if (!status) {
+        const compilationLog = gl.getShaderInfoLog(shader);
+        console.error('Shader compiler log:', compilationLog);
+      }
       return shader;
     }
 
