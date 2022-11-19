@@ -37,7 +37,7 @@ const root: Group = {
           vec2 uv = vec2(v_pos.x, v_pos.y * iResolution.y / iResolution.x);
           float r = length(uv);
           float theta = atan(uv.y, uv.x);
-          vec4 prev = texture2D(previousLayer, (v_pos.yx + vec2(1.0, 1.0)) * 0.5);
+          vec4 prev = texture2D(previousLayer, (v_pos.xy + vec2(1.0, 1.0)) * 0.5);
           gl_FragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - iTime) < 0.5 ? vec4(1.0) : prev;
         }
       `,
@@ -154,11 +154,19 @@ interface RenderTarget {
   buffer: WebGLFramebuffer;
 }
 
+const textureCache: Record<string, WebGLTexture> = {};
 const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
+  const foundTexture = textureCache[url];
+  if (foundTexture) {
+    return foundTexture;
+  }
+
   const texture = gl.createTexture();
   if (!texture){
     throw new Error("Unable to create RenderTarget WebGLTexture");
   }
+  textureCache[url] = texture;
+
   gl.bindTexture(gl.TEXTURE_2D, texture);
 
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -166,21 +174,20 @@ const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
   (async () => {
     const response = await fetch(url);
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
     const img = document.createElement("img");
     img.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, img);
+      gl.generateMipmap(gl.TEXTURE_2D);
       URL.revokeObjectURL(objectUrl);
     };
     img.src = objectUrl;
   })();
 
-  gl.generateMipmap(gl.TEXTURE_2D);
   return texture;
 }
 
@@ -216,6 +223,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   if (!gl) {
     return false;
   }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
   const vertexPosBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
@@ -249,7 +257,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   varying vec2 v_pos;
   uniform sampler2D textureToCopy;
   void main() {
-    gl_FragColor = texture2D(textureToCopy, (v_pos.yx + vec2(1.0, 1.0)) * 0.5);
+    gl_FragColor = texture2D(textureToCopy, (v_pos.xy + vec2(1.0, 1.0)) * 0.5);
   }
   `;
 
