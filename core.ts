@@ -18,8 +18,8 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 type GLSLType = "float" | "sampler2D";
 
 interface CompiledUniform {
-  name: string;
   type: GLSLType;
+  name: string;
   location: WebGLUniformLocation;
   defaultValue: ShaderType;
   minValue?: ShaderType;
