@@ -115,6 +115,10 @@ interface CompiledShaderLayer {
   shaderLayer: ShaderLayer;
   uniforms: CompiledUniform[];
   program: WebGLProgram;
+  
+  // Global uniforms
+  iResolution: WebGLUniformLocation;
+  iTime: WebGLUniformLocation;
 }
 
 interface RenderTarget {
@@ -151,6 +155,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     +1, +1, // Top right
   ];
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
   const vertexShader = `
     attribute vec2 pos;
     varying vec2 v_pos;
@@ -177,7 +182,10 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   `;
 
   const createShader = (str: string, type: GLenum) => {
-    const shader = gl.createShader(type)!;
+    const shader = gl.createShader(type);
+    if (!shader) {
+      throw new Error("Unable to create WebGLShader");
+    }
     gl.shaderSource(shader, str);
     gl.compileShader(shader);
 
@@ -189,7 +197,10 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   }
 
   const createProgram = (vstr: string, fstr: string) => {
-    const program = gl.createProgram()!;
+    const program = gl.createProgram();
+    if (!program) {
+      throw new Error("Unable to create WebGLProgram");
+    }
     const vshader = createShader(vstr, gl.VERTEX_SHADER);
     const fshader = createShader(fstr, gl.FRAGMENT_SHADER);
     gl.attachShader(program, vshader);
@@ -230,6 +241,10 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
 
   const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
     const program = createProgram(vertexShader, `${fragmentShaderHeader}\n${shaderLayer.code}`);
+
+    const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
+    gl.enableVertexAttribArray(vertexPosAttrib);
+    gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
     const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
     
@@ -284,42 +299,55 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
       });
     }
 
+    const getGlobalUniform = (uniformName: string): WebGLUniformLocation => {
+      const location = gl.getUniformLocation(program, uniformName);
+      if (!location) {
+        throw new Error(`Unable to find global uniform of name '${uniformName}'`);
+      }
+      return location;
+    }
+
     return {
       shaderLayer,
       uniforms,
-      program
+      program,
+      iResolution: getGlobalUniform("iResolution"),
+      iTime: getGlobalUniform("iTime"),
     }
   }
 
+  const renderShaderLayer = (compiledShaderLayer: CompiledShaderLayer, renderTarget: RenderTarget) => {
+    gl.useProgram(compiledShaderLayer.program);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
+    
+    // Apply global uniforms
+    gl.uniform2f(compiledShaderLayer.iResolution, canvas.width, canvas.height);
+    gl.uniform1f(compiledShaderLayer.iTime, performance.now() / 1000);
+    
+    // Apply layer uniforms
+    for (const uniform of compiledShaderLayer.uniforms) {
+      const value = compiledShaderLayer.shaderLayer.values[uniform.name];
+      const validatedValue = validateGLSLValue(uniform.type, value);
+      switch (uniform.type){
+        case "float":
+          gl.uniform1f(uniform.location, validatedValue as number);
+          break;
+        default: throw new Error(`Unexpected GLSL type '${uniform.type}'`)
+      }
+    }
 
-  const compiledShaderLayer = compileShaderLayer(root.layers[0] as ShaderLayer);
-  const program = compiledShaderLayer.program;
-
-  const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
-  gl.enableVertexAttribArray(vertexPosAttrib);
-  gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
-
-  const iResolution = gl.getUniformLocation(program, 'iResolution');
-  const iTime = gl.getUniformLocation(program, 'iTime');
-
-
-  const lines = gl.getUniformLocation(program, 'lines');
-
-  const fb = createFramebuffer(canvas.width, canvas.height);
-
-
-  const programCopy = createProgram(vertexShader, fsCopy);
-
-  setInterval(() => {
-    gl.useProgram(program);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fb.buffer);
-    gl.uniform2f(iResolution, canvas.width, canvas.height);
-    gl.uniform1f(iTime, performance.now() / 1000);
-    gl.uniform1f(lines, 3);
     gl.clearColor(0, 0, 0.5, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  const compiledShaderLayer = compileShaderLayer(root.layers[0] as ShaderLayer);
+  const renderTarget = createRenderTarget(canvas.width, canvas.height);
+  const programCopy = createProgram(vertexShader, fsCopy);
+
+  setInterval(() => {
+    renderShaderLayer(compiledShaderLayer, renderTarget);
 
     gl.useProgram(programCopy);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
