@@ -96,8 +96,11 @@ const root: Group = {
   ]
 };
 
+// tags: <types>
 type GLSLType = "float";
+// tags: <types>
 type TSType = number;
+
 interface CompiledUniform {
   name: string;
   type: GLSLType;
@@ -139,11 +142,13 @@ interface RenderTarget {
 const validateGLSLValue = (glslType: GLSLType, value: any): TSType  => {
   // Handle default values when undefined
   if (value === undefined) {
+    // tags: <types>
     switch (glslType) {
       case "float": return 0;
     }
   }
 
+  // tags: <types>
   switch (glslType) {
     case "float": return Number(value);
   }
@@ -258,6 +263,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.enableVertexAttribArray(vertexPosAttrib);
     gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
+    // tags: <types>
     const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
     
     const uniforms: CompiledUniform[] = [];
@@ -359,6 +365,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     for (const uniform of compiledShaderLayer.uniforms) {
       const value = compiledShaderLayer.shaderLayer.values[uniform.name];
       const validatedValue = validateGLSLValue(uniform.type, value);
+      // tags: <types>
       switch (uniform.type){
         case "float":
           gl.uniform1f(uniform.location, validatedValue as number);
