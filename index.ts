@@ -117,6 +117,11 @@ interface CompiledShaderLayer {
   program: WebGLProgram;
 }
 
+interface RenderTarget {
+  texture: WebGLTexture;
+  buffer: WebGLFramebuffer;
+}
+
 const validateGLSLValue = (glslType: GLSLType, value: any): TSType  => {
   // Handle default values when undefined
   if (value === undefined) {
@@ -205,11 +210,16 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     return texture;
   }
 
-  const createFramebuffer = (width: number, height: number) => {
+  const createRenderTarget = (width: number, height: number): RenderTarget => {
     const buffer = gl.createFramebuffer();
-    //bind framebuffer to texture
+    if (!buffer){
+      throw new Error("Unable to create RenderTarget WebGLFramebuffer");
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
     const texture = createTexture(width, height);
+    if (!texture){
+      throw new Error("Unable to create RenderTarget WebGLTexture");
+    }
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return {
