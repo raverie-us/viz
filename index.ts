@@ -94,6 +94,22 @@ const root: Group = {
   ]
 };
 
+type CompiledUniformGlslType = "float";
+interface CompiledUniform {
+  name: string;
+  type: CompiledUniformGlslType;
+  location: WebGLUniformLocation;
+  // min
+  // max
+  // default
+}
+
+interface CompiledShaderLayer {
+  shaderLayer: ShaderLayer;
+  uniforms: CompiledUniform[];
+  program: WebGLProgram;
+}
+
 const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   const gl = canvas.getContext("webgl");
   if (!gl) {
@@ -109,7 +125,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     +1, +1, // Top right
   ];
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-  const vs = `
+  const vertexShader = `
     attribute vec2 pos;
     varying vec2 v_pos;
     void main() {
@@ -180,7 +196,44 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
       buffer: buffer
     };
   }
-  const program = createProgram(vs, `${fragmentShaderHeader}\n${(root.layers[0] as ShaderLayer).code}`);
+
+  const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
+    const program = createProgram(vertexShader, `${fragmentShaderHeader}\n${shaderLayer.code}`);
+
+    const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gum;
+    
+    const uniforms: CompiledUniform[] = [];
+
+    for (;;) {
+      const result = uniformRegex.exec(shaderLayer.code);
+      if (!result) {
+        break;
+      }
+
+      const name = result[2];
+      const location = gl.getUniformLocation(program, name);
+
+      if (!location) {
+        throw new Error(`Unable to find uniform of name '${name}'`);
+      }
+
+      uniforms.push({
+        type: result[1] as CompiledUniformGlslType,
+        name,
+        location
+      });
+    }
+
+    return {
+      shaderLayer,
+      uniforms,
+      program
+    }
+  }
+
+
+  const compiledShaderLayer = compileShaderLayer(root.layers[0] as ShaderLayer);
+  const program = compiledShaderLayer.program;
 
   const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
   gl.enableVertexAttribArray(vertexPosAttrib);
@@ -195,7 +248,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   const fb = createFramebuffer(canvas.width, canvas.height);
 
 
-  const programCopy = createProgram(vs, fsCopy);
+  const programCopy = createProgram(vertexShader, fsCopy);
 
   setInterval(() => {
     gl.useProgram(program);
