@@ -218,11 +218,7 @@ const validateGLSLValue = (glslType: GLSLType, value: any): TSType  => {
   throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
-const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
-  const gl = canvas.getContext("webgl");
-  if (!gl) {
-    return false;
-  }
+export const initialize = (gl: WebGLRenderingContext, width: number, height: number) => {
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
   const vertexPosBuffer = gl.createBuffer();
@@ -418,7 +414,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
     
     // Apply global uniforms
-    gl.uniform2f(compiledShaderLayer.iResolution, canvas.width, canvas.height);
+    gl.uniform2f(compiledShaderLayer.iResolution, width, height);
     gl.uniform1f(compiledShaderLayer.iTime, performance.now() / 1000);
 
     gl.uniform1i(compiledShaderLayer.previousLayer, 0);
@@ -457,8 +453,8 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   const compiledGroup = compileGroup(root);
 
   const renderTargets = [
-    createRenderTarget(canvas.width, canvas.height),
-    createRenderTarget(canvas.width, canvas.height),
+    createRenderTarget(width, height),
+    createRenderTarget(width, height),
   ]
 
   const copyProgram = createProgram(vertexShader, fragmentShaderCopy);
@@ -488,10 +484,5 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  setInterval(render, 50);
-
-  return true;
+  return render;
 }
-
-
-initializeWebGl(document.getElementsByTagName("canvas")[0])
