@@ -120,6 +120,7 @@ interface CompiledShaderLayer {
   // Global uniforms (entirely possible to be null if they are unused)
   iResolution: WebGLUniformLocation | null;
   iTime: WebGLUniformLocation | null;
+  previousLayer: WebGLUniformLocation | null;
 }
 
 interface CompiledGroup {
@@ -180,12 +181,12 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     uniform float iTime;
     `;
 
-  const fsCopy = `
+  const fragmentShaderCopy = `
   precision highp float;
   varying vec2 v_pos;
-  uniform sampler2D texture;
+  uniform sampler2D textureToCopy;
   void main() {
-    gl_FragColor = texture2D(texture, (v_pos.yx + vec2(1.0, 1.0)) * 0.5);
+    gl_FragColor = texture2D(textureToCopy, (v_pos.yx + vec2(1.0, 1.0)) * 0.5);
   }
   `;
 
@@ -315,7 +316,8 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
       uniforms,
       program,
       iResolution: gl.getUniformLocation(program, "iResolution"),
-      iTime:gl.getUniformLocation(program, "iTime"),
+      iTime: gl.getUniformLocation(program, "iTime"),
+      previousLayer: gl.getUniformLocation(program, "previousLayer"),
     }
   }
 
@@ -346,6 +348,10 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     // Apply global uniforms
     gl.uniform2f(compiledShaderLayer.iResolution, canvas.width, canvas.height);
     gl.uniform1f(compiledShaderLayer.iTime, performance.now() / 1000);
+
+    gl.uniform1i(compiledShaderLayer.previousLayer, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
     
     // Apply layer uniforms
     for (const uniform of compiledShaderLayer.uniforms) {
@@ -372,11 +378,13 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     createRenderTarget(canvas.width, canvas.height),
   ]
 
-  const programCopy = createProgram(vertexShader, fsCopy);
+  const copyProgram = createProgram(vertexShader, fragmentShaderCopy);
+  const textureToCopy = gl.getUniformLocation(copyProgram, "textureToCopy");
 
   let renderTargetIndex = 0;
   const renderRecursive = (compiledGroup: CompiledGroup) => {
-    for (const layer of compiledGroup.layers) {
+    for (let i = compiledGroup.layers.length - 1; i >= 0; --i) {
+      const layer = compiledGroup.layers[i];
       if (layer.type === "shader") {
         renderShaderLayer(layer, renderTargets[renderTargetIndex], renderTargets[Number(!renderTargetIndex)].texture);
         renderTargetIndex = Number(!renderTargetIndex);
@@ -389,7 +397,11 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   const render = () => {
     renderRecursive(compiledGroup);
 
-    gl.useProgram(programCopy);
+    gl.useProgram(copyProgram);
+    gl.uniform1i(textureToCopy, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, renderTargets[Number(!renderTargetIndex)].texture);
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
