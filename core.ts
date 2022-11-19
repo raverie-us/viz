@@ -1,4 +1,4 @@
-import { Group, ShaderLayer, ShaderTexture, TSType } from "./interfaces.js";
+import { Group, ShaderLayer, ShaderTexture, ShaderType } from "./interfaces.js";
 export * from "./interfaces.js"
 
 // We don't want to rely on nodejs asserts or any other packages
@@ -21,15 +21,15 @@ interface CompiledUniform {
   name: string;
   type: GLSLType;
   location: WebGLUniformLocation;
-  defaultValue: TSType;
-  minValue?: TSType;
-  maxValue?: TSType;
+  defaultValue: ShaderType;
+  minValue?: ShaderType;
+  maxValue?: ShaderType;
 }
 
 interface ParsedComment {
-  default?: TSType;
-  min?: TSType;
-  max?: TSType;
+  default?: ShaderType;
+  min?: ShaderType;
+  max?: ShaderType;
 }
 
 interface CompiledShaderLayer {
@@ -92,7 +92,7 @@ const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
   return texture;
 }
 
-const validateGLSLValue = (glslType: GLSLType, value: any): TSType => {
+const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   // Handle default values when undefined
   if (value === undefined) {
     // tags: <types>
