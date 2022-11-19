@@ -112,13 +112,20 @@ interface ParsedComment {
 }
 
 interface CompiledShaderLayer {
+  type: "shader";
   shaderLayer: ShaderLayer;
   uniforms: CompiledUniform[];
   program: WebGLProgram;
   
-  // Global uniforms
-  iResolution: WebGLUniformLocation;
-  iTime: WebGLUniformLocation;
+  // Global uniforms (entirely possible to be null if they are unused)
+  iResolution: WebGLUniformLocation | null;
+  iTime: WebGLUniformLocation | null;
+}
+
+interface CompiledGroup {
+  type: "group";
+  layers: (CompiledShaderLayer | CompiledGroup)[];
+  timeSeconds: number;
 }
 
 interface RenderTarget {
@@ -168,6 +175,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     precision highp float;
     const float PI = 3.1415926535897932384626433832795;
     varying vec2 v_pos;
+    uniform sampler2D previousLayer;
     uniform vec2 iResolution;
     uniform float iTime;
     `;
@@ -240,7 +248,8 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
   }
 
   const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
-    const program = createProgram(vertexShader, `${fragmentShaderHeader}\n${shaderLayer.code}`);
+    const finalFragmentShader = `${fragmentShaderHeader}\n${shaderLayer.code}`;
+    const program = createProgram(vertexShader, finalFragmentShader);
 
     const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
     gl.enableVertexAttribArray(vertexPosAttrib);
@@ -259,8 +268,9 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
       const name = result[2];
       const location = gl.getUniformLocation(program, name);
 
+      // Its possible that the uniform was declared but never used (or commented out)
       if (!location) {
-        throw new Error(`Unable to find uniform of name '${name}'`);
+        break;
       }
 
       let parsedComment: ParsedComment = {};
@@ -299,24 +309,37 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
       });
     }
 
-    const getGlobalUniform = (uniformName: string): WebGLUniformLocation => {
-      const location = gl.getUniformLocation(program, uniformName);
-      if (!location) {
-        throw new Error(`Unable to find global uniform of name '${uniformName}'`);
-      }
-      return location;
-    }
-
     return {
+      type: "shader",
       shaderLayer,
       uniforms,
       program,
-      iResolution: getGlobalUniform("iResolution"),
-      iTime: getGlobalUniform("iTime"),
+      iResolution: gl.getUniformLocation(program, "iResolution"),
+      iTime:gl.getUniformLocation(program, "iTime"),
     }
   }
 
-  const renderShaderLayer = (compiledShaderLayer: CompiledShaderLayer, renderTarget: RenderTarget) => {
+  const compileGroup = (group: Group): CompiledGroup => {
+    const compiledGroup: CompiledGroup = {
+      type: "group",
+      layers: [],
+      timeSeconds: 0
+    };
+    for (const layer of group.layers) {
+      if (layer.type === "shader") {
+        compiledGroup.layers.push(compileShaderLayer(layer));
+      } else {
+        // Recursively compile the child group
+        compiledGroup.layers.push(compileGroup(layer));
+      }
+    }
+    return compiledGroup;
+  };
+
+  const renderShaderLayer = (
+    compiledShaderLayer: CompiledShaderLayer,
+    renderTarget: RenderTarget,
+    previousLayerTexture: WebGLTexture) => {
     gl.useProgram(compiledShaderLayer.program);
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
     
@@ -342,16 +365,35 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  const compiledShaderLayer = compileShaderLayer(root.layers[0] as ShaderLayer);
-  const renderTarget = createRenderTarget(canvas.width, canvas.height);
+  const compiledGroup = compileGroup(root);
+
+  const renderTargets = [
+    createRenderTarget(canvas.width, canvas.height),
+    createRenderTarget(canvas.width, canvas.height),
+  ]
+
   const programCopy = createProgram(vertexShader, fsCopy);
 
-  setInterval(() => {
-    renderShaderLayer(compiledShaderLayer, renderTarget);
+  let renderTargetIndex = 0;
+  const renderRecursive = (compiledGroup: CompiledGroup) => {
+    for (const layer of compiledGroup.layers) {
+      if (layer.type === "shader") {
+        renderShaderLayer(layer, renderTargets[renderTargetIndex], renderTargets[Number(!renderTargetIndex)].texture);
+        renderTargetIndex = Number(!renderTargetIndex);
+      } else {
+        renderRecursive(layer);
+      }
+    }
+  }
+
+  const render = () => {
+    renderRecursive(compiledGroup);
 
     gl.useProgram(programCopy);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }, 50);
+  }
+
+  setInterval(render, 50);
 
   return true;
 }
