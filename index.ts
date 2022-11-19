@@ -4,15 +4,6 @@ interface Group {
   layers: (ShaderLayer | Group)[];
 }
 
-type ShaderTexture = {
-  url: string;
-};
-
-type ShaderValue =
-  ShaderTexture |
-  boolean |
-  number;
-
 type ShaderLayerBlendMode =
   "effect" |
   "normal" |
@@ -28,7 +19,7 @@ type ShaderLayerTimeMode =
 interface ShaderLayer {
   type: "shader";
   code: string;
-  values: Record<string, ShaderValue>;
+  values: Record<string, TSType>;
   blendMode: ShaderLayerBlendMode;
   opacity: number;
   timeScale: number;
@@ -80,6 +71,25 @@ const root: Group = {
     {
       type: "shader",
       code: `
+        uniform sampler2D texture;
+        void main() {
+          vec2 uv = (v_pos * 0.5 + vec2(0.5)) * vec2(1, iResolution.y / iResolution.x);
+          gl_FragColor = texture2D(texture, uv);
+        }
+      `,
+      blendMode: "normal",
+      opacity: 1,
+      timeMode: "normal",
+      timeScale: 1,
+      values: {
+        texture: {
+          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAC1QTFRFAAAA9KRazHn//Pez/97//v3m/8P//33//PFc/3T//vua/////7X//fWO99xVZpEWpAAAAA90Uk5TAP//////////////////5Y2epgAAAdBJREFUeJyl1D9qwzAUBnCrJ6jRBYrpBcrD4KUegijkAFoC2YpDaceC8ezFZPaiA2TJnKWkc6DQrbOPUJ+h+mtbqiVTqvX98n2K/ZIosg+6iYIH4VVYYCCrYACkjyQUgYAWQYBTWjyGOpYAb6BFqGMR8AYOAh1LQDRw4O/4PxBXEMB7iWUAYYBAg53nEgsgjrEB5WuSJM4wjkEcDUpCSDIiPQSop4BIJOdgTjZUEHMSebUA4NfFI4Bag3HOd/xPIJNgN2loOchqP2AcIGiaQRwkGOdMPFOcjWIjV06P10wEKNDUvwFjGogOI+iBg9MwZ+qtyQhVM4A1GwJMhBR0Q4vnk/64CRgieI0Get6azTIRDX+Sh+L8xpyAMaI5Unr+/HADRIQW+yN9N6CdLh7WJXu6HYD1Z4VUCaS0u2jQ2n93+o1MgLPZeq/SbXd5CYKuuxQhcC/AUwB8C7CbA2rx8gloV35QeUGvQOkDuQGVB/QK8N/mPMgDAIENKvd7ItXAwdeDAOUc4AF91wGRoJoBvQBwd0s8QAT0ANdXhJSywwVqHkdRIkU1B+TcCBfkw1yLygIYJnMlKutJcTCZK2FvNVhzKeyNwfZcCPtlIWfOhQ74AbgZq7L3W3rcAAAAAElFTkSuQmCC"
+        }
+      }
+    },
+    {
+      type: "shader",
+      code: `
         uniform float blue;
         void main() {
           gl_FragColor = vec4((v_pos + vec2(1.0, 1.0)) * 0.5, blue, 1.0);
@@ -97,9 +107,14 @@ const root: Group = {
 };
 
 // tags: <types>
-type GLSLType = "float";
+type GLSLType = "float" | "sampler2D";
+
+type ShaderTexture = {
+  url: string;
+};
+
 // tags: <types>
-type TSType = number;
+type TSType = number | ShaderTexture;
 
 interface CompiledUniform {
   name: string;
@@ -139,18 +154,59 @@ interface RenderTarget {
   buffer: WebGLFramebuffer;
 }
 
+const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
+  const texture = gl.createTexture();
+  if (!texture){
+    throw new Error("Unable to create RenderTarget WebGLTexture");
+  }
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  (async () => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const img = document.createElement("img");
+    img.onload = () => {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, img);
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.src = objectUrl;
+  })();
+
+  gl.generateMipmap(gl.TEXTURE_2D);
+  return texture;
+}
+
 const validateGLSLValue = (glslType: GLSLType, value: any): TSType  => {
   // Handle default values when undefined
   if (value === undefined) {
     // tags: <types>
     switch (glslType) {
       case "float": return 0;
+      case "sampler2D": return {url: ""};
     }
   }
 
   // tags: <types>
   switch (glslType) {
     case "float": return Number(value);
+    case "sampler2D": {
+      if (typeof value === "object" && value !== null) {
+        if (!("url" in value)) {
+          return {url: ""};
+        }
+        return value;
+      } else {
+        return {url: String(value)};
+      }
+    }
   }
   throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
@@ -225,8 +281,11 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     return program;
   }
 
-  const createTexture = (width: number, height: number) => {
+  const createTexture = (width: number, height: number): WebGLTexture => {
     const texture = gl.createTexture();
+    if (!texture){
+      throw new Error("Unable to create RenderTarget WebGLTexture");
+    }
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -244,9 +303,6 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
     const texture = createTexture(width, height);
-    if (!texture){
-      throw new Error("Unable to create RenderTarget WebGLTexture");
-    }
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return {
@@ -264,7 +320,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
     // tags: <types>
-    const uniformRegex = /uniform\s+(float)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+    const uniformRegex = /uniform\s+(float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
     
     const uniforms: CompiledUniform[] = [];
 
@@ -362,6 +418,7 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
     gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
     
     // Apply layer uniforms
+    let textureSamplerIndex = 1;
     for (const uniform of compiledShaderLayer.uniforms) {
       const value = compiledShaderLayer.shaderLayer.values[uniform.name];
       const validatedValue = validateGLSLValue(uniform.type, value);
@@ -370,6 +427,15 @@ const initializeWebGl = (canvas: HTMLCanvasElement): boolean => {
         case "float":
           gl.uniform1f(uniform.location, validatedValue as number);
           break;
+        case "sampler2D": {
+          const shaderTexture = validatedValue as ShaderTexture;
+          const texture = getTexture(shaderTexture.url, gl);
+          gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.uniform1i(uniform.location, textureSamplerIndex);
+          ++textureSamplerIndex;
+          break;
+        }
         default: throw new Error(`Unexpected GLSL type '${uniform.type}'`)
       }
     }
