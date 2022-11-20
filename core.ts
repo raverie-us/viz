@@ -14,7 +14,7 @@ type GLSLType = "int" | "float" | "sampler2D";
 // tags: <types> (see below, the different uniform types)
 interface ProcessedUniformBase {
   compiledUniform: CompiledUniformBase;
-  location: WebGLUniformLocation;
+  location: WebGLUniformLocation | null;
 }
 
 interface ProcessedUniformNumber extends ProcessedUniformBase {
@@ -263,11 +263,6 @@ export class RaverieVisualizer {
         const name = result[2];
         const location = gl.getUniformLocation(program, name);
 
-        // Its possible that the uniform was declared but never used (or commented out)
-        if (!location) {
-          break;
-        }
-
         let parsedComment: ProcessedComment = {};
 
         const afterUniform = result[3];
@@ -385,6 +380,12 @@ export class RaverieVisualizer {
       // Apply layer uniforms
       let textureSamplerIndex = 1;
       for (const processedUniform of processedShaderLayer.uniforms) {
+        // Don't set uniforms that don't have locations. These can occur if we
+        // found the uniform via a regex, but it was optimized out by the compiler
+        if (!processedUniform.location) {
+          continue;
+        }
+
         const value = processedShaderLayer.compiledShaderLayer.shaderLayer.
           values[processedUniform.compiledUniform.name];
         // tags: <types>
