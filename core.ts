@@ -154,20 +154,21 @@ export class RaverieVisualizer {
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
 
-  private createProgram(fragmentShader: string) {
-    const createShader = (str: string, type: GLenum) => {
-      const shader = expect(gl.createShader(type), "WebGLShader");
-      gl.shaderSource(shader, str);
-      gl.compileShader(shader);
+  private createShader(str: string, type: GLenum) {
+    const gl = this.gl;
+    const shader = expect(gl.createShader(type), "WebGLShader");
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
 
-      const compileStatus = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
-      if (!compileStatus) {
-        const compilationLog = gl.getShaderInfoLog(shader);
-        console.error(`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader compiler log:`, compilationLog);
-      }
-      return shader;
+    const compileStatus = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
+    if (!compileStatus) {
+      const compilationLog = gl.getShaderInfoLog(shader);
+      console.error(`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader compiler log:`, compilationLog);
     }
+    return shader;
+  }
 
+  private createProgram(fragmentShader: string) {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
@@ -182,7 +183,7 @@ export class RaverieVisualizer {
         gl_Position = pos;
       }`;
 
-    const vshader = createShader(vertexShader, gl.VERTEX_SHADER);
+    const vshader = this.createShader(vertexShader, gl.VERTEX_SHADER);
 
     const fragmentShaderHeader = `#version 300 es
       precision highp float;
@@ -194,7 +195,7 @@ export class RaverieVisualizer {
       uniform vec2 gResolution;
       uniform float gTime;
     `;
-    const fshader = createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
+    const fshader = this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
     gl.attachShader(program, vshader);
     gl.attachShader(program, fshader);
     gl.linkProgram(program);
