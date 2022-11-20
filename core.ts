@@ -107,6 +107,8 @@ export class RaverieVisualizer {
 
   private processedGroup: ProcessedGroup | null = null;
 
+  private readonly vertexShader: WebGLShader;
+
   // For copying the final result to the back buffer
   private readonly copyProgram: WebGLProgram;
   private readonly textureToCopy: WebGLUniformLocation;
@@ -155,6 +157,23 @@ export class RaverieVisualizer {
       createRenderTarget(width, height),
     ]
 
+    // All effects currently use the same vertex shader
+    const vertexShader = `#version 300 es
+      in vec4 pos;
+      out vec2 gPosition;
+      out vec2 gUV;
+      void main() {
+        gPosition = pos.xy;
+        gUV = (pos.xy + vec2(1.0, 1.0)) * 0.5;
+        gl_Position = pos;
+      }`;
+  
+    const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
+    if (processedVertexShader.errors) {
+      throw new Error(`Shared vertex shader errors: ${processedVertexShader.errors}`);
+    }
+    this.vertexShader = processedVertexShader.shader;
+
     this.copyProgram = this.createProgram(fragmentShaderCopy);
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
@@ -180,19 +199,6 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    // All effects currently use the same vertex shader
-    const vertexShader = `#version 300 es
-      in vec4 pos;
-      out vec2 gPosition;
-      out vec2 gUV;
-      void main() {
-        gPosition = pos.xy;
-        gUV = (pos.xy + vec2(1.0, 1.0)) * 0.5;
-        gl_Position = pos;
-      }`;
-
-    const vshader = this.createShader(vertexShader, gl.VERTEX_SHADER);
-
     const fragmentShaderHeader = `#version 300 es
       precision highp float;
       const float PI = 3.1415926535897932384626433832795;
@@ -204,7 +210,7 @@ export class RaverieVisualizer {
       uniform float gTime;
     `;
     const fshader = this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
-    gl.attachShader(program, vshader.shader);
+    gl.attachShader(program, this.vertexShader);
     gl.attachShader(program, fshader.shader);
     gl.linkProgram(program);
     const linkStatus = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
