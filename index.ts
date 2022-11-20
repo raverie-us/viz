@@ -7,7 +7,7 @@ if (!gl) {
 }
 
 const textureCache: Record<string, WebGLTexture> = {};
-const getTexture = (url: string, gl: WebGLRenderingContext): WebGLTexture => {
+const getTexture = (url: string, gl: WebGL2RenderingContext): WebGLTexture => {
   const foundTexture = textureCache[url];
   if (foundTexture) {
     return foundTexture;

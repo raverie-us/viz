@@ -82,12 +82,12 @@ const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
-export type GetTextureFunction = (url: string, gl: WebGLRenderingContext) => WebGLTexture;
+export type GetTextureFunction = (url: string, gl: WebGL2RenderingContext) => WebGLTexture;
 
 export class RaverieVisualizer {
   private width: number;
   private height: number;
-  private readonly gl: WebGLRenderingContext;
+  private readonly gl: WebGL2RenderingContext;
   private readonly renderTargets: [RenderTarget, RenderTarget];
   private readonly getTexture: GetTextureFunction;
 
@@ -97,7 +97,7 @@ export class RaverieVisualizer {
   private readonly copyProgram: WebGLProgram;
   private readonly textureToCopy: WebGLUniformLocation;
 
-  public constructor(gl: WebGLRenderingContext, getTexture: GetTextureFunction, width: number, height: number) {
+  public constructor(gl: WebGL2RenderingContext, getTexture: GetTextureFunction, width: number, height: number) {
     this.gl = gl;
     this.getTexture = getTexture;
     this.width = width;
