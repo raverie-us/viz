@@ -17,14 +17,25 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 // tags: <types>
 type GLSLType = "float" | "sampler2D";
 
-interface CompiledUniform {
+interface CompiledUniformBase {
   type: GLSLType;
   name: string;
   location: WebGLUniformLocation;
   defaultValue: ShaderType;
+}
+
+interface CompiledUniformNumber extends CompiledUniformBase {
+  type: "float";
   minValue?: ShaderType;
   maxValue?: ShaderType;
 }
+
+interface CompiledUniformSampler2D extends CompiledUniformBase {
+  type: "sampler2D";
+  cachedTexture?: WebGLTexture;
+}
+
+type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
 interface ParsedComment {
   default?: ShaderType;
@@ -116,11 +127,9 @@ export class RaverieVisualizer {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
     const fragmentShaderCopy = `
-    precision highp float;
-    varying vec2 v_pos;
     uniform sampler2D textureToCopy;
     void main() {
-      gl_FragColor = texture2D(textureToCopy, (v_pos.xy + vec2(1.0, 1.0)) * 0.5);
+      gFragColor = texture(textureToCopy, gUV);
     }
     `;
 
@@ -172,10 +181,10 @@ export class RaverieVisualizer {
       gl.shaderSource(shader, str);
       gl.compileShader(shader);
 
-      const status = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
-      if (!status) {
+      const compileStatus = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
+      if (!compileStatus) {
         const compilationLog = gl.getShaderInfoLog(shader);
-        console.error('Shader compiler log:', compilationLog);
+        console.error(`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader compiler log:`, compilationLog);
       }
       return shader;
     }
@@ -187,19 +196,37 @@ export class RaverieVisualizer {
     }
 
     // All effects currently use the same vertex shader
-    const vertexShader = `
-      attribute vec2 pos;
-      varying vec2 v_pos;
+    const vertexShader = `#version 300 es
+      in vec4 pos;
+      out vec2 gPosition;
+      out vec2 gUV;
       void main() {
-          v_pos = pos;
-          gl_Position = vec4(pos, 0, 1);
+        gPosition = pos.xy;
+        gUV = (pos.xy + vec2(1.0, 1.0)) * 0.5;
+        gl_Position = pos;
       }`;
 
     const vshader = createShader(vertexShader, gl.VERTEX_SHADER);
-    const fshader = createShader(fragmentShader, gl.FRAGMENT_SHADER);
+
+    const fragmentShaderHeader = `#version 300 es
+      precision highp float;
+      const float PI = 3.1415926535897932384626433832795;
+      in vec2 gPosition;
+      in vec2 gUV;
+      out vec4 gFragColor;
+      uniform sampler2D previousLayer;
+      uniform vec2 iResolution;
+      uniform float iTime;
+    `;
+    const fshader = createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
     gl.attachShader(program, vshader);
     gl.attachShader(program, fshader);
     gl.linkProgram(program);
+    const linkStatus = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
+    if (!linkStatus) {
+      const programLog = gl.getProgramInfoLog(program);
+      console.error('Shader program/linking:', programLog);
+    }
     return program;
   }
 
@@ -211,25 +238,7 @@ export class RaverieVisualizer {
     const gl = this.gl;
 
     const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
-      const vertexShader = `
-        attribute vec2 pos;
-        varying vec2 v_pos;
-        void main() {
-            v_pos = pos;
-            gl_Position = vec4(pos, 0, 1);
-        }`;
-
-      const fragmentShaderHeader = `
-        precision highp float;
-        const float PI = 3.1415926535897932384626433832795;
-        varying vec2 v_pos;
-        uniform sampler2D previousLayer;
-        uniform vec2 iResolution;
-        uniform float iTime;
-      `;
-
-      const finalFragmentShader = `${fragmentShaderHeader}\n${shaderLayer.code}`;
-      const program = this.createProgram(finalFragmentShader);
+      const program = this.createProgram(shaderLayer.code);
 
       const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
       gl.enableVertexAttribArray(vertexPosAttrib);
@@ -350,18 +359,19 @@ export class RaverieVisualizer {
             break;
           case "sampler2D": {
             const shaderTexture = validatedValue as ShaderTexture;
-            const texture = this.getTexture(shaderTexture.url, gl);
+            const texture = uniform.cachedTexture || this.getTexture(shaderTexture.url, gl);
+            uniform.cachedTexture = texture;
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(uniform.location, textureSamplerIndex);
             ++textureSamplerIndex;
             break;
           }
-          default: throw new Error(`Unexpected GLSL type '${uniform.type}'`)
+          default: throw new Error(`Unexpected GLSL type '${(uniform as any).type}'`)
         }
       }
 
-      gl.clearColor(0, 0, 0.5, 1);
+      gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
