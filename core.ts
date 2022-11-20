@@ -131,13 +131,6 @@ export class RaverieVisualizer {
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
-    const fragmentShaderCopy = `
-    uniform sampler2D textureToCopy;
-    void main() {
-      gFragColor = texture(textureToCopy, gUV);
-    }
-    `;
-
     const createRenderTarget = (width: number, height: number): RenderTarget => {
       const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
@@ -174,6 +167,11 @@ export class RaverieVisualizer {
     }
     this.vertexShader = processedVertexShader.shader;
 
+    const fragmentShaderCopy = `
+      uniform sampler2D textureToCopy;
+      void main() {
+        gFragColor = texture(textureToCopy, gUV);
+      }`;
     this.copyProgram = this.createProgram(fragmentShaderCopy);
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
