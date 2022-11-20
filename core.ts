@@ -132,10 +132,7 @@ export class RaverieVisualizer {
     `;
 
     const createRenderTarget = (width: number, height: number): RenderTarget => {
-      const buffer = gl.createFramebuffer();
-      if (!buffer) {
-        throw new Error("Unable to create RenderTarget WebGLFramebuffer");
-      }
+      const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
       const texture = this.createTexture();
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -159,10 +156,7 @@ export class RaverieVisualizer {
 
   private createProgram(fragmentShader: string) {
     const createShader = (str: string, type: GLenum) => {
-      const shader = gl.createShader(type);
-      if (!shader) {
-        throw new Error("Unable to create WebGLShader");
-      }
+      const shader = expect(gl.createShader(type), "WebGLShader");
       gl.shaderSource(shader, str);
       gl.compileShader(shader);
 
@@ -175,10 +169,7 @@ export class RaverieVisualizer {
     }
 
     const gl = this.gl;
-    const program = gl.createProgram();
-    if (!program) {
-      throw new Error("Unable to create WebGLProgram");
-    }
+    const program = expect(gl.createProgram(), "WebGLProgram");
 
     // All effects currently use the same vertex shader
     const vertexShader = `#version 300 es
@@ -217,10 +208,7 @@ export class RaverieVisualizer {
 
   private createTexture(): WebGLTexture {
     const gl = this.gl;
-    const texture = gl.createTexture();
-    if (!texture) {
-      throw new Error("Unable to create RenderTarget WebGLTexture");
-    }
+    const texture = expect(gl.createTexture(), "WebGLTexture");
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
