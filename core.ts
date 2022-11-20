@@ -235,8 +235,12 @@ export class RaverieVisualizer {
     return texture;
   }
 
-  public compile(group: Group): CompiledGroup {
-    this.processedGroup = this.compileGroup(group);
+  public compile(group: Group, mode: "clone" | "modifyInPlace" = "clone"): CompiledGroup {
+    // Let the user pick if we make a copy, because we're going to potentially
+    // modify the group such as if we find new uniforms within the shaders
+    this.processedGroup = this.compileGroup(mode === "clone"
+      ? JSON.parse(JSON.stringify(group)) as Group
+      : group);
     return this.processedGroup.compiledGroup;
   }
 
