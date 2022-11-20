@@ -15,8 +15,9 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 }
 
 // tags: <types>
-type GLSLType = "float" | "sampler2D";
+type GLSLType = "int" | "float" | "sampler2D";
 
+// tags: <types> (see below, the different uniform types)
 interface CompiledUniformBase {
   name: string;
   location: WebGLUniformLocation;
@@ -24,7 +25,7 @@ interface CompiledUniformBase {
 }
 
 interface CompiledUniformNumber extends CompiledUniformBase {
-  type: "float";
+  type: "int" | "float";
   minValue?: ShaderType;
   maxValue?: ShaderType;
 }
@@ -71,6 +72,7 @@ const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   if (value === undefined) {
     // tags: <types>
     switch (glslType) {
+      case "int": return 0;
       case "float": return 0;
       case "sampler2D": return { url: "" };
     }
@@ -78,6 +80,7 @@ const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
 
   // tags: <types>
   switch (glslType) {
+    case "int": return Math.floor(Number(value));
     case "float": return Number(value);
     case "sampler2D": {
       if (typeof value === "object" && value !== null) {
@@ -245,7 +248,7 @@ export class RaverieVisualizer {
       gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
       // tags: <types>
-      const uniformRegex = /uniform\s+(float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+      const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
       const uniforms: CompiledUniform[] = [];
 
@@ -295,10 +298,11 @@ export class RaverieVisualizer {
 
         // tags: <types>
         switch (type) {
+          case "int":
           case "float":
             uniforms.push({
               ...uniformBase,
-              type: "float",
+              type,
               minValue: validateGLSLValue(type, parsedComment.min),
               maxValue: validateGLSLValue(type, parsedComment.min)
             });
@@ -306,7 +310,7 @@ export class RaverieVisualizer {
           case "sampler2D":
             uniforms.push({
               ...uniformBase,
-              type: "sampler2D"
+              type
             });
             break;
         }
@@ -367,6 +371,9 @@ export class RaverieVisualizer {
         const validatedValue = validateGLSLValue(uniform.type, value);
         // tags: <types>
         switch (uniform.type) {
+          case "int":
+            gl.uniform1i(uniform.location, validatedValue as number);
+            break;
           case "float":
             gl.uniform1f(uniform.location, validatedValue as number);
             break;
