@@ -1,12 +1,6 @@
 import { CompiledGroup, CompiledShaderLayer, CompiledUniformBase, CompiledUniformNumber, CompiledUniformSampler2D, Group, ShaderLayer, ShaderTexture, ShaderType } from "./interfaces.js";
 export * from "./interfaces.js"
 
-// We don't want to rely on nodejs asserts or any other packages
-const assert = (value: unknown, error: string): asserts value => {
-  if (!value) {
-    throw new Error(error);
-  }
-}
 const expect = <T>(value: T | null | undefined, name: string): T => {
   if (!value) {
     throw new Error(`Expected to get: ${name}`);
