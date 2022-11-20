@@ -208,7 +208,7 @@ export class RaverieVisualizer {
       uniform float gTime;
     `;
     const fshader = this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
-    gl.attachShader(program, this.vertexShader);
+    gl.attachShader(program, expect(this.vertexShader, "Vertex Shader"));
     gl.attachShader(program, fshader.shader);
     gl.linkProgram(program);
     const linkStatus = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
