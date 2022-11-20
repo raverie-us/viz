@@ -1,7 +1,7 @@
 import { RaverieVisualizer, Group } from "./core.js";
 
 const canvas = document.getElementsByTagName("canvas")[0];
-const gl = canvas.getContext("webgl");
+const gl = canvas.getContext("webgl2");
 if (!gl) {
   throw new Error("Unable to initialze WebGl");
 }
