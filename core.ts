@@ -38,13 +38,6 @@ interface ProcessedUniformSampler2D extends ProcessedUniformBase {
 
 type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
 
-// This type contains all the possible attributes for all types
-interface ProcessedComment {
-  default?: ShaderType;
-  min?: ShaderType;
-  max?: ShaderType;
-}
-
 interface ProcessedShaderLayer {
   type: "shader";
   shaderLayer: ShaderLayer;
@@ -61,6 +54,13 @@ interface ProcessedGroup {
   type: "group";
   layers: (ProcessedShaderLayer | ProcessedGroup)[];
   timeSeconds: number;
+}
+
+// This type contains all the possible attributes for all types
+interface ProcessedComment {
+  default?: ShaderType;
+  min?: ShaderType;
+  max?: ShaderType;
 }
 
 interface RenderTarget {
