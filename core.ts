@@ -21,17 +21,18 @@ type GLSLType = "int" | "float" | "sampler2D";
 interface CompiledUniformBase {
   name: string;
   location: WebGLUniformLocation;
-  defaultValue: ShaderType;
 }
 
 interface CompiledUniformNumber extends CompiledUniformBase {
   type: "int" | "float";
-  minValue?: ShaderType;
-  maxValue?: ShaderType;
+  defaultValue: number;
+  minValue?: number;
+  maxValue?: number;
 }
 
 interface CompiledUniformSampler2D extends CompiledUniformBase {
   type: "sampler2D";
+  defaultValue: ShaderTexture;
   cachedTexture?: WebGLTexture;
 }
 
@@ -67,33 +68,34 @@ interface RenderTarget {
   buffer: WebGLFramebuffer;
 }
 
-const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
-  // Handle default values when undefined
+// tags: <types>
+const validateGLSLInt = (value: any): number =>
+  value === undefined ? 0 : Math.floor(Number(value));
+
+// tags: <types>
+const validateGLSLFloat = (value: any): number =>
+  value === undefined ? 0 : Number(value);
+
+// tags: <types>
+const validateGLSLNumber = (glslType: "int" | "float", value: any): number => 
+  glslType === "int"
+    ? validateGLSLInt(value)
+    : validateGLSLFloat(value)
+
+// tags: <types>
+const validateGLSLSampler2D = (value: any): ShaderTexture => {
   if (value === undefined) {
-    // tags: <types>
-    switch (glslType) {
-      case "int": return 0;
-      case "float": return 0;
-      case "sampler2D": return { url: "" };
-    }
+    return { url: "" };
   }
 
-  // tags: <types>
-  switch (glslType) {
-    case "int": return Math.floor(Number(value));
-    case "float": return Number(value);
-    case "sampler2D": {
-      if (typeof value === "object" && value !== null) {
-        if (!("url" in value)) {
-          return { url: "" };
-        }
-        return value;
-      } else {
-        return { url: String(value) };
-      }
+  if (typeof value === "object" && value !== null) {
+    if (!("url" in value)) {
+      return { url: "" };
     }
+    return value;
+  } else {
+    return { url: String(value) };
   }
-  throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
 export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => any;
@@ -289,12 +291,9 @@ export class RaverieVisualizer {
         }
 
         const type = result[1] as GLSLType;
-        const defaultValue = validateGLSLValue(type, parsedComment.default);
-
         const uniformBase: CompiledUniformBase = {
           name,
-          location,
-          defaultValue
+          location
         };
 
         // tags: <types>
@@ -304,12 +303,14 @@ export class RaverieVisualizer {
             uniforms.push({
               ...uniformBase,
               type,
-              minValue: validateGLSLValue(type, parsedComment.min),
-              maxValue: validateGLSLValue(type, parsedComment.min)
+              defaultValue: validateGLSLNumber(type, parsedComment.default),
+              minValue: validateGLSLNumber(type, parsedComment.min),
+              maxValue: validateGLSLNumber(type, parsedComment.min),
             });
             break;
           case "sampler2D":
             uniforms.push({
+              defaultValue: validateGLSLSampler2D(parsedComment.default),
               ...uniformBase,
               type
             });
@@ -369,16 +370,20 @@ export class RaverieVisualizer {
       let textureSamplerIndex = 1;
       for (const uniform of compiledShaderLayer.uniforms) {
         const value = compiledShaderLayer.shaderLayer.values[uniform.name];
-        const validatedValue = validateGLSLValue(uniform.type, value);
         // tags: <types>
         switch (uniform.type) {
           case "int":
-            gl.uniform1i(uniform.location, validatedValue as number);
+          case "float": {
+            const validatedValue = validateGLSLNumber(uniform.type, value);
+            if (uniform.type === "int") {
+              gl.uniform1i(uniform.location, validatedValue);
+            } else {
+              gl.uniform1f(uniform.location, validatedValue);
+            }
             break;
-          case "float":
-            gl.uniform1f(uniform.location, validatedValue as number);
-            break;
+          }
           case "sampler2D": {
+            const validatedValue = validateGLSLSampler2D(value);
             const shaderTexture = validatedValue as ShaderTexture;
             let texture: WebGLTexture | null = null;
             if (uniform.cachedTexture) {
