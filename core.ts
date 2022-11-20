@@ -52,6 +52,7 @@ interface ProcessedShaderLayer {
 
 interface ProcessedGroup {
   type: "group";
+  group: Group;
   layers: (ProcessedShaderLayer | ProcessedGroup)[];
   timeSeconds: number;
 }
@@ -332,6 +333,7 @@ export class RaverieVisualizer {
 
     const processedGroup: ProcessedGroup = {
       type: "group",
+      group,
       layers: [],
       timeSeconds: 0
     };
