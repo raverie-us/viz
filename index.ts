@@ -49,7 +49,6 @@ const visualizer = new RaverieVisualizer(gl, getTexture, canvas.width, canvas.he
 
 const onJsonChanged = () => {
   const json = eval(`(${textarea.value})`);
-  console.log(json);
   visualizer.compile(json);
 }
 textarea.oninput = onJsonChanged;
