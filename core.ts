@@ -50,9 +50,9 @@ interface CompiledShaderLayer {
   program: WebGLProgram;
 
   // Global uniforms (entirely possible to be null if they are unused)
-  iResolution: WebGLUniformLocation | null;
-  iTime: WebGLUniformLocation | null;
-  previousLayer: WebGLUniformLocation | null;
+  gResolution: WebGLUniformLocation | null;
+  gTime: WebGLUniformLocation | null;
+  gPreviousLayer: WebGLUniformLocation | null;
 }
 
 interface CompiledGroup {
@@ -214,9 +214,9 @@ export class RaverieVisualizer {
       in vec2 gPosition;
       in vec2 gUV;
       out vec4 gFragColor;
-      uniform sampler2D previousLayer;
-      uniform vec2 iResolution;
-      uniform float iTime;
+      uniform sampler2D gPreviousLayer;
+      uniform vec2 gResolution;
+      uniform float gTime;
     `;
     const fshader = createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
     gl.attachShader(program, vshader);
@@ -304,9 +304,9 @@ export class RaverieVisualizer {
         shaderLayer,
         uniforms,
         program,
-        iResolution: gl.getUniformLocation(program, "iResolution"),
-        iTime: gl.getUniformLocation(program, "iTime"),
-        previousLayer: gl.getUniformLocation(program, "previousLayer"),
+        gResolution: gl.getUniformLocation(program, "gResolution"),
+        gTime: gl.getUniformLocation(program, "gTime"),
+        gPreviousLayer: gl.getUniformLocation(program, "gPreviousLayer"),
       }
     }
 
@@ -340,10 +340,10 @@ export class RaverieVisualizer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
 
       // Apply global uniforms
-      gl.uniform2f(compiledShaderLayer.iResolution, this.width, this.height);
-      gl.uniform1f(compiledShaderLayer.iTime, performance.now() / 1000);
+      gl.uniform2f(compiledShaderLayer.gResolution, this.width, this.height);
+      gl.uniform1f(compiledShaderLayer.gTime, performance.now() / 1000);
 
-      gl.uniform1i(compiledShaderLayer.previousLayer, 0);
+      gl.uniform1i(compiledShaderLayer.gPreviousLayer, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
 

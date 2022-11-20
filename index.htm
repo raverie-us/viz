@@ -17,11 +17,11 @@
       code: `
         uniform float centerWarp; // default: 0.4
         void main() {
-          vec2 uv = vec2(gPosition.x, gPosition.y * iResolution.y / iResolution.x);
+          vec2 uv = vec2(gPosition.x, gPosition.y * gResolution.y / gResolution.x);
           float r = length(uv);
           float theta = atan(uv.y, uv.x);
-          vec4 prev = texture(previousLayer, gUV);
-          gFragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - iTime) < 0.5 ? vec4(1.0) : prev;
+          vec4 prev = texture(gPreviousLayer, gUV);
+          gFragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - gTime) < 0.5 ? vec4(1.0) : prev;
         }
       `,
       blendMode: "normal",
@@ -37,9 +37,9 @@
       code: `
         uniform float lines; // default: 3
         void main() {
-          float radians = (gUV.y + iTime) * (2.0 * 3.14159265359) * lines;
+          float radians = (gUV.y + gTime) * (2.0 * 3.14159265359) * lines;
           float value = sin(radians);
-          vec4 prev = texture(previousLayer, gUV);
+          vec4 prev = texture(gPreviousLayer, gUV);
           gFragColor = vec4(vec3(value), 1.0) + prev;
         }
       `,
@@ -56,7 +56,7 @@
       code: `
         uniform sampler2D textureInput;
         void main() {
-          vec2 uv = gUV * vec2(1, iResolution.y / iResolution.x);
+          vec2 uv = gUV * vec2(1, gResolution.y / gResolution.x);
           gFragColor = texture(textureInput, uv);
         }
       `,
