@@ -56,6 +56,11 @@ interface ProcessedComment {
   max?: ShaderType;
 }
 
+interface ProcessedShader {
+  shader: WebGLShader;
+  errors?: string;
+}
+
 interface RenderTarget {
   texture: WebGLTexture;
   buffer: WebGLFramebuffer;
@@ -154,7 +159,7 @@ export class RaverieVisualizer {
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
 
-  private createShader(str: string, type: GLenum) {
+  private createShader(str: string, type: GLenum): ProcessedShader {
     const gl = this.gl;
     const shader = expect(gl.createShader(type), "WebGLShader");
     gl.shaderSource(shader, str);
@@ -163,9 +168,12 @@ export class RaverieVisualizer {
     const compileStatus = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
     if (!compileStatus) {
       const compilationLog = gl.getShaderInfoLog(shader);
-      console.error(`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader compiler log:`, compilationLog);
+      return {
+        shader,
+        errors: compilationLog || "Failed to compile"
+      };
     }
-    return shader;
+    return {shader};
   }
 
   private createProgram(fragmentShader: string) {
@@ -196,8 +204,8 @@ export class RaverieVisualizer {
       uniform float gTime;
     `;
     const fshader = this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
-    gl.attachShader(program, vshader);
-    gl.attachShader(program, fshader);
+    gl.attachShader(program, vshader.shader);
+    gl.attachShader(program, fshader.shader);
     gl.linkProgram(program);
     const linkStatus = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
     if (!linkStatus) {
