@@ -18,37 +18,37 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 type GLSLType = "int" | "float" | "sampler2D";
 
 // tags: <types> (see below, the different uniform types)
-interface CompiledUniformBase {
+interface ProcessedUniformBase {
   name: string;
   location: WebGLUniformLocation;
 }
 
-interface CompiledUniformNumber extends CompiledUniformBase {
+interface ProcessedUniformNumber extends ProcessedUniformBase {
   type: "int" | "float";
   defaultValue: number;
   minValue?: number;
   maxValue?: number;
 }
 
-interface CompiledUniformSampler2D extends CompiledUniformBase {
+interface ProcessedUniformSampler2D extends ProcessedUniformBase {
   type: "sampler2D";
   defaultValue: ShaderTexture;
   cachedTexture?: WebGLTexture;
 }
 
-type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
+type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
 
 // This type contains all the possible attributes for all types
-interface ParsedComment {
+interface ProcessedComment {
   default?: ShaderType;
   min?: ShaderType;
   max?: ShaderType;
 }
 
-interface CompiledShaderLayer {
+interface ProcessedShaderLayer {
   type: "shader";
   shaderLayer: ShaderLayer;
-  uniforms: CompiledUniform[];
+  uniforms: ProcessedUniform[];
   program: WebGLProgram;
 
   // Global uniforms (entirely possible to be null if they are unused)
@@ -57,9 +57,9 @@ interface CompiledShaderLayer {
   gPreviousLayer: WebGLUniformLocation | null;
 }
 
-interface CompiledGroup {
+interface ProcessedGroup {
   type: "group";
-  layers: (CompiledShaderLayer | CompiledGroup)[];
+  layers: (ProcessedShaderLayer | ProcessedGroup)[];
   timeSeconds: number;
 }
 
@@ -107,7 +107,7 @@ export class RaverieVisualizer {
   private readonly renderTargets: [RenderTarget, RenderTarget];
   private readonly loadTexture: LoadTextureFunction;
 
-  private compiledGroup: CompiledGroup | null = null;
+  private processedGroup: ProcessedGroup | null = null;
 
   // For copying the final result to the back buffer
   private readonly copyProgram: WebGLProgram;
@@ -237,13 +237,13 @@ export class RaverieVisualizer {
   }
 
   public compile(group: Group): void {
-    this.compiledGroup = this.compileGroup(group);
+    this.processedGroup = this.compileGroup(group);
   }
 
-  private compileGroup(group: Group): CompiledGroup {
+  private compileGroup(group: Group): ProcessedGroup {
     const gl = this.gl;
 
-    const compileShaderLayer = (shaderLayer: ShaderLayer): CompiledShaderLayer => {
+    const compileShaderLayer = (shaderLayer: ShaderLayer): ProcessedShaderLayer => {
       const program = this.createProgram(shaderLayer.code);
 
       const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
@@ -253,7 +253,7 @@ export class RaverieVisualizer {
       // tags: <types>
       const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
-      const uniforms: CompiledUniform[] = [];
+      const uniforms: ProcessedUniform[] = [];
 
       for (; ;) {
         const result = uniformRegex.exec(shaderLayer.code);
@@ -269,7 +269,7 @@ export class RaverieVisualizer {
           break;
         }
 
-        let parsedComment: ParsedComment = {};
+        let parsedComment: ProcessedComment = {};
 
         const afterUniform = result[3];
         const commentStart = afterUniform.indexOf("//");
@@ -291,7 +291,8 @@ export class RaverieVisualizer {
         }
 
         const type = result[1] as GLSLType;
-        const uniformBase: CompiledUniformBase = {
+
+        const uniformBase: ProcessedUniformBase = {
           name,
           location
         };
@@ -329,47 +330,47 @@ export class RaverieVisualizer {
       }
     }
 
-    const compiledGroup: CompiledGroup = {
+    const processedGroup: ProcessedGroup = {
       type: "group",
       layers: [],
       timeSeconds: 0
     };
     for (const layer of group.layers) {
       if (layer.type === "shader") {
-        compiledGroup.layers.push(compileShaderLayer(layer));
+        processedGroup.layers.push(compileShaderLayer(layer));
       } else {
         // Recursively compile the child group
-        compiledGroup.layers.push(this.compileGroup(layer));
+        processedGroup.layers.push(this.compileGroup(layer));
       }
     }
-    return compiledGroup;
+    return processedGroup;
   }
 
   render(): void {
-    if (!this.compiledGroup) {
+    if (!this.processedGroup) {
       return;
     }
     const gl = this.gl;
 
     const renderShaderLayer = (
-      compiledShaderLayer: CompiledShaderLayer,
+      processedShaderLayer: ProcessedShaderLayer,
       renderTarget: RenderTarget,
       previousLayerTexture: WebGLTexture) => {
-      gl.useProgram(compiledShaderLayer.program);
+      gl.useProgram(processedShaderLayer.program);
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
 
       // Apply global uniforms
-      gl.uniform2f(compiledShaderLayer.gResolution, this.width, this.height);
-      gl.uniform1f(compiledShaderLayer.gTime, performance.now() / 1000);
+      gl.uniform2f(processedShaderLayer.gResolution, this.width, this.height);
+      gl.uniform1f(processedShaderLayer.gTime, performance.now() / 1000);
 
-      gl.uniform1i(compiledShaderLayer.gPreviousLayer, 0);
+      gl.uniform1i(processedShaderLayer.gPreviousLayer, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
 
       // Apply layer uniforms
       let textureSamplerIndex = 1;
-      for (const uniform of compiledShaderLayer.uniforms) {
-        const value = compiledShaderLayer.shaderLayer.values[uniform.name];
+      for (const uniform of processedShaderLayer.uniforms) {
+        const value = processedShaderLayer.shaderLayer.values[uniform.name];
         // tags: <types>
         switch (uniform.type) {
           case "int":
@@ -410,9 +411,9 @@ export class RaverieVisualizer {
     }
 
     let renderTargetIndex = 0;
-    const renderRecursive = (compiledGroup: CompiledGroup) => {
-      for (let i = compiledGroup.layers.length - 1; i >= 0; --i) {
-        const layer = compiledGroup.layers[i];
+    const renderRecursive = (processedGroup: ProcessedGroup) => {
+      for (let i = processedGroup.layers.length - 1; i >= 0; --i) {
+        const layer = processedGroup.layers[i];
         if (layer.type === "shader") {
           renderShaderLayer(
             layer,
@@ -426,7 +427,7 @@ export class RaverieVisualizer {
       }
     }
 
-    renderRecursive(this.compiledGroup);
+    renderRecursive(this.processedGroup);
 
     gl.useProgram(this.copyProgram);
     gl.uniform1i(this.textureToCopy, 0);
