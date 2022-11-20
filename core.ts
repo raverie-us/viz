@@ -1,4 +1,4 @@
-import { Group, ShaderLayer, ShaderTexture, ShaderType } from "./interfaces.js";
+import { CompiledGroup, CompiledShaderLayer, CompiledUniformBase, CompiledUniformNumber, CompiledUniformSampler2D, Group, ShaderLayer, ShaderTexture, ShaderType } from "./interfaces.js";
 export * from "./interfaces.js"
 
 // We don't want to rely on nodejs asserts or any other packages
@@ -19,20 +19,18 @@ type GLSLType = "int" | "float" | "sampler2D";
 
 // tags: <types> (see below, the different uniform types)
 interface ProcessedUniformBase {
-  name: string;
+  compiledUniform: CompiledUniformBase;
   location: WebGLUniformLocation;
 }
 
 interface ProcessedUniformNumber extends ProcessedUniformBase {
   type: "int" | "float";
-  defaultValue: number;
-  minValue?: number;
-  maxValue?: number;
+  compiledUniform: CompiledUniformNumber;
 }
 
 interface ProcessedUniformSampler2D extends ProcessedUniformBase {
   type: "sampler2D";
-  defaultValue: ShaderTexture;
+  compiledUniform: CompiledUniformSampler2D;
   cachedTexture?: WebGLTexture;
 }
 
@@ -40,7 +38,7 @@ type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
 
 interface ProcessedShaderLayer {
   type: "shader";
-  shaderLayer: ShaderLayer;
+  compiledShaderLayer: CompiledShaderLayer;
   uniforms: ProcessedUniform[];
   program: WebGLProgram;
 
@@ -52,7 +50,7 @@ interface ProcessedShaderLayer {
 
 interface ProcessedGroup {
   type: "group";
-  group: Group;
+  compiledGroup: CompiledGroup;
   layers: (ProcessedShaderLayer | ProcessedGroup)[];
   timeSeconds: number;
 }
@@ -237,8 +235,9 @@ export class RaverieVisualizer {
     return texture;
   }
 
-  public compile(group: Group): void {
+  public compile(group: Group): CompiledGroup {
     this.processedGroup = this.compileGroup(group);
+    return this.processedGroup.compiledGroup;
   }
 
   private compileGroup(group: Group): ProcessedGroup {
@@ -254,7 +253,7 @@ export class RaverieVisualizer {
       // tags: <types>
       const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
-      const uniforms: ProcessedUniform[] = [];
+      const processedUniforms: ProcessedUniform[] = [];
 
       for (; ;) {
         const result = uniformRegex.exec(shaderLayer.code);
@@ -293,37 +292,44 @@ export class RaverieVisualizer {
 
         const type = result[1] as GLSLType;
 
-        const uniformBase: ProcessedUniformBase = {
-          name,
-          location
-        };
-
         // tags: <types>
         switch (type) {
           case "int":
           case "float":
-            uniforms.push({
-              ...uniformBase,
+            processedUniforms.push({
               type,
-              defaultValue: validateGLSLNumber(type, parsedComment.default),
-              minValue: validateGLSLNumber(type, parsedComment.min),
-              maxValue: validateGLSLNumber(type, parsedComment.min),
+              location,
+              compiledUniform: {
+                name,
+                type,
+                defaultValue: validateGLSLNumber(type, parsedComment.default),
+                minValue: validateGLSLNumber(type, parsedComment.min),
+                maxValue: validateGLSLNumber(type, parsedComment.min),
+              }
             });
             break;
           case "sampler2D":
-            uniforms.push({
-              defaultValue: validateGLSLSampler2D(parsedComment.default),
-              ...uniformBase,
-              type
+            processedUniforms.push({
+              type,
+              location,
+              compiledUniform: {
+                name,
+                type,
+                defaultValue: validateGLSLSampler2D(parsedComment.default),
+              }
             });
             break;
         }
       }
 
-      return {
+      return { 
         type: "shader",
-        shaderLayer,
-        uniforms,
+        compiledShaderLayer: {
+          type: "shader",
+          shaderLayer,
+          uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform)
+        },
+        uniforms: processedUniforms,
         program,
         gResolution: gl.getUniformLocation(program, "gResolution"),
         gTime: gl.getUniformLocation(program, "gTime"),
@@ -333,16 +339,24 @@ export class RaverieVisualizer {
 
     const processedGroup: ProcessedGroup = {
       type: "group",
-      group,
+      compiledGroup: {
+        type: "group",
+        group,
+        layers: []
+      },
       layers: [],
       timeSeconds: 0
     };
     for (const layer of group.layers) {
       if (layer.type === "shader") {
-        processedGroup.layers.push(compileShaderLayer(layer));
+        const processedShaderLayer = compileShaderLayer(layer);
+        processedGroup.layers.push(processedShaderLayer);
+        processedGroup.compiledGroup.layers.push(processedShaderLayer.compiledShaderLayer);
       } else {
         // Recursively compile the child group
-        processedGroup.layers.push(this.compileGroup(layer));
+        const processedGroup = this.compileGroup(layer);
+        processedGroup.layers.push(processedGroup);
+        processedGroup.compiledGroup.layers.push(processedGroup.compiledGroup);
       }
     }
     return processedGroup;
@@ -371,17 +385,18 @@ export class RaverieVisualizer {
 
       // Apply layer uniforms
       let textureSamplerIndex = 1;
-      for (const uniform of processedShaderLayer.uniforms) {
-        const value = processedShaderLayer.shaderLayer.values[uniform.name];
+      for (const processedUniform of processedShaderLayer.uniforms) {
+        const value = processedShaderLayer.compiledShaderLayer.shaderLayer.
+          values[processedUniform.compiledUniform.name];
         // tags: <types>
-        switch (uniform.type) {
+        switch (processedUniform.type) {
           case "int":
           case "float": {
-            const validatedValue = validateGLSLNumber(uniform.type, value);
-            if (uniform.type === "int") {
-              gl.uniform1i(uniform.location, validatedValue);
+            const validatedValue = validateGLSLNumber(processedUniform.type, value);
+            if (processedUniform.type === "int") {
+              gl.uniform1i(processedUniform.location, validatedValue);
             } else {
-              gl.uniform1f(uniform.location, validatedValue);
+              gl.uniform1f(processedUniform.location, validatedValue);
             }
             break;
           }
@@ -389,20 +404,20 @@ export class RaverieVisualizer {
             const validatedValue = validateGLSLSampler2D(value);
             const shaderTexture = validatedValue as ShaderTexture;
             let texture: WebGLTexture | null = null;
-            if (uniform.cachedTexture) {
-              texture = uniform.cachedTexture;
+            if (processedUniform.cachedTexture) {
+              texture = processedUniform.cachedTexture;
             } else {
               texture = this.createTexture();
               this.loadTexture(shaderTexture.url, texture, gl);
             }
-            uniform.cachedTexture = texture;
+            processedUniform.cachedTexture = texture;
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.uniform1i(uniform.location, textureSamplerIndex);
+            gl.uniform1i(processedUniform.location, textureSamplerIndex);
             ++textureSamplerIndex;
             break;
           }
-          default: throw new Error(`Unexpected GLSL type '${(uniform as any).type}'`)
+          default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
         }
       }
 

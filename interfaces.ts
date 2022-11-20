@@ -32,3 +32,34 @@ export interface ShaderLayer {
   timeScale: number;
   timeMode: ShaderLayerTimeMode;
 }
+
+// tags: <types> (see below, the different uniform types)
+export interface CompiledUniformBase {
+  name: string;
+}
+
+export interface CompiledUniformNumber extends CompiledUniformBase {
+  type: "int" | "float";
+  defaultValue: number;
+  minValue?: number;
+  maxValue?: number;
+}
+
+export interface CompiledUniformSampler2D extends CompiledUniformBase {
+  type: "sampler2D";
+  defaultValue: ShaderTexture;
+}
+
+export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
+
+export interface CompiledShaderLayer {
+  type: "shader";
+  shaderLayer: ShaderLayer;
+  uniforms: CompiledUniform[];
+}
+
+export interface CompiledGroup {
+  type: "group";
+  group: Group;
+  layers: (CompiledShaderLayer | CompiledGroup)[];
+}
