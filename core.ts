@@ -96,14 +96,14 @@ const validateGLSLValue = (glslType: GLSLType, value: any): ShaderType => {
   throw new Error(`Unexpected GLSL type '${glslType}'`);
 }
 
-export type GetTextureFunction = (url: string, gl: WebGL2RenderingContext) => WebGLTexture;
+export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => any;
 
 export class RaverieVisualizer {
   private width: number;
   private height: number;
   private readonly gl: WebGL2RenderingContext;
   private readonly renderTargets: [RenderTarget, RenderTarget];
-  private readonly getTexture: GetTextureFunction;
+  private readonly loadTexture: LoadTextureFunction;
 
   private compiledGroup: CompiledGroup | null = null;
 
@@ -111,9 +111,9 @@ export class RaverieVisualizer {
   private readonly copyProgram: WebGLProgram;
   private readonly textureToCopy: WebGLUniformLocation;
 
-  public constructor(gl: WebGL2RenderingContext, getTexture: GetTextureFunction, width: number, height: number) {
+  public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
     this.gl = gl;
-    this.getTexture = getTexture;
+    this.loadTexture = loadTexture;
     this.width = width;
     this.height = height;
 
@@ -136,28 +136,15 @@ export class RaverieVisualizer {
     }
     `;
 
-    const createTexture = (width: number, height: number): WebGLTexture => {
-      const texture = gl.createTexture();
-      if (!texture) {
-        throw new Error("Unable to create RenderTarget WebGLTexture");
-      }
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      return texture;
-    }
-
     const createRenderTarget = (width: number, height: number): RenderTarget => {
       const buffer = gl.createFramebuffer();
       if (!buffer) {
         throw new Error("Unable to create RenderTarget WebGLFramebuffer");
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
-      const texture = createTexture(width, height);
+      const texture = this.createTexture();
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return {
@@ -231,6 +218,20 @@ export class RaverieVisualizer {
       console.error('Shader program/linking:', programLog);
     }
     return program;
+  }
+
+  private createTexture(): WebGLTexture {
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    if (!texture) {
+      throw new Error("Unable to create RenderTarget WebGLTexture");
+    }
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
   }
 
   public compile(group: Group): void {
@@ -379,7 +380,13 @@ export class RaverieVisualizer {
             break;
           case "sampler2D": {
             const shaderTexture = validatedValue as ShaderTexture;
-            const texture = uniform.cachedTexture || this.getTexture(shaderTexture.url, gl);
+            let texture: WebGLTexture | null = null;
+            if (uniform.cachedTexture) {
+              texture = uniform.cachedTexture;
+            } else {
+              texture = this.createTexture();
+              this.loadTexture(shaderTexture.url, texture, gl);
+            }
             uniform.cachedTexture = texture;
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
