@@ -18,7 +18,6 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 type GLSLType = "float" | "sampler2D";
 
 interface CompiledUniformBase {
-  type: GLSLType;
   name: string;
   location: WebGLUniformLocation;
   defaultValue: ShaderType;
@@ -37,6 +36,7 @@ interface CompiledUniformSampler2D extends CompiledUniformBase {
 
 type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
+// This type contains all the possible attributes for all types
 interface ParsedComment {
   default?: ShaderType;
   min?: ShaderType;
@@ -286,17 +286,30 @@ export class RaverieVisualizer {
 
         const type = result[1] as GLSLType;
         const defaultValue = validateGLSLValue(type, parsedComment.default);
-        const minValue = validateGLSLValue(type, parsedComment.min);
-        const maxValue = validateGLSLValue(type, parsedComment.max);
 
-        uniforms.push({
-          type,
+        const uniformBase: CompiledUniformBase = {
           name,
           location,
-          defaultValue,
-          minValue,
-          maxValue
-        });
+          defaultValue
+        };
+
+        // tags: <types>
+        switch (type) {
+          case "float":
+            uniforms.push({
+              ...uniformBase,
+              type: "float",
+              minValue: validateGLSLValue(type, parsedComment.min),
+              maxValue: validateGLSLValue(type, parsedComment.min)
+            });
+            break;
+          case "sampler2D":
+            uniforms.push({
+              ...uniformBase,
+              type: "sampler2D"
+            });
+            break;
+        }
       }
 
       return {
