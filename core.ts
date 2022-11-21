@@ -34,7 +34,7 @@ interface ProcessedShaderLayer {
   type: "shader";
   compiledShaderLayer: CompiledShaderLayer;
   uniforms: ProcessedUniform[];
-  program: WebGLProgram;
+  program: WebGLProgram | null;
 
   // Global uniforms (entirely possible to be null if they are unused)
   gResolution: WebGLUniformLocation | null;
@@ -56,13 +56,18 @@ interface ProcessedComment {
   max?: ShaderType;
 }
 
-interface ProcessedShader {
+interface ProcessedShaderSuccess {
   shader: WebGLShader;
-  compileErrors?: string;
+  compileErrors?: undefined;
 }
+interface ProcessedShaderFailed {
+  shader: null;
+  compileErrors: string;
+}
+type ProcessedShader = ProcessedShaderSuccess | ProcessedShaderFailed;
 
 interface ProcessedProgram {
-  program: WebGLProgram;
+  program: WebGLProgram | null;
   compileErrors?: string;
   linkErrors?: string;
 }
@@ -81,7 +86,7 @@ const validateGLSLFloat = (value: any): number =>
   value === undefined ? 0 : Number(value);
 
 // tags: <types>
-const validateGLSLNumber = (glslType: "int" | "float", value: any): number => 
+const validateGLSLNumber = (glslType: "int" | "float", value: any): number =>
   glslType === "int"
     ? validateGLSLInt(value)
     : validateGLSLFloat(value)
@@ -167,18 +172,27 @@ export class RaverieVisualizer {
         gl_Position = vec4(_gVeretxPosition, 0.0, 1.0);
       }`;
 
-    this.vertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER, true).shader;
+    const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
+    this.vertexShader = expect(this.createShader(vertexShader, gl.VERTEX_SHADER).shader,
+      processedVertexShader.compileErrors!);
 
     const fragmentShaderCopy = `
       uniform sampler2D textureToCopy;
       void main() {
         gFragColor = texture(textureToCopy, gUV);
       }`;
-    this.copyProgram = this.createProgram(fragmentShaderCopy);
+    const processedCopyProgram = this.createProgram(fragmentShaderCopy);
+    if (processedCopyProgram.compileErrors) {
+      throw new Error(`Copy program did not compile: ${processedCopyProgram.compileErrors}`);
+    }
+    if (processedCopyProgram.linkErrors) {
+      throw new Error(`Copy program did not link: ${processedCopyProgram.linkErrors}`);
+    }
+    this.copyProgram = processedCopyProgram.program!;
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
 
-  private createShader(str: string, type: GLenum, throwOnError = false): ProcessedShader {
+  private createShader(str: string, type: GLenum): ProcessedShader {
     const gl = this.gl;
     const shader = expect(gl.createShader(type), "WebGLShader");
     gl.shaderSource(shader, str);
@@ -188,13 +202,8 @@ export class RaverieVisualizer {
     if (!compileStatus) {
       const compilationLog = gl.getShaderInfoLog(shader);
       gl.deleteShader(shader);
-
-      if (throwOnError) {
-        throw new Error(`Built in shader did not compile: ${compilationLog}`);
-      }
-
       return {
-        shader,
+        shader: null,
         compileErrors: compilationLog || "Failed to compile"
       };
     }
@@ -217,6 +226,13 @@ export class RaverieVisualizer {
     `;
     const processedFragmentShader =
       this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
+    if (!processedFragmentShader.shader) {
+      return {
+        program: null,
+        compileErrors: processedFragmentShader.compileErrors,
+      };
+    }
+
     gl.attachShader(program, expect(this.vertexShader, "Vertex Shader"));
     gl.attachShader(program, processedFragmentShader.shader);
     gl.linkProgram(program);
@@ -225,7 +241,6 @@ export class RaverieVisualizer {
       const programLog = gl.getProgramInfoLog(program);
       return {
         program,
-        compileErrors: processedFragmentShader.compileErrors,
         linkErrors: programLog || "Failed to link"
       };
     }
@@ -258,9 +273,24 @@ export class RaverieVisualizer {
     const compileShaderLayer = (shaderLayer: ShaderLayer): ProcessedShaderLayer => {
       const processedProgram = this.createProgram(shaderLayer.code);
 
-      const vertexPosAttrib = gl.getAttribLocation(processedProgram.program, '_gVeretxPosition');
-      gl.enableVertexAttribArray(vertexPosAttrib);
-      gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+      if (processedProgram.compileErrors) {
+        console.warn(processedProgram.compileErrors);
+      }
+      if (processedProgram.linkErrors) {
+        console.warn(processedProgram.linkErrors);
+      }
+
+      // It's possible that there was a compile/linker error and we got no program back
+      const program = processedProgram.program;
+      if (program) {
+        const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
+        gl.enableVertexAttribArray(vertexPosAttrib);
+        gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+      }
+
+      const getUniformLocation = (name: string) => program
+        ? gl.getUniformLocation(program, name)
+        : null;
 
       // tags: <types>
       const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
@@ -274,7 +304,7 @@ export class RaverieVisualizer {
         }
 
         const name = result[2];
-        const location = gl.getUniformLocation(processedProgram.program, name);
+        const location = getUniformLocation(name);
 
         let parsedComment: ProcessedComment = {};
 
@@ -339,10 +369,10 @@ export class RaverieVisualizer {
           linkErrors: processedProgram.linkErrors,
         },
         uniforms: processedUniforms,
-        program: processedProgram,
-        gResolution: gl.getUniformLocation(processedProgram, "gResolution"),
-        gTime: gl.getUniformLocation(processedProgram, "gTime"),
-        gPreviousLayer: gl.getUniformLocation(processedProgram, "gPreviousLayer"),
+        program,
+        gResolution: getUniformLocation("gResolution"),
+        gTime: getUniformLocation("gTime"),
+        gPreviousLayer: getUniformLocation("gPreviousLayer"),
       }
     }
 
@@ -447,12 +477,16 @@ export class RaverieVisualizer {
       for (let i = processedGroup.layers.length - 1; i >= 0; --i) {
         const layer = processedGroup.layers[i];
         if (layer.type === "shader") {
-          renderShaderLayer(
-            layer,
-            this.renderTargets[renderTargetIndex],
-            this.renderTargets[Number(!renderTargetIndex)].texture);
+          // We only render the layer if it has a valid program (also don't swap buffers)
+          // Treat this like it's an invisible layer
+          if (layer.program) {
+            renderShaderLayer(
+              layer,
+              this.renderTargets[renderTargetIndex],
+              this.renderTargets[Number(!renderTargetIndex)].texture);
 
-          renderTargetIndex = Number(!renderTargetIndex);
+            renderTargetIndex = Number(!renderTargetIndex);
+          }
         } else {
           renderRecursive(layer);
         }
