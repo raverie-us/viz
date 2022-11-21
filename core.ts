@@ -216,7 +216,8 @@ export class RaverieVisualizer {
 
     const fragmentShaderHeader = `#version 300 es
       precision highp float;
-      const float PI = 3.1415926535897932384626433832795;
+      const float gPI = acos(-1.0);
+      const float gPI2 = gPI * 2.0;
       in vec2 gPosition;
       in vec2 gUV;
       out vec4 gFragColor;
@@ -251,8 +252,8 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const texture = expect(gl.createTexture(), "WebGLTexture");
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     return texture;
