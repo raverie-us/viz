@@ -167,11 +167,7 @@ export class RaverieVisualizer {
         gl_Position = vec4(_gVeretxPosition, 0.0, 1.0);
       }`;
 
-    const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
-    if (processedVertexShader.compileErrors) {
-      throw new Error(`Shared vertex shader errors: ${processedVertexShader.compileErrors}`);
-    }
-    this.vertexShader = processedVertexShader.shader;
+    this.vertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER, true).shader;
 
     const fragmentShaderCopy = `
       uniform sampler2D textureToCopy;
@@ -182,7 +178,7 @@ export class RaverieVisualizer {
     this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
   }
 
-  private createShader(str: string, type: GLenum): ProcessedShader {
+  private createShader(str: string, type: GLenum, throwOnError = false): ProcessedShader {
     const gl = this.gl;
     const shader = expect(gl.createShader(type), "WebGLShader");
     gl.shaderSource(shader, str);
@@ -191,6 +187,12 @@ export class RaverieVisualizer {
     const compileStatus = gl.getShaderParameter(shader, gl.COMPILE_STATUS) as boolean;
     if (!compileStatus) {
       const compilationLog = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+
+      if (throwOnError) {
+        throw new Error(`Built in shader did not compile: ${compilationLog}`);
+      }
+
       return {
         shader,
         compileErrors: compilationLog || "Failed to compile"
