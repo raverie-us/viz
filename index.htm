@@ -22,7 +22,7 @@
           float r = length(uv);
           float theta = atan(uv.y, uv.x);
           vec4 prev = texture(gPreviousLayer, gUV);
-          gFragColor = fract(2.5 * theta / PI + 7.0 * pow(r, centerWarp) - gTime) < 0.5 ? vec4(1.0) : prev;
+          gFragColor = fract(2.5 * theta / gPI + 7.0 * pow(r, centerWarp) - gTime) < 0.5 ? vec4(1.0) : prev;
         }
       `,
       blendMode: "normal",
