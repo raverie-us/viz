@@ -58,7 +58,13 @@ interface ProcessedComment {
 
 interface ProcessedShader {
   shader: WebGLShader;
-  errors?: string;
+  compileErrors?: string;
+}
+
+interface ProcessedProgram {
+  program: WebGLProgram;
+  compileErrors?: string;
+  linkErrors?: string;
 }
 
 interface RenderTarget {
@@ -162,8 +168,8 @@ export class RaverieVisualizer {
       }`;
   
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
-    if (processedVertexShader.errors) {
-      throw new Error(`Shared vertex shader errors: ${processedVertexShader.errors}`);
+    if (processedVertexShader.compileErrors) {
+      throw new Error(`Shared vertex shader errors: ${processedVertexShader.compileErrors}`);
     }
     this.vertexShader = processedVertexShader.shader;
 
@@ -187,13 +193,13 @@ export class RaverieVisualizer {
       const compilationLog = gl.getShaderInfoLog(shader);
       return {
         shader,
-        errors: compilationLog || "Failed to compile"
+        compileErrors: compilationLog || "Failed to compile"
       };
     }
     return {shader};
   }
 
-  private createProgram(fragmentShader: string) {
+  private createProgram(fragmentShader: string): ProcessedProgram {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
@@ -207,16 +213,21 @@ export class RaverieVisualizer {
       uniform vec2 gResolution;
       uniform float gTime;
     `;
-    const fshader = this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
+    const processedFragmentShader =
+      this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
     gl.attachShader(program, expect(this.vertexShader, "Vertex Shader"));
-    gl.attachShader(program, fshader.shader);
+    gl.attachShader(program, processedFragmentShader.shader);
     gl.linkProgram(program);
     const linkStatus = gl.getProgramParameter(program, gl.LINK_STATUS) as boolean;
     if (!linkStatus) {
       const programLog = gl.getProgramInfoLog(program);
-      console.error('Shader program/linking:', programLog);
+      return {
+        program,
+        compileErrors: processedFragmentShader.compileErrors,
+        linkErrors: programLog || "Failed to link"
+      };
     }
-    return program;
+    return {program};
   }
 
   private createTexture(): WebGLTexture {
@@ -243,9 +254,9 @@ export class RaverieVisualizer {
     const gl = this.gl;
 
     const compileShaderLayer = (shaderLayer: ShaderLayer): ProcessedShaderLayer => {
-      const program = this.createProgram(shaderLayer.code);
+      const processedProgram = this.createProgram(shaderLayer.code);
 
-      const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
+      const vertexPosAttrib = gl.getAttribLocation(processedProgram.program, '_gVeretxPosition');
       gl.enableVertexAttribArray(vertexPosAttrib);
       gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
@@ -261,7 +272,7 @@ export class RaverieVisualizer {
         }
 
         const name = result[2];
-        const location = gl.getUniformLocation(program, name);
+        const location = gl.getUniformLocation(processedProgram.program, name);
 
         let parsedComment: ProcessedComment = {};
 
@@ -321,13 +332,15 @@ export class RaverieVisualizer {
         compiledShaderLayer: {
           type: "shader",
           shaderLayer,
-          uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform)
+          uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
+          compileErrors: processedProgram.compileErrors,
+          linkErrors: processedProgram.linkErrors,
         },
         uniforms: processedUniforms,
-        program,
-        gResolution: gl.getUniformLocation(program, "gResolution"),
-        gTime: gl.getUniformLocation(program, "gTime"),
-        gPreviousLayer: gl.getUniformLocation(program, "gPreviousLayer"),
+        program: processedProgram,
+        gResolution: gl.getUniformLocation(processedProgram, "gResolution"),
+        gTime: gl.getUniformLocation(processedProgram, "gTime"),
+        gPreviousLayer: gl.getUniformLocation(processedProgram, "gPreviousLayer"),
       }
     }
 

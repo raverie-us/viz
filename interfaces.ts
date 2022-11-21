@@ -56,6 +56,8 @@ export interface CompiledShaderLayer {
   type: "shader";
   shaderLayer: ShaderLayer;
   uniforms: CompiledUniform[];
+  compileErrors?: string;
+  linkErrors?: string;
 }
 
 export interface CompiledGroup {
