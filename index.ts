@@ -1,4 +1,5 @@
-import { RaverieVisualizer, Group } from "./core.js";
+import { RaverieVisualizer } from "./core.js";
+import { runTests } from "./test.js";
 
 const canvas = document.getElementsByTagName("canvas")[0];
 const gl = canvas.getContext("webgl2");
@@ -23,6 +24,8 @@ const loadTexture = async (url: string, texture: WebGLTexture, gl: WebGL2Renderi
 const textarea = document.getElementsByTagName("textarea")[0];
 
 const visualizer = new RaverieVisualizer(gl, loadTexture, canvas.width, canvas.height);
+
+runTests(visualizer);
 
 const onJsonChanged = () => {
   const json = eval(`(${textarea.value})`);
