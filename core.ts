@@ -152,13 +152,13 @@ export class RaverieVisualizer {
 
     // All effects currently use the same vertex shader
     const vertexShader = `#version 300 es
-      in vec4 pos;
+      in vec2 _gVeretxPosition;
       out vec2 gPosition;
       out vec2 gUV;
       void main() {
-        gPosition = pos.xy;
-        gUV = (pos.xy + vec2(1.0, 1.0)) * 0.5;
-        gl_Position = pos;
+        gPosition = _gVeretxPosition;
+        gUV = (_gVeretxPosition + vec2(1.0, 1.0)) * 0.5;
+        gl_Position = vec4(_gVeretxPosition, 0.0, 1.0);
       }`;
   
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
@@ -245,7 +245,7 @@ export class RaverieVisualizer {
     const compileShaderLayer = (shaderLayer: ShaderLayer): ProcessedShaderLayer => {
       const program = this.createProgram(shaderLayer.code);
 
-      const vertexPosAttrib = gl.getAttribLocation(program, 'pos');
+      const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
       gl.enableVertexAttribArray(vertexPosAttrib);
       gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
 
