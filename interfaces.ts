@@ -16,30 +16,44 @@ export type ShaderLayerTimeMode =
   "normal" |
   "pingpong";
 
+export interface ShaderValueBase {
+  name: string;
+}
+
+export interface ShaderValueNumber extends ShaderValueBase {
+  type: "int" | "float";
+  value: number;
+}
+
 export interface ShaderTexture {
   url: string;
 };
 
+export interface ShaderValueSampler2D extends ShaderValueBase {
+  type: "sampler2D";
+  value: ShaderTexture;
+}
+
 // tags: <types>
-export type ShaderType = number | ShaderTexture;
+export type ShaderValue = ShaderValueNumber | ShaderValueSampler2D;
 
 export interface ShaderLayer {
   type: "shader";
   code: string;
-  values: Record<string, ShaderType>;
+  values: ShaderValue[];
   blendMode: ShaderLayerBlendMode;
   opacity: number;
   timeScale: number;
   timeMode: ShaderLayerTimeMode;
 }
 
-// tags: <types> (see below, the different uniform types)
 export interface CompiledUniformBase {
   name: string;
 }
 
 export interface CompiledUniformNumber extends CompiledUniformBase {
   type: "int" | "float";
+  shaderValue: ShaderValueNumber;
   defaultValue: number;
   minValue?: number;
   maxValue?: number;
@@ -47,9 +61,11 @@ export interface CompiledUniformNumber extends CompiledUniformBase {
 
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
   type: "sampler2D";
+  shaderValue: ShaderValueSampler2D;
   defaultValue: ShaderTexture;
 }
 
+// tags: <types>
 export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
 export interface CompiledShaderLayer {

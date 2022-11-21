@@ -1,4 +1,14 @@
-import { CompiledGroup, CompiledShaderLayer, CompiledUniformBase, CompiledUniformNumber, CompiledUniformSampler2D, Group, ShaderLayer, ShaderTexture, ShaderType } from "./interfaces.js";
+import {
+  CompiledGroup,
+  CompiledShaderLayer,
+  CompiledUniformBase,
+  CompiledUniformNumber,
+  CompiledUniformSampler2D,
+  Group,
+  ShaderLayer,
+  ShaderTexture,
+  ShaderValue
+} from "./interfaces.js";
 export * from "./interfaces.js"
 
 const expect = <T>(value: T | null | undefined, name: string): T => {
@@ -29,6 +39,12 @@ interface ProcessedUniformSampler2D extends ProcessedUniformBase {
 }
 
 type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
+
+interface NewUniform {
+  type: GLSLType;
+  name: string;
+  afterUniform: string;
+}
 
 interface ProcessedShaderLayer {
   type: "shader";
@@ -296,20 +312,31 @@ export class RaverieVisualizer {
       // tags: <types>
       const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
-      const processedUniforms: ProcessedUniform[] = [];
-
+      const newUniformNames: Record<string, true> = {};
+      const newUniforms: NewUniform[] = [];
       for (; ;) {
         const result = uniformRegex.exec(shaderLayer.code);
         if (!result) {
           break;
         }
-
         const name = result[2];
+        newUniformNames[name] = true;
+        newUniforms.push({
+          type: result[1] as GLSLType,
+          name,
+          afterUniform: result[3]
+        });
+      }
+
+      // Make a copy of the old shader values that we pop from as we map old to new
+      const oldShaderValues = shaderLayer.values.slice(0);
+
+      const processedUniforms: ProcessedUniform[] = newUniforms.map((unprocessedUniform, uniformIndex) => {
+        const { type, name, afterUniform } = unprocessedUniform;
         const location = getUniformLocation(name);
 
         let parsedComment: ProcessedComment = {};
 
-        const afterUniform = result[3];
         const commentStart = afterUniform.indexOf("//");
         if (commentStart !== -1) {
           // Check if we can parse the comment as JSON (skip 2 characters for the //)
@@ -328,37 +355,79 @@ export class RaverieVisualizer {
           }
         }
 
-        const type = result[1] as GLSLType;
+        // We always first look by name
+        let foundShaderValue: ShaderValue | null = null;
+        for (let i = 0; i < oldShaderValues.length; ++i) {
+          const oldShaderValue = oldShaderValues[i];
+          if (oldShaderValue.name === name) {
+            oldShaderValues.splice(i, 1);
+            foundShaderValue = oldShaderValue;
+            break;
+          }
+        }
+
+        // If we didn't find it by name, we'll detect a potential rename by checking if there
+        // is a uniform at the same previous index that is also of the same type and is *unused*
+        if (foundShaderValue === null) {
+          const oldShaderValueAtIndex = shaderLayer.values[uniformIndex] as ShaderValue | undefined;
+          const isRename =
+            oldShaderValueAtIndex &&
+            oldShaderValueAtIndex.type === type &&
+            !newUniformNames[oldShaderValueAtIndex.name];
+
+          if (isRename) {
+            foundShaderValue = oldShaderValueAtIndex;
+          }
+        }
 
         // tags: <types>
         switch (type) {
           case "int":
           case "float":
-            processedUniforms.push({
+            return <ProcessedUniformNumber>{
               type,
               location,
               compiledUniform: {
                 name,
                 type,
+                shaderValue: {
+                  name,
+                  type,
+                  value: validateGLSLNumber(type, foundShaderValue?.value)
+                },
                 defaultValue: validateGLSLNumber(type, parsedComment.default),
                 minValue: validateGLSLNumber(type, parsedComment.min),
                 maxValue: validateGLSLNumber(type, parsedComment.min),
               }
-            });
+            };
             break;
           case "sampler2D":
-            processedUniforms.push({
+            return <ProcessedUniformSampler2D>{
               type,
               location,
               compiledUniform: {
                 name,
                 type,
+                shaderValue: {
+                  name,
+                  type,
+                  value: validateGLSLSampler2D(foundShaderValue?.value)
+                },
                 defaultValue: validateGLSLSampler2D(parsedComment.default),
               }
-            });
+            };
             break;
         }
-      }
+      });
+
+      // Now that we've processed all the new uniforms and either
+      // found their old shader values or made new ones, lets update the
+      // shader values on the ShaderLayer to match. Note that this will
+      // mutate the object, however it may be a copy of the user's ShaderLayer
+      // depending on which option they passed into `compile`
+      shaderLayer.values.length = 0;
+      shaderLayer.values.push(...processedUniforms.map((processedUniform) =>
+        processedUniform.compiledUniform.shaderValue));
 
       return {
         type: "shader",
@@ -432,8 +501,7 @@ export class RaverieVisualizer {
           continue;
         }
 
-        const value = processedShaderLayer.compiledShaderLayer.shaderLayer.
-          values[processedUniform.compiledUniform.name];
+        const value = processedUniform.compiledUniform.shaderValue.value;
         // tags: <types>
         switch (processedUniform.type) {
           case "int":

@@ -29,9 +29,13 @@
       opacity: 1,
       timeMode: "normal",
       timeScale: 1,
-      values: {
-        centerWarp: 0.4
-      }
+      values: [
+        {
+          name: "centerWarp",
+          type: "float",
+          value: 0.4
+        }
+      ]
     },
     {
       type: "shader",
@@ -48,9 +52,13 @@
       opacity: 1,
       timeMode: "normal",
       timeScale: 1,
-      values: {
-        lines: 3
-      }
+      values: [
+        {
+          name: "lines",
+          type: "float",
+          value: 3
+        }
+      ]
     },
     {
       type: "shader",
@@ -65,11 +73,15 @@
       opacity: 1,
       timeMode: "normal",
       timeScale: 1,
-      values: {
-        textureInput: {
-          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAC1QTFRFAAAA9KRazHn//Pez/97//v3m/8P//33//PFc/3T//vua/////7X//fWO99xVZpEWpAAAAA90Uk5TAP//////////////////5Y2epgAAAdBJREFUeJyl1D9qwzAUBnCrJ6jRBYrpBcrD4KUegijkAFoC2YpDaceC8ezFZPaiA2TJnKWkc6DQrbOPUJ+h+mtbqiVTqvX98n2K/ZIosg+6iYIH4VVYYCCrYACkjyQUgYAWQYBTWjyGOpYAb6BFqGMR8AYOAh1LQDRw4O/4PxBXEMB7iWUAYYBAg53nEgsgjrEB5WuSJM4wjkEcDUpCSDIiPQSop4BIJOdgTjZUEHMSebUA4NfFI4Bag3HOd/xPIJNgN2loOchqP2AcIGiaQRwkGOdMPFOcjWIjV06P10wEKNDUvwFjGogOI+iBg9MwZ+qtyQhVM4A1GwJMhBR0Q4vnk/64CRgieI0Get6azTIRDX+Sh+L8xpyAMaI5Unr+/HADRIQW+yN9N6CdLh7WJXu6HYD1Z4VUCaS0u2jQ2n93+o1MgLPZeq/SbXd5CYKuuxQhcC/AUwB8C7CbA2rx8gloV35QeUGvQOkDuQGVB/QK8N/mPMgDAIENKvd7ItXAwdeDAOUc4AF91wGRoJoBvQBwd0s8QAT0ANdXhJSywwVqHkdRIkU1B+TcCBfkw1yLygIYJnMlKutJcTCZK2FvNVhzKeyNwfZcCPtlIWfOhQ74AbgZq7L3W3rcAAAAAElFTkSuQmCC"
+      values: [
+        {
+          name: "textureInput",
+          type: "sampler2D",
+          value: {
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAC1QTFRFAAAA9KRazHn//Pez/97//v3m/8P//33//PFc/3T//vua/////7X//fWO99xVZpEWpAAAAA90Uk5TAP//////////////////5Y2epgAAAdBJREFUeJyl1D9qwzAUBnCrJ6jRBYrpBcrD4KUegijkAFoC2YpDaceC8ezFZPaiA2TJnKWkc6DQrbOPUJ+h+mtbqiVTqvX98n2K/ZIosg+6iYIH4VVYYCCrYACkjyQUgYAWQYBTWjyGOpYAb6BFqGMR8AYOAh1LQDRw4O/4PxBXEMB7iWUAYYBAg53nEgsgjrEB5WuSJM4wjkEcDUpCSDIiPQSop4BIJOdgTjZUEHMSebUA4NfFI4Bag3HOd/xPIJNgN2loOchqP2AcIGiaQRwkGOdMPFOcjWIjV06P10wEKNDUvwFjGogOI+iBg9MwZ+qtyQhVM4A1GwJMhBR0Q4vnk/64CRgieI0Get6azTIRDX+Sh+L8xpyAMaI5Unr+/HADRIQW+yN9N6CdLh7WJXu6HYD1Z4VUCaS0u2jQ2n93+o1MgLPZeq/SbXd5CYKuuxQhcC/AUwB8C7CbA2rx8gloV35QeUGvQOkDuQGVB/QK8N/mPMgDAIENKvd7ItXAwdeDAOUc4AF91wGRoJoBvQBwd0s8QAT0ANdXhJSywwVqHkdRIkU1B+TcCBfkw1yLygIYJnMlKutJcTCZK2FvNVhzKeyNwfZcCPtlIWfOhQ74AbgZq7L3W3rcAAAAAElFTkSuQmCC"
+          }
         }
-      }
+      ]
     },
     {
       type: "shader",
@@ -83,9 +95,13 @@
       opacity: 1,
       timeMode: "normal",
       timeScale: 1,
-      values: {
-        blue: 0.5
-      }
+      values: [
+        {
+          name: "blue",
+          type: "float",
+          value: 0.5
+        }
+      ]
     }
   ]
 }
