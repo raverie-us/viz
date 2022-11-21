@@ -166,7 +166,7 @@ export class RaverieVisualizer {
         gUV = (_gVeretxPosition + vec2(1.0, 1.0)) * 0.5;
         gl_Position = vec4(_gVeretxPosition, 0.0, 1.0);
       }`;
-  
+
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
     if (processedVertexShader.compileErrors) {
       throw new Error(`Shared vertex shader errors: ${processedVertexShader.compileErrors}`);
@@ -196,7 +196,7 @@ export class RaverieVisualizer {
         compileErrors: compilationLog || "Failed to compile"
       };
     }
-    return {shader};
+    return { shader };
   }
 
   private createProgram(fragmentShader: string): ProcessedProgram {
@@ -227,7 +227,7 @@ export class RaverieVisualizer {
         linkErrors: programLog || "Failed to link"
       };
     }
-    return {program};
+    return { program };
   }
 
   private createTexture(): WebGLTexture {
@@ -327,7 +327,7 @@ export class RaverieVisualizer {
         }
       }
 
-      return { 
+      return {
         type: "shader",
         compiledShaderLayer: {
           type: "shader",
