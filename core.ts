@@ -98,10 +98,10 @@ const validateGLSLSampler2D = (value: any): ShaderTexture => {
   }
 
   if (typeof value === "object" && value !== null) {
-    if (!("url" in value)) {
-      return { url: "" };
+    if (typeof value.url === "string") {
+      return value;
     }
-    return value;
+    return { url: "" };
   } else {
     return { url: String(value) };
   }
