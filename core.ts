@@ -51,9 +51,9 @@ interface ProcessedGroup {
 
 // This type contains all the possible attributes for all types
 interface ProcessedComment {
-  default?: ShaderType;
-  min?: ShaderType;
-  max?: ShaderType;
+  default?: any;
+  min?: any;
+  max?: any;
 }
 
 interface ProcessedShaderSuccess {
