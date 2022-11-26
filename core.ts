@@ -418,6 +418,7 @@ export class RaverieVisualizer {
               defaultValue: validateGLSLSampler2D(parsedComment.default),
             }
           });
+        default: throw new Error(`Unexpected GLSL type '${type}'`)
       }
     });
 
