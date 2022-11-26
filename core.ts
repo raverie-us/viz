@@ -474,7 +474,7 @@ export class RaverieVisualizer {
     return processedGroup;
   }
 
-  private render(): void {
+  public render(): void {
     if (!this.processedGroup) {
       return;
     }
