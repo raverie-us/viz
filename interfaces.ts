@@ -49,6 +49,7 @@ export interface ShaderLayer {
 
 export interface CompiledUniformBase {
   name: string;
+  parsedComment: Record<string, any>;
 }
 
 export interface CompiledUniformNumber extends CompiledUniformBase {

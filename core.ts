@@ -93,6 +93,8 @@ interface RenderTarget {
   buffer: WebGLFramebuffer;
 }
 
+const pass = <T>(value: T): T => value;
+
 // tags: <types>
 const validateGLSLInt = (value: any): number =>
   value === undefined ? 0 : Math.floor(Number(value));
@@ -331,7 +333,7 @@ export class RaverieVisualizer {
       // Make a copy of the old shader values that we pop from as we map old to new
       const oldShaderValues = shaderLayer.values.slice(0);
 
-      const processedUniforms: ProcessedUniform[] = newUniforms.map((unprocessedUniform, uniformIndex) => {
+      const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
         const { type, name, afterUniform } = unprocessedUniform;
         const location = getUniformLocation(name);
 
@@ -384,12 +386,13 @@ export class RaverieVisualizer {
         switch (type) {
           case "int":
           case "float":
-            return <ProcessedUniformNumber>{
+            return pass<ProcessedUniformNumber>({
               type,
               location,
               compiledUniform: {
                 name,
                 type,
+                parsedComment,
                 shaderValue: {
                   name,
                   type,
@@ -399,15 +402,15 @@ export class RaverieVisualizer {
                 minValue: validateGLSLNumber(type, parsedComment.min),
                 maxValue: validateGLSLNumber(type, parsedComment.min),
               }
-            };
-            break;
+            });
           case "sampler2D":
-            return <ProcessedUniformSampler2D>{
+            return pass<ProcessedUniformSampler2D>({
               type,
               location,
               compiledUniform: {
                 name,
                 type,
+                parsedComment,
                 shaderValue: {
                   name,
                   type,
@@ -415,8 +418,7 @@ export class RaverieVisualizer {
                 },
                 defaultValue: validateGLSLSampler2D(parsedComment.default),
               }
-            };
-            break;
+            });
         }
       });
 
