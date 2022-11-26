@@ -449,8 +449,6 @@ export class RaverieVisualizer {
   }
 
   private compileGroup(group: Group): ProcessedGroup {
-    const gl = this.gl;
-
     const processedGroup: ProcessedGroup = {
       type: "group",
       compiledGroup: {
