@@ -466,9 +466,9 @@ export class RaverieVisualizer {
         processedGroup.compiledGroup.layers.push(processedShaderLayer.compiledShaderLayer);
       } else {
         // Recursively compile the child group
-        const processedGroup = this.compileGroup(layer);
-        processedGroup.layers.push(processedGroup);
-        processedGroup.compiledGroup.layers.push(processedGroup.compiledGroup);
+        const processedChildGroup = this.compileGroup(layer);
+        processedGroup.layers.push(processedChildGroup);
+        processedGroup.compiledGroup.layers.push(processedChildGroup.compiledGroup);
       }
     }
     return processedGroup;
