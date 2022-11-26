@@ -286,168 +286,169 @@ export class RaverieVisualizer {
     return this.processedGroup.compiledGroup;
   }
 
-  private compileGroup(group: Group): ProcessedGroup {
+  private compileShaderLayer(shaderLayer: ShaderLayer): ProcessedShaderLayer {
     const gl = this.gl;
+    const processedProgram = this.createProgram(shaderLayer.code);
 
-    const compileShaderLayer = (shaderLayer: ShaderLayer): ProcessedShaderLayer => {
-      const processedProgram = this.createProgram(shaderLayer.code);
+    if (processedProgram.compileErrors) {
+      console.warn(processedProgram.compileErrors);
+    }
+    if (processedProgram.linkErrors) {
+      console.warn(processedProgram.linkErrors);
+    }
 
-      if (processedProgram.compileErrors) {
-        console.warn(processedProgram.compileErrors);
+    // It's possible that there was a compile/linker error and we got no program back
+    const program = processedProgram.program;
+    if (program) {
+      const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
+      gl.enableVertexAttribArray(vertexPosAttrib);
+      gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+    }
+
+    const getUniformLocation = (name: string) => program
+      ? gl.getUniformLocation(program, name)
+      : null;
+
+    // tags: <types>
+    const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+
+    const newUniformNames: Record<string, true> = {};
+    const newUniforms: NewUniform[] = [];
+    for (; ;) {
+      const result = uniformRegex.exec(shaderLayer.code);
+      if (!result) {
+        break;
       }
-      if (processedProgram.linkErrors) {
-        console.warn(processedProgram.linkErrors);
+      const name = result[2];
+      newUniformNames[name] = true;
+      newUniforms.push({
+        type: result[1] as GLSLType,
+        name,
+        afterUniform: result[3]
+      });
+    }
+
+    // Make a copy of the old shader values that we pop from as we map old to new
+    const oldShaderValues = shaderLayer.values.slice(0);
+
+    const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
+      const { type, name, afterUniform } = unprocessedUniform;
+      const location = getUniformLocation(name);
+
+      let parsedComment: ProcessedComment = {};
+
+      const commentStart = afterUniform.indexOf("//");
+      if (commentStart !== -1) {
+        // Check if we can parse the comment as JSON (skip 2 characters for the //)
+        const commentText = afterUniform.substring(commentStart + 2);
+        const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*/gum, (found) => {
+          if (found === "true" || found === "false") {
+            return found;
+          }
+          return `"${found}"`;
+        });
+
+        const json = `{${innerJson}}`;
+        try {
+          parsedComment = JSON.parse(json);
+        } catch {
+          // Ignore the comment for now
+        }
       }
 
-      // It's possible that there was a compile/linker error and we got no program back
-      const program = processedProgram.program;
-      if (program) {
-        const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
-        gl.enableVertexAttribArray(vertexPosAttrib);
-        gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
-      }
-
-      const getUniformLocation = (name: string) => program
-        ? gl.getUniformLocation(program, name)
-        : null;
-
-      // tags: <types>
-      const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
-
-      const newUniformNames: Record<string, true> = {};
-      const newUniforms: NewUniform[] = [];
-      for (; ;) {
-        const result = uniformRegex.exec(shaderLayer.code);
-        if (!result) {
+      // We always first look by name
+      let foundShaderValue: ShaderValue | null = null;
+      for (let i = 0; i < oldShaderValues.length; ++i) {
+        const oldShaderValue = oldShaderValues[i];
+        if (oldShaderValue.name === name) {
+          oldShaderValues.splice(i, 1);
+          foundShaderValue = oldShaderValue;
           break;
         }
-        const name = result[2];
-        newUniformNames[name] = true;
-        newUniforms.push({
-          type: result[1] as GLSLType,
-          name,
-          afterUniform: result[3]
-        });
       }
 
-      // Make a copy of the old shader values that we pop from as we map old to new
-      const oldShaderValues = shaderLayer.values.slice(0);
+      // If we didn't find it by name, we'll detect a potential rename by checking if there
+      // is a uniform at the same previous index that is also of the same type and is *unused*
+      if (foundShaderValue === null) {
+        const oldShaderValueAtIndex = shaderLayer.values[uniformIndex] as ShaderValue | undefined;
+        const isRename =
+          oldShaderValueAtIndex &&
+          oldShaderValueAtIndex.type === type &&
+          !newUniformNames[oldShaderValueAtIndex.name];
 
-      const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
-        const { type, name, afterUniform } = unprocessedUniform;
-        const location = getUniformLocation(name);
+        if (isRename) {
+          foundShaderValue = oldShaderValueAtIndex;
+        }
+      }
 
-        let parsedComment: ProcessedComment = {};
-
-        const commentStart = afterUniform.indexOf("//");
-        if (commentStart !== -1) {
-          // Check if we can parse the comment as JSON (skip 2 characters for the //)
-          const commentText = afterUniform.substring(commentStart + 2);
-          const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*/gum, (found) => {
-            if (found === "true" || found === "false") {
-              return found;
+      // tags: <types>
+      switch (type) {
+        case "int":
+        case "float":
+          return pass<ProcessedUniformNumber>({
+            type,
+            location,
+            compiledUniform: {
+              name,
+              type,
+              parsedComment,
+              shaderValue: {
+                name,
+                type,
+                value: validateGLSLNumber(type, foundShaderValue?.value)
+              },
+              defaultValue: validateGLSLNumber(type, parsedComment.default),
+              minValue: validateGLSLNumber(type, parsedComment.min),
+              maxValue: validateGLSLNumber(type, parsedComment.min),
             }
-            return `"${found}"`;
           });
-
-          const json = `{${innerJson}}`;
-          try {
-            parsedComment = JSON.parse(json);
-          } catch {
-            // Ignore the comment for now
-          }
-        }
-
-        // We always first look by name
-        let foundShaderValue: ShaderValue | null = null;
-        for (let i = 0; i < oldShaderValues.length; ++i) {
-          const oldShaderValue = oldShaderValues[i];
-          if (oldShaderValue.name === name) {
-            oldShaderValues.splice(i, 1);
-            foundShaderValue = oldShaderValue;
-            break;
-          }
-        }
-
-        // If we didn't find it by name, we'll detect a potential rename by checking if there
-        // is a uniform at the same previous index that is also of the same type and is *unused*
-        if (foundShaderValue === null) {
-          const oldShaderValueAtIndex = shaderLayer.values[uniformIndex] as ShaderValue | undefined;
-          const isRename =
-            oldShaderValueAtIndex &&
-            oldShaderValueAtIndex.type === type &&
-            !newUniformNames[oldShaderValueAtIndex.name];
-
-          if (isRename) {
-            foundShaderValue = oldShaderValueAtIndex;
-          }
-        }
-
-        // tags: <types>
-        switch (type) {
-          case "int":
-          case "float":
-            return pass<ProcessedUniformNumber>({
+        case "sampler2D":
+          return pass<ProcessedUniformSampler2D>({
+            type,
+            location,
+            compiledUniform: {
+              name,
               type,
-              location,
-              compiledUniform: {
+              parsedComment,
+              shaderValue: {
                 name,
                 type,
-                parsedComment,
-                shaderValue: {
-                  name,
-                  type,
-                  value: validateGLSLNumber(type, foundShaderValue?.value)
-                },
-                defaultValue: validateGLSLNumber(type, parsedComment.default),
-                minValue: validateGLSLNumber(type, parsedComment.min),
-                maxValue: validateGLSLNumber(type, parsedComment.min),
-              }
-            });
-          case "sampler2D":
-            return pass<ProcessedUniformSampler2D>({
-              type,
-              location,
-              compiledUniform: {
-                name,
-                type,
-                parsedComment,
-                shaderValue: {
-                  name,
-                  type,
-                  value: validateGLSLSampler2D(foundShaderValue?.value)
-                },
-                defaultValue: validateGLSLSampler2D(parsedComment.default),
-              }
-            });
-        }
-      });
-
-      // Now that we've processed all the new uniforms and either
-      // found their old shader values or made new ones, lets update the
-      // shader values on the ShaderLayer to match. Note that this will
-      // mutate the object, however it may be a copy of the user's ShaderLayer
-      // depending on which option they passed into `compile`
-      shaderLayer.values.length = 0;
-      shaderLayer.values.push(...processedUniforms.map((processedUniform) =>
-        processedUniform.compiledUniform.shaderValue));
-
-      return {
-        type: "shader",
-        compiledShaderLayer: {
-          type: "shader",
-          shaderLayer,
-          uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
-          compileErrors: processedProgram.compileErrors,
-          linkErrors: processedProgram.linkErrors,
-        },
-        uniforms: processedUniforms,
-        program,
-        gResolution: getUniformLocation("gResolution"),
-        gTime: getUniformLocation("gTime"),
-        gPreviousLayer: getUniformLocation("gPreviousLayer"),
+                value: validateGLSLSampler2D(foundShaderValue?.value)
+              },
+              defaultValue: validateGLSLSampler2D(parsedComment.default),
+            }
+          });
       }
+    });
+
+    // Now that we've processed all the new uniforms and either
+    // found their old shader values or made new ones, lets update the
+    // shader values on the ShaderLayer to match. Note that this will
+    // mutate the object, however it may be a copy of the user's ShaderLayer
+    // depending on which option they passed into `compile`
+    shaderLayer.values.length = 0;
+    shaderLayer.values.push(...processedUniforms.map((processedUniform) =>
+      processedUniform.compiledUniform.shaderValue));
+
+    return {
+      type: "shader",
+      compiledShaderLayer: {
+        type: "shader",
+        shaderLayer,
+        uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
+        compileErrors: processedProgram.compileErrors,
+        linkErrors: processedProgram.linkErrors,
+      },
+      uniforms: processedUniforms,
+      program,
+      gResolution: getUniformLocation("gResolution"),
+      gTime: getUniformLocation("gTime"),
+      gPreviousLayer: getUniformLocation("gPreviousLayer"),
     }
+  }
+
+  private compileGroup(group: Group): ProcessedGroup {
+    const gl = this.gl;
 
     const processedGroup: ProcessedGroup = {
       type: "group",
@@ -461,7 +462,7 @@ export class RaverieVisualizer {
     };
     for (const layer of group.layers) {
       if (layer.type === "shader") {
-        const processedShaderLayer = compileShaderLayer(layer);
+        const processedShaderLayer = this.compileShaderLayer(layer);
         processedGroup.layers.push(processedShaderLayer);
         processedGroup.compiledGroup.layers.push(processedShaderLayer.compiledShaderLayer);
       } else {
