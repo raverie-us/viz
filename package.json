@@ -2,7 +2,7 @@
   "name": "visualizer",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/core.js",
   "scripts": {
     "build": "tsc"
   },
