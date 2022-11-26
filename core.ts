@@ -354,6 +354,7 @@ export class RaverieVisualizer {
           try {
             parsedComment = JSON.parse(json);
           } catch {
+            // Ignore the comment for now
           }
         }
 
@@ -473,7 +474,7 @@ export class RaverieVisualizer {
     return processedGroup;
   }
 
-  render(): void {
+  private render(): void {
     if (!this.processedGroup) {
       return;
     }
