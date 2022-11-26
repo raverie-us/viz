@@ -21,9 +21,11 @@ const singleLayerTest = (compiledGroup: CompiledGroup): CompiledShaderLayer => {
 const compileTestGroup = (visualizer: RaverieVisualizer, code: string, values: ShaderValue[]) => {
   return visualizer.compile({
     type: "group",
+    name: "root",
     layers: [
       {
         type: "shader",
+        name: "layer",
         blendMode: "effect",
         opacity: 1.0,
         timeMode: "normal",

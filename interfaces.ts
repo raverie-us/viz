@@ -1,5 +1,8 @@
+export interface LayerBase {
+  name: string;
+}
 
-export interface Group {
+export interface Group extends LayerBase {
   type: "group";
   layers: (ShaderLayer | Group)[];
 }
@@ -37,7 +40,7 @@ export interface ShaderValueSampler2D extends ShaderValueBase {
 // tags: <types>
 export type ShaderValue = ShaderValueNumber | ShaderValueSampler2D;
 
-export interface ShaderLayer {
+export interface ShaderLayer extends LayerBase {
   type: "shader";
   code: string;
   values: ShaderValue[];
