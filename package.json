@@ -1,5 +1,5 @@
 {
-  "name": "visualizer",
+  "name": "@raverie/visualizer",
   "version": "1.0.0",
   "description": "",
   "main": "dist/core.js",
