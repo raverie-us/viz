@@ -240,11 +240,10 @@ export class RaverieVisualizer {
   private readonly vertexShader: WebGLShader;
 
   // For rendering checker-board "transparent" background
-  private readonly checkerboard: ProcessedLayerShader;
+  private readonly checkerboardShader: ProcessedLayerShader;
 
   // For copying the final result to the back buffer
-  private readonly copyProgram: WebGLProgram;
-  private readonly textureToCopy: WebGLUniformLocation;
+  private readonly copyShader: ProcessedLayerShader;
 
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
     this.gl = gl;
@@ -298,7 +297,7 @@ export class RaverieVisualizer {
     this.vertexShader = expect(this.createShader(vertexShader, gl.VERTEX_SHADER).shader,
       processedVertexShader.compileErrors!);
 
-    this.checkerboard = this.compileLayerShader({
+    this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
       code: `
       uniform float checkerPixelSize; // default: 8
@@ -310,20 +309,13 @@ export class RaverieVisualizer {
       }`
     });
 
-    const fragmentShaderCopy = `
-      uniform sampler2D textureToCopy;
+    this.copyShader = this.compileLayerShader({
+      ...defaultEmptyLayerShader(),
+      code: `
       void main() {
-        gFragColor = texture(textureToCopy, gUV);
-      }`;
-    const processedCopyProgram = this.createProgram(fragmentShaderCopy);
-    if (processedCopyProgram.compileErrors) {
-      throw new Error(`Copy program did not compile: ${processedCopyProgram.compileErrors}`);
-    }
-    if (processedCopyProgram.linkErrors) {
-      throw new Error(`Copy program did not link: ${processedCopyProgram.linkErrors}`);
-    }
-    this.copyProgram = processedCopyProgram.program!;
-    this.textureToCopy = expect(gl.getUniformLocation(this.copyProgram, "textureToCopy"), "textureToCopy");
+        gFragColor = texture(gPreviousLayer, gUV);
+      }`
+    });
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
@@ -602,10 +594,10 @@ export class RaverieVisualizer {
 
     const renderLayerShader = (
       processedLayerShader: ProcessedLayerShader,
-      renderTarget: RenderTarget,
+      frameBuffer: WebGLFramebuffer | null,
       previousLayerTexture: WebGLTexture | null) => {
       gl.useProgram(processedLayerShader.program);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
       // Apply global uniforms
       gl.uniform2f(processedLayerShader.gResolution, this.width, this.height);
@@ -682,7 +674,7 @@ export class RaverieVisualizer {
           if (layer.program) {
             renderLayerShader(
               layer,
-              this.renderTargets[renderTargetIndex],
+              this.renderTargets[renderTargetIndex].buffer,
               this.renderTargets[Number(!renderTargetIndex)].texture);
 
             renderTargetIndex = Number(!renderTargetIndex);
@@ -697,7 +689,7 @@ export class RaverieVisualizer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
       gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      renderLayerShader(this.checkerboard, renderTarget, null);
+      renderLayerShader(this.checkerboardShader, renderTarget.buffer, null);
     };
 
     clearRenderTarget(this.renderTargets[0]);
@@ -705,12 +697,9 @@ export class RaverieVisualizer {
 
     renderRecursive(this.processedGroup);
 
-    gl.useProgram(this.copyProgram);
-    gl.uniform1i(this.textureToCopy, 0);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[Number(!renderTargetIndex)].texture);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    renderLayerShader(
+      this.copyShader,
+      null,
+      this.renderTargets[Number(!renderTargetIndex)].texture);
   }
 }
