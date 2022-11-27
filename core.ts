@@ -239,6 +239,9 @@ export class RaverieVisualizer {
 
   private readonly vertexShader: WebGLShader;
 
+  // For rendering checker-board "transparent" background
+  private readonly checkerboard: ProcessedLayerShader;
+
   // For copying the final result to the back buffer
   private readonly copyProgram: WebGLProgram;
   private readonly textureToCopy: WebGLUniformLocation;
@@ -294,6 +297,18 @@ export class RaverieVisualizer {
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
     this.vertexShader = expect(this.createShader(vertexShader, gl.VERTEX_SHADER).shader,
       processedVertexShader.compileErrors!);
+
+    this.checkerboard = this.compileLayerShader({
+      ...defaultEmptyLayerShader(),
+      code: `
+      uniform float checkerPixelSize; // default: 8
+      void main() {
+        vec2 pixels = gUV * gResolution;
+        vec2 uv = floor(pixels / vec2(checkerPixelSize));
+        float checker = mod(uv.x + uv.y, 2.0);
+        gFragColor = vec4(vec3(max(checker, 0.8)), 1);
+      }`
+    });
 
     const fragmentShaderCopy = `
       uniform sampler2D textureToCopy;
@@ -588,7 +603,7 @@ export class RaverieVisualizer {
     const renderLayerShader = (
       processedLayerShader: ProcessedLayerShader,
       renderTarget: RenderTarget,
-      previousLayerTexture: WebGLTexture) => {
+      previousLayerTexture: WebGLTexture | null) => {
       gl.useProgram(processedLayerShader.program);
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
 
@@ -649,6 +664,7 @@ export class RaverieVisualizer {
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindTexture(gl.TEXTURE_2D, null);
     }
 
     let renderTargetIndex = 0;
@@ -677,6 +693,16 @@ export class RaverieVisualizer {
       }
     }
 
+    const clearRenderTarget = (renderTarget: RenderTarget) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
+      gl.clearColor(1, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      renderLayerShader(this.checkerboard, renderTarget, null);
+    };
+
+    clearRenderTarget(this.renderTargets[0]);
+    clearRenderTarget(this.renderTargets[1]);
+
     renderRecursive(this.processedGroup);
 
     gl.useProgram(this.copyProgram);
@@ -685,5 +711,6 @@ export class RaverieVisualizer {
     gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[Number(!renderTargetIndex)].texture);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 }
