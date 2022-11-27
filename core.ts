@@ -1,11 +1,11 @@
 import {
-  CompiledGroup,
-  CompiledShaderLayer,
+  CompiledLayerGroup,
+  CompiledLayerShader,
   CompiledUniformBase,
   CompiledUniformNumber,
   CompiledUniformSampler2D,
-  Group,
-  ShaderLayer,
+  LayerGroup,
+  LayerShader,
   ShaderTexture,
   ShaderValue
 } from "./interfaces.js";
@@ -46,9 +46,9 @@ interface NewUniform {
   afterUniform: string;
 }
 
-interface ProcessedShaderLayer {
+interface ProcessedLayerShader {
   type: "shader";
-  compiledLayer: CompiledShaderLayer;
+  compiledLayer: CompiledLayerShader;
   uniforms: ProcessedUniform[];
   program: WebGLProgram | null;
 
@@ -58,10 +58,12 @@ interface ProcessedShaderLayer {
   gPreviousLayer: WebGLUniformLocation | null;
 }
 
-interface ProcessedGroup {
+type ProcessedLayer = ProcessedLayerShader | ProcessedLayerGroup;
+
+interface ProcessedLayerGroup {
   type: "group";
-  compiledLayer: CompiledGroup;
-  layers: (ProcessedShaderLayer | ProcessedGroup)[];
+  compiledLayer: CompiledLayerGroup;
+  layers: ProcessedLayer[];
   timeSeconds: number;
 }
 
@@ -134,7 +136,7 @@ export class RaverieVisualizer {
   private readonly renderTargets: [RenderTarget, RenderTarget];
   private readonly loadTexture: LoadTextureFunction;
 
-  private processedGroup: ProcessedGroup | null = null;
+  private processedGroup: ProcessedLayerGroup | null = null;
 
   private readonly vertexShader: WebGLShader;
 
@@ -277,18 +279,18 @@ export class RaverieVisualizer {
     return texture;
   }
 
-  public compile(group: Group, mode: "clone" | "modifyInPlace" = "clone"): CompiledGroup {
+  public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone"): CompiledLayerGroup {
     // Let the user pick if we make a copy, because we're going to potentially
     // modify the group such as if we find new uniforms within the shaders
-    this.processedGroup = this.compileGroup(mode === "clone"
-      ? JSON.parse(JSON.stringify(group)) as Group
-      : group);
+    this.processedGroup = this.compileLayerGroup(mode === "clone"
+      ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
+      : layerGroup);
     return this.processedGroup.compiledLayer;
   }
 
-  private compileShaderLayer(shaderLayer: ShaderLayer): ProcessedShaderLayer {
+  private compileLayerShader(layerShader: LayerShader): ProcessedLayerShader {
     const gl = this.gl;
-    const processedProgram = this.createProgram(shaderLayer.code);
+    const processedProgram = this.createProgram(layerShader.code);
 
     if (processedProgram.compileErrors) {
       console.warn(processedProgram.compileErrors);
@@ -315,7 +317,7 @@ export class RaverieVisualizer {
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
     for (; ;) {
-      const result = uniformRegex.exec(shaderLayer.code);
+      const result = uniformRegex.exec(layerShader.code);
       if (!result) {
         break;
       }
@@ -329,7 +331,7 @@ export class RaverieVisualizer {
     }
 
     // Make a copy of the old shader values that we pop from as we map old to new
-    const oldShaderValues = shaderLayer.values.slice(0);
+    const oldShaderValues = layerShader.values.slice(0);
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
       const { type, name, afterUniform } = unprocessedUniform;
@@ -370,7 +372,7 @@ export class RaverieVisualizer {
       // If we didn't find it by name, we'll detect a potential rename by checking if there
       // is a uniform at the same previous index that is also of the same type and is *unused*
       if (foundShaderValue === null) {
-        const oldShaderValueAtIndex = shaderLayer.values[uniformIndex] as ShaderValue | undefined;
+        const oldShaderValueAtIndex = layerShader.values[uniformIndex] as ShaderValue | undefined;
         const isRename =
           oldShaderValueAtIndex &&
           oldShaderValueAtIndex.type === type &&
@@ -424,18 +426,18 @@ export class RaverieVisualizer {
 
     // Now that we've processed all the new uniforms and either
     // found their old shader values or made new ones, lets update the
-    // shader values on the ShaderLayer to match. Note that this will
-    // mutate the object, however it may be a copy of the user's ShaderLayer
+    // shader values on the LayerShader to match. Note that this will
+    // mutate the object, however it may be a copy of the user's LayerShader
     // depending on which option they passed into `compile`
-    shaderLayer.values.length = 0;
-    shaderLayer.values.push(...processedUniforms.map((processedUniform) =>
+    layerShader.values.length = 0;
+    layerShader.values.push(...processedUniforms.map((processedUniform) =>
       processedUniform.compiledUniform.shaderValue));
 
     return {
       type: "shader",
       compiledLayer: {
         type: "shader",
-        layer: shaderLayer,
+        layer: layerShader,
         uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
         compileErrors: processedProgram.compileErrors,
         linkErrors: processedProgram.linkErrors,
@@ -448,25 +450,25 @@ export class RaverieVisualizer {
     }
   }
 
-  private compileGroup(group: Group): ProcessedGroup {
-    const processedGroup: ProcessedGroup = {
+  private compileLayerGroup(layerGroup: LayerGroup): ProcessedLayerGroup {
+    const processedGroup: ProcessedLayerGroup = {
       type: "group",
       compiledLayer: {
         type: "group",
-        layer: group,
+        layer: layerGroup,
         layers: []
       },
       layers: [],
       timeSeconds: 0
     };
-    for (const layer of group.layers) {
+    for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
-        const processedShaderLayer = this.compileShaderLayer(layer);
-        processedGroup.layers.push(processedShaderLayer);
-        processedGroup.compiledLayer.layers.push(processedShaderLayer.compiledLayer);
+        const processedLayerShader = this.compileLayerShader(layer);
+        processedGroup.layers.push(processedLayerShader);
+        processedGroup.compiledLayer.layers.push(processedLayerShader.compiledLayer);
       } else {
         // Recursively compile the child group
-        const processedChildGroup = this.compileGroup(layer);
+        const processedChildGroup = this.compileLayerGroup(layer);
         processedGroup.layers.push(processedChildGroup);
         processedGroup.compiledLayer.layers.push(processedChildGroup.compiledLayer);
       }
@@ -480,24 +482,24 @@ export class RaverieVisualizer {
     }
     const gl = this.gl;
 
-    const renderShaderLayer = (
-      processedShaderLayer: ProcessedShaderLayer,
+    const renderLayerShader = (
+      processedLayerShader: ProcessedLayerShader,
       renderTarget: RenderTarget,
       previousLayerTexture: WebGLTexture) => {
-      gl.useProgram(processedShaderLayer.program);
+      gl.useProgram(processedLayerShader.program);
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
 
       // Apply global uniforms
-      gl.uniform2f(processedShaderLayer.gResolution, this.width, this.height);
-      gl.uniform1f(processedShaderLayer.gTime, performance.now() / 1000);
+      gl.uniform2f(processedLayerShader.gResolution, this.width, this.height);
+      gl.uniform1f(processedLayerShader.gTime, performance.now() / 1000);
 
-      gl.uniform1i(processedShaderLayer.gPreviousLayer, 0);
+      gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
 
       // Apply layer uniforms
       let textureSamplerIndex = 1;
-      for (const processedUniform of processedShaderLayer.uniforms) {
+      for (const processedUniform of processedLayerShader.uniforms) {
         // Don't set uniforms that don't have locations. These can occur if we
         // found the uniform via a regex, but it was optimized out by the compiler
         if (!processedUniform.location) {
@@ -545,9 +547,9 @@ export class RaverieVisualizer {
     }
 
     let renderTargetIndex = 0;
-    const renderRecursive = (processedGroup: ProcessedGroup) => {
-      for (let i = processedGroup.layers.length - 1; i >= 0; --i) {
-        const layer = processedGroup.layers[i];
+    const renderRecursive = (processedLayerGroup: ProcessedLayerGroup) => {
+      for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
+        const layer = processedLayerGroup.layers[i];
         // Skip invisible layers
         if (!layer.compiledLayer.layer.visible) {
           continue;
@@ -557,7 +559,7 @@ export class RaverieVisualizer {
           // We only render the layer if it has a valid program (also don't swap buffers)
           // Treat this like it's an invisible layer
           if (layer.program) {
-            renderShaderLayer(
+            renderLayerShader(
               layer,
               this.renderTargets[renderTargetIndex],
               this.renderTargets[Number(!renderTargetIndex)].texture);

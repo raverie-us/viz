@@ -3,12 +3,14 @@ export interface LayerBase {
   visible: boolean;
 }
 
-export interface Group extends LayerBase {
+export type Layer = LayerShader | LayerGroup;
+
+export interface LayerGroup extends LayerBase {
   type: "group";
-  layers: (ShaderLayer | Group)[];
+  layers: Layer[];
 }
 
-export type ShaderLayerBlendMode =
+export type LayerShaderBlendMode =
   "effect" |
   "normal" |
   "darken" |
@@ -16,7 +18,7 @@ export type ShaderLayerBlendMode =
   "lighten" |
   "screen";
 
-export type ShaderLayerTimeMode =
+export type LayerShaderTimeMode =
   "normal" |
   "pingpong";
 
@@ -41,14 +43,14 @@ export interface ShaderValueSampler2D extends ShaderValueBase {
 // tags: <types>
 export type ShaderValue = ShaderValueNumber | ShaderValueSampler2D;
 
-export interface ShaderLayer extends LayerBase {
+export interface LayerShader extends LayerBase {
   type: "shader";
   code: string;
   values: ShaderValue[];
-  blendMode: ShaderLayerBlendMode;
+  blendMode: LayerShaderBlendMode;
   opacity: number;
   timeScale: number;
-  timeMode: ShaderLayerTimeMode;
+  timeMode: LayerShaderTimeMode;
 }
 
 export interface CompiledUniformBase {
@@ -73,16 +75,18 @@ export interface CompiledUniformSampler2D extends CompiledUniformBase {
 // tags: <types>
 export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
-export interface CompiledShaderLayer {
+export interface CompiledLayerShader {
   type: "shader";
-  layer: ShaderLayer;
+  layer: LayerShader;
   uniforms: CompiledUniform[];
   compileErrors?: string;
   linkErrors?: string;
 }
 
-export interface CompiledGroup {
+export type CompiledLayer = CompiledLayerShader | CompiledLayerGroup;
+
+export interface CompiledLayerGroup {
   type: "group";
-  layer: Group;
-  layers: (CompiledShaderLayer | CompiledGroup)[];
+  layer: LayerGroup;
+  layers: CompiledLayer[];
 }

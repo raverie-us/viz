@@ -1,4 +1,4 @@
-import { RaverieVisualizer, CompiledGroup, CompiledShaderLayer, ShaderValue, CompiledUniform } from "./core.js";
+import { RaverieVisualizer, CompiledLayerGroup, CompiledLayerShader, ShaderValue, CompiledUniform } from "./core.js";
 
 // Note: This must be a 'function' https://github.com/microsoft/TypeScript/issues/34523
 function assert(value: unknown): asserts value {
@@ -7,18 +7,18 @@ function assert(value: unknown): asserts value {
   }
 }
 
-const singleLayerTest = (compiledGroup: CompiledGroup): CompiledShaderLayer => {
-  assert(compiledGroup.type === "group");
-  assert(compiledGroup.layers.length === 1);
-  assert(compiledGroup.layer.type === "group");
-  assert(compiledGroup.layer.layers.length === 1);
-  const firstLayer = compiledGroup.layers[0];
+const singleLayerTest = (compiledLayerGroup: CompiledLayerGroup): CompiledLayerShader => {
+  assert(compiledLayerGroup.type === "group");
+  assert(compiledLayerGroup.layers.length === 1);
+  assert(compiledLayerGroup.layer.type === "group");
+  assert(compiledLayerGroup.layer.layers.length === 1);
+  const firstLayer = compiledLayerGroup.layers[0];
   assert(firstLayer.type === "shader");
   assert(firstLayer.layer.type === "shader");
   return firstLayer;
 }
 
-const compileTestGroup = (visualizer: RaverieVisualizer, code: string, values: ShaderValue[]) => {
+const compileTestLayerGroup = (visualizer: RaverieVisualizer, code: string, values: ShaderValue[]) => {
   return visualizer.compile({
     type: "group",
     name: "root",
@@ -49,7 +49,7 @@ const validateUniform = (uniform: CompiledUniform, type: string, name: string, v
 };
 
 const runUniformRenameTest = (visualizer: RaverieVisualizer) => {
-  const compiledGroup = compileTestGroup(visualizer, `
+  const compiledLayerGroup = compileTestLayerGroup(visualizer, `
     uniform float a; // default: 987
     void main() {
       gFragColor = vec4(a, 0.0, 0.0, 1.0);
@@ -61,14 +61,14 @@ const runUniformRenameTest = (visualizer: RaverieVisualizer) => {
     }]
   );
 
-  const firstLayer = singleLayerTest(compiledGroup);
+  const firstLayer = singleLayerTest(compiledLayerGroup);
   assert(firstLayer.uniforms.length === 1);
   assert(firstLayer.layer.values.length === 1);
   validateUniform(firstLayer.uniforms[0], "float", "a", 123, 987);
 };
 
 const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
-  const compiledGroup = compileTestGroup(visualizer, `
+  const compiledLayerGroup = compileTestLayerGroup(visualizer, `
     uniform float a; // default: 987
     uniform float b; // default: 654
     void main() {
@@ -88,7 +88,7 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
     ]
   );
 
-  const firstLayer = singleLayerTest(compiledGroup);
+  const firstLayer = singleLayerTest(compiledLayerGroup);
   assert(firstLayer.uniforms.length === 2);
   assert(firstLayer.layer.values.length === 2);
   validateUniform(firstLayer.uniforms[0], "float", "a", 123, 987);
@@ -96,7 +96,7 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
 };
 
 const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
-  const compiledGroup = visualizer.compile({
+  const compiledLayerGroup = visualizer.compile({
     type: "group",
     name: "root",
     visible: true,
@@ -110,8 +110,8 @@ const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
     ]
   });
 
-  assert(compiledGroup.layers.length === 1);
-  const firstLayer = compiledGroup.layers[0];
+  assert(compiledLayerGroup.layers.length === 1);
+  const firstLayer = compiledLayerGroup.layers[0];
   assert(firstLayer.type === "group");
   assert(firstLayer.layer.name === "nested");
 }
