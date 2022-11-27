@@ -282,13 +282,13 @@ export class RaverieVisualizer {
 
     // All effects currently use the same vertex shader
     const vertexShader = `#version 300 es
-      in vec2 _gVeretxPosition;
+      in vec2 _gVertexPosition;
       out vec2 gPosition;
       out vec2 gUV;
       void main() {
-        gPosition = _gVeretxPosition;
-        gUV = (_gVeretxPosition + vec2(1.0, 1.0)) * 0.5;
-        gl_Position = vec4(_gVeretxPosition, 0.0, 1.0);
+        gPosition = _gVertexPosition;
+        gUV = (_gVertexPosition + vec2(1.0, 1.0)) * 0.5;
+        gl_Position = vec4(_gVertexPosition, 0.0, 1.0);
       }`;
 
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
@@ -407,7 +407,7 @@ export class RaverieVisualizer {
     // It's possible that there was a compile/linker error and we got no program back
     const program = processedProgram.program;
     if (program) {
-      const vertexPosAttrib = gl.getAttribLocation(program, '_gVeretxPosition');
+      const vertexPosAttrib = gl.getAttribLocation(program, '_gVertexPosition');
       gl.enableVertexAttribArray(vertexPosAttrib);
       gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
     }
