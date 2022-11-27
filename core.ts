@@ -9,7 +9,7 @@ import {
   ShaderTexture,
   ShaderValue
 } from "./interfaces.js";
-export * from "./interfaces.js"
+export * from "./interfaces.js";
 
 const expect = <T>(value: T | null | undefined, name: string): T => {
   if (!value) {
