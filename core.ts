@@ -305,7 +305,7 @@ export class RaverieVisualizer {
         float checker = mod(uv.x + uv.y, 2.0);
         gFragColor = vec4(vec3(max(checker, 0.8)), 1);
       }`
-    });
+    }, true);
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
@@ -313,7 +313,7 @@ export class RaverieVisualizer {
       void main() {
         gFragColor = texture(gPreviousLayer, gUV);
       }`
-    });
+    }, true);
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
@@ -392,12 +392,16 @@ export class RaverieVisualizer {
     return this.processedGroup.compiledLayer;
   }
 
-  private compileLayerShader(layerShader: LayerShader): ProcessedLayerShader {
+  private compileLayerShader(layerShader: LayerShader, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code);
 
     if (processedProgram.error) {
-      console.warn(processedProgram.error);
+      if (throwOnError) {
+        throw new Error(processedProgram.error);
+      } else {
+        console.warn(processedProgram.error);
+      }
     }
 
     // It's possible that there was a compile/linker error and we got no program back
