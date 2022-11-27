@@ -12,9 +12,13 @@
   <textarea style="height: 600px; width: calc(100vw - 650px); white-space: nowrap">
 {
   type: "group",
+  name: "root",
+  visible: true,
   layers: [
     {
       type: "shader",
+      name: "spiral",
+      visible: true,
       code: `
         uniform float centerWarp; // default: 0.4
         void main() {
@@ -39,6 +43,8 @@
     },
     {
       type: "shader",
+      name: "lines",
+      visible: true,
       code: `
         uniform float lines; // default: 3
         void main() {
@@ -62,6 +68,8 @@
     },
     {
       type: "shader",
+      name: "texture",
+      visible: true,
       code: `
         uniform sampler2D textureInput;
         void main() {
@@ -85,6 +93,8 @@
     },
     {
       type: "shader",
+      name: "blue",
+      visible: true,
       code: `
         uniform float blue;
         void main() {

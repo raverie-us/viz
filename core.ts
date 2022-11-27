@@ -48,7 +48,7 @@ interface NewUniform {
 
 interface ProcessedShaderLayer {
   type: "shader";
-  compiledShaderLayer: CompiledShaderLayer;
+  compiledLayer: CompiledShaderLayer;
   uniforms: ProcessedUniform[];
   program: WebGLProgram | null;
 
@@ -60,7 +60,7 @@ interface ProcessedShaderLayer {
 
 interface ProcessedGroup {
   type: "group";
-  compiledGroup: CompiledGroup;
+  compiledLayer: CompiledGroup;
   layers: (ProcessedShaderLayer | ProcessedGroup)[];
   timeSeconds: number;
 }
@@ -283,7 +283,7 @@ export class RaverieVisualizer {
     this.processedGroup = this.compileGroup(mode === "clone"
       ? JSON.parse(JSON.stringify(group)) as Group
       : group);
-    return this.processedGroup.compiledGroup;
+    return this.processedGroup.compiledLayer;
   }
 
   private compileShaderLayer(shaderLayer: ShaderLayer): ProcessedShaderLayer {
@@ -433,9 +433,9 @@ export class RaverieVisualizer {
 
     return {
       type: "shader",
-      compiledShaderLayer: {
+      compiledLayer: {
         type: "shader",
-        shaderLayer,
+        layer: shaderLayer,
         uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
         compileErrors: processedProgram.compileErrors,
         linkErrors: processedProgram.linkErrors,
@@ -451,9 +451,9 @@ export class RaverieVisualizer {
   private compileGroup(group: Group): ProcessedGroup {
     const processedGroup: ProcessedGroup = {
       type: "group",
-      compiledGroup: {
+      compiledLayer: {
         type: "group",
-        group,
+        layer: group,
         layers: []
       },
       layers: [],
@@ -463,12 +463,12 @@ export class RaverieVisualizer {
       if (layer.type === "shader") {
         const processedShaderLayer = this.compileShaderLayer(layer);
         processedGroup.layers.push(processedShaderLayer);
-        processedGroup.compiledGroup.layers.push(processedShaderLayer.compiledShaderLayer);
+        processedGroup.compiledLayer.layers.push(processedShaderLayer.compiledLayer);
       } else {
         // Recursively compile the child group
         const processedChildGroup = this.compileGroup(layer);
         processedGroup.layers.push(processedChildGroup);
-        processedGroup.compiledGroup.layers.push(processedChildGroup.compiledGroup);
+        processedGroup.compiledLayer.layers.push(processedChildGroup.compiledLayer);
       }
     }
     return processedGroup;
@@ -548,6 +548,11 @@ export class RaverieVisualizer {
     const renderRecursive = (processedGroup: ProcessedGroup) => {
       for (let i = processedGroup.layers.length - 1; i >= 0; --i) {
         const layer = processedGroup.layers[i];
+        // Skip invisible layers
+        if (!layer.compiledLayer.layer.visible) {
+          continue;
+        }
+
         if (layer.type === "shader") {
           // We only render the layer if it has a valid program (also don't swap buffers)
           // Treat this like it's an invisible layer

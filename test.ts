@@ -10,11 +10,11 @@ function assert(value: unknown): asserts value {
 const singleLayerTest = (compiledGroup: CompiledGroup): CompiledShaderLayer => {
   assert(compiledGroup.type === "group");
   assert(compiledGroup.layers.length === 1);
-  assert(compiledGroup.group.type === "group");
-  assert(compiledGroup.group.layers.length === 1);
+  assert(compiledGroup.layer.type === "group");
+  assert(compiledGroup.layer.layers.length === 1);
   const firstLayer = compiledGroup.layers[0];
   assert(firstLayer.type === "shader");
-  assert(firstLayer.shaderLayer.type === "shader");
+  assert(firstLayer.layer.type === "shader");
   return firstLayer;
 }
 
@@ -22,10 +22,12 @@ const compileTestGroup = (visualizer: RaverieVisualizer, code: string, values: S
   return visualizer.compile({
     type: "group",
     name: "root",
+    visible: true,
     layers: [
       {
         type: "shader",
         name: "layer",
+        visible: true,
         blendMode: "effect",
         opacity: 1.0,
         timeMode: "normal",
@@ -61,7 +63,7 @@ const runUniformRenameTest = (visualizer: RaverieVisualizer) => {
 
   const firstLayer = singleLayerTest(compiledGroup);
   assert(firstLayer.uniforms.length === 1);
-  assert(firstLayer.shaderLayer.values.length === 1);
+  assert(firstLayer.layer.values.length === 1);
   validateUniform(firstLayer.uniforms[0], "float", "a", 123, 987);
 };
 
@@ -88,7 +90,7 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
 
   const firstLayer = singleLayerTest(compiledGroup);
   assert(firstLayer.uniforms.length === 2);
-  assert(firstLayer.shaderLayer.values.length === 2);
+  assert(firstLayer.layer.values.length === 2);
   validateUniform(firstLayer.uniforms[0], "float", "a", 123, 987);
   validateUniform(firstLayer.uniforms[1], "float", "b", 456, 654);
 };
@@ -97,10 +99,12 @@ const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
   const compiledGroup = visualizer.compile({
     type: "group",
     name: "root",
+    visible: true,
     layers: [
       {
         type: "group",
         name: "nested",
+        visible: true,
         layers: []
       }
     ]
@@ -109,7 +113,7 @@ const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
   assert(compiledGroup.layers.length === 1);
   const firstLayer = compiledGroup.layers[0];
   assert(firstLayer.type === "group");
-  assert(firstLayer.group.name === "nested");
+  assert(firstLayer.layer.name === "nested");
 }
 
 export const runTests = (visualizer: RaverieVisualizer) => {

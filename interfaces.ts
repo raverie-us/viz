@@ -1,5 +1,6 @@
 export interface LayerBase {
   name: string;
+  visible: boolean;
 }
 
 export interface Group extends LayerBase {
@@ -74,7 +75,7 @@ export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
 export interface CompiledShaderLayer {
   type: "shader";
-  shaderLayer: ShaderLayer;
+  layer: ShaderLayer;
   uniforms: CompiledUniform[];
   compileErrors?: string;
   linkErrors?: string;
@@ -82,6 +83,6 @@ export interface CompiledShaderLayer {
 
 export interface CompiledGroup {
   type: "group";
-  group: Group;
+  layer: Group;
   layers: (CompiledShaderLayer | CompiledGroup)[];
 }
