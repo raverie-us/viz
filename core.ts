@@ -79,8 +79,7 @@ export interface CompiledLayerShader {
   type: "shader";
   layer: LayerShader;
   uniforms: CompiledUniform[];
-  compileErrors?: string;
-  linkErrors?: string;
+  error?: string;
 }
 
 export type CompiledLayer = CompiledLayerShader | CompiledLayerGroup;
@@ -175,18 +174,17 @@ interface ProcessedComment {
 
 interface ProcessedShaderSuccess {
   shader: WebGLShader;
-  compileErrors?: undefined;
+  error?: undefined;
 }
 interface ProcessedShaderFailed {
   shader: null;
-  compileErrors: string;
+  error: string;
 }
 type ProcessedShader = ProcessedShaderSuccess | ProcessedShaderFailed;
 
 interface ProcessedProgram {
   program: WebGLProgram | null;
-  compileErrors?: string;
-  linkErrors?: string;
+  error?: string;
 }
 
 interface RenderTarget {
@@ -295,7 +293,7 @@ export class RaverieVisualizer {
 
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
     this.vertexShader = expect(this.createShader(vertexShader, gl.VERTEX_SHADER).shader,
-      processedVertexShader.compileErrors!);
+      processedVertexShader.error!);
 
     this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
@@ -330,7 +328,7 @@ export class RaverieVisualizer {
       gl.deleteShader(shader);
       return {
         shader: null,
-        compileErrors: compilationLog || "Failed to compile"
+        error: compilationLog || "Failed to compile"
       };
     }
     return { shader };
@@ -356,7 +354,7 @@ export class RaverieVisualizer {
     if (!processedFragmentShader.shader) {
       return {
         program: null,
-        compileErrors: processedFragmentShader.compileErrors,
+        error: processedFragmentShader.error,
       };
     }
 
@@ -368,7 +366,7 @@ export class RaverieVisualizer {
       const programLog = gl.getProgramInfoLog(program);
       return {
         program,
-        linkErrors: programLog || "Failed to link"
+        error: programLog || "Failed to link"
       };
     }
     return { program };
@@ -398,11 +396,8 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code);
 
-    if (processedProgram.compileErrors) {
-      console.warn(processedProgram.compileErrors);
-    }
-    if (processedProgram.linkErrors) {
-      console.warn(processedProgram.linkErrors);
+    if (processedProgram.error) {
+      console.warn(processedProgram.error);
     }
 
     // It's possible that there was a compile/linker error and we got no program back
@@ -549,8 +544,7 @@ export class RaverieVisualizer {
         type: "shader",
         layer: layerShader,
         uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
-        compileErrors: processedProgram.compileErrors,
-        linkErrors: processedProgram.linkErrors,
+        error: processedProgram.error,
       },
       uniforms: processedUniforms,
       program,
