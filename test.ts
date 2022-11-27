@@ -93,7 +93,27 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
   validateUniform(firstLayer.uniforms[1], "float", "b", 456, 654);
 };
 
+const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
+  const compiledGroup = visualizer.compile({
+    type: "group",
+    name: "root",
+    layers: [
+      {
+        type: "group",
+        name: "nested",
+        layers: []
+      }
+    ]
+  });
+
+  assert(compiledGroup.layers.length === 1);
+  const firstLayer = compiledGroup.layers[0];
+  assert(firstLayer.type === "group");
+  assert(firstLayer.group.name === "nested");
+}
+
 export const runTests = (visualizer: RaverieVisualizer) => {
   runUniformRenameTest(visualizer);
   runUniformReorderTest(visualizer);
+  runNestedGroupTest(visualizer);
 };
