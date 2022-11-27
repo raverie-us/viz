@@ -1,4 +1,12 @@
-import { RaverieVisualizer, CompiledLayerGroup, CompiledLayerShader, ShaderValue, CompiledUniform } from "./core.js";
+import {
+  RaverieVisualizer,
+  CompiledLayerGroup,
+  CompiledLayerShader,
+  ShaderValue,
+  CompiledUniform,
+  defaultEmptyLayerShader,
+  defaultEmptyLayerGroup
+} from "./core.js";
 
 // Note: This must be a 'function' https://github.com/microsoft/TypeScript/issues/34523
 function assert(value: unknown): asserts value {
@@ -20,18 +28,10 @@ const singleLayerTest = (compiledLayerGroup: CompiledLayerGroup): CompiledLayerS
 
 const compileTestLayerGroup = (visualizer: RaverieVisualizer, code: string, values: ShaderValue[]) => {
   return visualizer.compile({
-    type: "group",
-    name: "root",
-    visible: true,
+    ...defaultEmptyLayerGroup(),
     layers: [
       {
-        type: "shader",
-        name: "layer",
-        visible: true,
-        blendMode: "effect",
-        opacity: 1.0,
-        timeMode: "normal",
-        timeScale: 1.0,
+        ...defaultEmptyLayerShader(),
         code,
         values
       }

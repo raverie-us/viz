@@ -91,6 +91,25 @@ export interface CompiledLayerGroup {
   layers: CompiledLayer[];
 }
 
+export const defaultEmptyLayerGroup = (): LayerGroup => ({
+  type: "group",
+  name: "",
+  visible: true,
+  layers: []
+});
+
+export const defaultEmptyLayerShader = (): LayerShader => ({
+  type: "shader",
+  name: "",
+  visible: true,
+  blendMode: "normal",
+  opacity: 1.0,
+  timeMode: "normal",
+  timeScale: 1.0,
+  code: "",
+  values: []
+});
+
 const expect = <T>(value: T | null | undefined, name: string): T => {
   if (!value) {
     throw new Error(`Expected to get: ${name}`);
