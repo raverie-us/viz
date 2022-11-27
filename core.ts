@@ -62,8 +62,8 @@ export interface CompiledUniformNumber extends CompiledUniformBase {
   type: "int" | "float";
   shaderValue: ShaderValueNumber;
   defaultValue: number;
-  minValue?: number;
-  maxValue?: number;
+  minValue: number;
+  maxValue: number;
 }
 
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
@@ -178,30 +178,30 @@ interface RenderTarget {
 const pass = <T>(value: T): T => value;
 
 // tags: <types>
-const validateGLSLInt = (value: any): number =>
-  value === undefined ? 0 : Math.floor(Number(value));
+const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
+  value === undefined ? validatedDefault : Math.floor(Number(value));
 
 // tags: <types>
-const validateGLSLFloat = (value: any): number =>
-  value === undefined ? 0 : Number(value);
+const validateGLSLFloat = (value: any, validatedDefault: number = 0): number =>
+  value === undefined ? validatedDefault : Number(value);
 
 // tags: <types>
-const validateGLSLNumber = (glslType: "int" | "float", value: any): number =>
+const validateGLSLNumber = (glslType: "int" | "float", value: any, validatedDefault: number = 0): number =>
   glslType === "int"
-    ? validateGLSLInt(value)
-    : validateGLSLFloat(value)
+    ? validateGLSLInt(value, validatedDefault)
+    : validateGLSLFloat(value, validatedDefault)
 
 // tags: <types>
-const validateGLSLSampler2D = (value: any): ShaderTexture => {
+const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
   if (value === undefined) {
-    return { url: "" };
+    return validatedDefault;
   }
 
   if (typeof value === "object" && value !== null) {
     if (typeof value.url === "string") {
       return value;
     }
-    return { url: "" };
+    return validatedDefault;
   } else {
     return { url: String(value) };
   }
@@ -466,7 +466,8 @@ export class RaverieVisualizer {
       // tags: <types>
       switch (type) {
         case "int":
-        case "float":
+        case "float": {
+          const defaultValue = validateGLSLNumber(type, parsedComment.default);
           return pass<ProcessedUniformNumber>({
             type,
             location,
@@ -477,14 +478,16 @@ export class RaverieVisualizer {
               shaderValue: {
                 name,
                 type,
-                value: validateGLSLNumber(type, foundShaderValue?.value)
+                value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
               },
-              defaultValue: validateGLSLNumber(type, parsedComment.default),
-              minValue: validateGLSLNumber(type, parsedComment.min),
-              maxValue: validateGLSLNumber(type, parsedComment.min),
+              defaultValue,
+              minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
+              maxValue: validateGLSLNumber(type, parsedComment.min, Number.POSITIVE_INFINITY),
             }
           });
-        case "sampler2D":
+        }
+        case "sampler2D": {
+          const defaultValue = validateGLSLSampler2D(parsedComment.default);
           return pass<ProcessedUniformSampler2D>({
             type,
             location,
@@ -495,11 +498,12 @@ export class RaverieVisualizer {
               shaderValue: {
                 name,
                 type,
-                value: validateGLSLSampler2D(foundShaderValue?.value)
+                value: validateGLSLSampler2D(foundShaderValue?.value, defaultValue)
               },
-              defaultValue: validateGLSLSampler2D(parsedComment.default),
+              defaultValue,
             }
           });
+        }
         default: throw new Error(`Unexpected GLSL type '${type}'`)
       }
     });
@@ -591,7 +595,8 @@ export class RaverieVisualizer {
         switch (processedUniform.type) {
           case "int":
           case "float": {
-            const validatedValue = validateGLSLNumber(processedUniform.type, value);
+            const validatedValue = validateGLSLNumber(processedUniform.type, value,
+              processedUniform.compiledUniform.defaultValue);
             if (processedUniform.type === "int") {
               gl.uniform1i(processedUniform.location, validatedValue);
             } else {
@@ -600,7 +605,8 @@ export class RaverieVisualizer {
             break;
           }
           case "sampler2D": {
-            const validatedValue = validateGLSLSampler2D(value);
+            const validatedValue = validateGLSLSampler2D(value,
+              processedUniform.compiledUniform.defaultValue);
             const shaderTexture = validatedValue as ShaderTexture;
             let texture: WebGLTexture | null = null;
             if (processedUniform.cachedTexture) {
