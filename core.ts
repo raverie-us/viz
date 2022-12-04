@@ -59,6 +59,7 @@ export interface LayerShader extends LayerBase {
 
 export interface CompiledUniformBase {
   name: string;
+  parent: CompiledLayerShader;
   parsedComment: Record<string, any>;
 }
 
@@ -84,7 +85,11 @@ export interface CompiledError {
   text: string;
 }
 
-export interface CompiledLayerShader {
+export interface CompiledLayerBase {
+  parent: CompiledLayerGroup | null;
+}
+
+export interface CompiledLayerShader extends CompiledLayerBase {
   type: "shader";
   layer: LayerShader;
   uniforms: CompiledUniform[];
@@ -93,7 +98,7 @@ export interface CompiledLayerShader {
 
 export type CompiledLayer = CompiledLayerShader | CompiledLayerGroup;
 
-export interface CompiledLayerGroup {
+export interface CompiledLayerGroup extends CompiledLayerBase {
   type: "group";
   layer: LayerGroup;
   layers: CompiledLayer[];
@@ -335,7 +340,7 @@ export class RaverieVisualizer {
         float checker = mod(uv.x + uv.y, 2.0);
         gFragColor = vec4(vec3(max(checker, 0.8)), 1);
       }`
-    }, true);
+    }, null, true);
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
@@ -343,7 +348,7 @@ export class RaverieVisualizer {
       void main() {
         gFragColor = texture(gPreviousLayer, gUV);
       }`
-    }, true);
+    }, null, true);
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
@@ -407,11 +412,11 @@ export class RaverieVisualizer {
     // modify the group such as if we find new uniforms within the shaders
     this.processedGroup = this.compileLayerGroup(mode === "clone"
       ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
-      : layerGroup);
+      : layerGroup, null);
     return this.processedGroup.compiledLayer;
   }
 
-  private compileLayerShader(layerShader: LayerShader, throwOnError = false): ProcessedLayerShader {
+  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code);
 
@@ -461,6 +466,37 @@ export class RaverieVisualizer {
 
     // Make a copy of the old shader values that we pop from as we map old to new
     const oldShaderValues = layerShader.values.slice(0);
+
+    const errors: CompiledError[] = [];
+    if (processedProgram.error) {
+      // WebGL errors in Chrome actually have a null terminator in them (\x00)
+      const lines = processedProgram.error.split(/\r|\n|\r\n|\x00/u);
+      for (const line of lines) {
+        if (line.trim() === "") {
+          continue;
+        }
+        const result = /^(?:ERROR|WARNING): 0:([0-9]+): (.*)/gum.exec(line);
+        if (result) {
+          errors.push({
+            line: Number(result[1]) - fragmentShaderHeaderLineCount,
+            text: result[2]
+          });
+        } else {
+          errors.push({
+            line: 1,
+            text: line
+          });
+        }
+      }
+    }
+
+    const compiledLayer: CompiledLayerShader = {
+      type: "shader",
+      parent,
+      layer: layerShader,
+      uniforms: [],
+      errors,
+    };
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
       const { type, name, afterUniform } = unprocessedUniform;
@@ -522,6 +558,7 @@ export class RaverieVisualizer {
             location,
             compiledUniform: {
               name,
+              parent: compiledLayer,
               type,
               parsedComment,
               shaderValue: {
@@ -542,6 +579,7 @@ export class RaverieVisualizer {
             location,
             compiledUniform: {
               name,
+              parent: compiledLayer,
               type,
               parsedComment,
               shaderValue: {
@@ -566,38 +604,11 @@ export class RaverieVisualizer {
     layerShader.values.push(...processedUniforms.map((processedUniform) =>
       processedUniform.compiledUniform.shaderValue));
 
-    const errors: CompiledError[] = [];
-    if (processedProgram.error) {
-      // WebGL errors in Chrome actually have a null terminator in them (\x00)
-      const lines = processedProgram.error.split(/\r|\n|\r\n|\x00/u);
-      for (const line of lines) {
-        if (line.trim() === "") {
-          continue;
-        }
-        const result = /^(?:ERROR|WARNING): 0:([0-9]+): (.*)/gum.exec(line);
-        if (result) {
-          errors.push({
-            line: Number(result[1]) - fragmentShaderHeaderLineCount,
-            text: result[2]
-          });
-        } else {
-          errors.push({
-            line: 1,
-            text: line
-          });
-        }
-      }
-    }
-
+    compiledLayer.uniforms = processedUniforms.map((processedUniform) => processedUniform.compiledUniform);
 
     return {
       type: "shader",
-      compiledLayer: {
-        type: "shader",
-        layer: layerShader,
-        uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
-        errors,
-      },
+      compiledLayer,
       uniforms: processedUniforms,
       program,
       gResolution: getUniformLocation("gResolution"),
@@ -606,9 +617,10 @@ export class RaverieVisualizer {
     }
   }
 
-  private compileLayerGroup(layerGroup: LayerGroup): ProcessedLayerGroup {
+  private compileLayerGroup(layerGroup: LayerGroup, parent: CompiledLayerGroup | null): ProcessedLayerGroup {
     const compiledLayerGroup: CompiledLayerGroup = {
       type: "group",
+      parent,
       layer: layerGroup,
       layers: [],
       idToLayer: {}
@@ -630,13 +642,13 @@ export class RaverieVisualizer {
 
     for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
-        const processedLayerShader = this.compileLayerShader(layer);
+        const processedLayerShader = this.compileLayerShader(layer, compiledLayerGroup);
         processedLayerGroup.layers.push(processedLayerShader);
         compiledLayerGroup.layers.push(processedLayerShader.compiledLayer);
         mapLayerById(processedLayerShader.compiledLayer);
       } else {
         // Recursively compile the child group
-        const processedChildGroup = this.compileLayerGroup(layer);
+        const processedChildGroup = this.compileLayerGroup(layer, compiledLayerGroup);
         processedLayerGroup.layers.push(processedChildGroup);
         compiledLayerGroup.layers.push(processedChildGroup.compiledLayer);
         mapLayerById(processedChildGroup.compiledLayer);
