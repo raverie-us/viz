@@ -128,6 +128,55 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
   values: []
 });
 
+export interface FoundLayer {
+  layer: Layer;
+  layerIndex: number;
+  parent: LayerGroup;
+}
+export const findChildLayerAndParentById = (root: LayerGroup, id: string): FoundLayer | null => {
+  for (let i = 0; i < root.layers.length; ++i) {
+    const childLayer = root.layers[i];
+    if (childLayer.id === id) {
+      return {
+        layer: childLayer,
+        layerIndex: i,
+        parent: root
+      }
+    }
+    if (childLayer.type === "group") {
+      const result = findChildLayerAndParentById(childLayer, id);
+      if (result) {
+        return result;
+      }
+    }
+  }
+  return null;
+}
+
+export const removeLayer = (root: LayerGroup, id: string): boolean => {
+  const result = findChildLayerAndParentById(root, id);
+  if (!result) {
+    return false;
+  }
+  result.parent.layers.splice(result.layerIndex, 1);
+  return true;
+};
+
+export const addLayer = (root: LayerGroup, layerToAdd: Layer, relativeToId?: string): void => {
+  if (!relativeToId) {
+    root.layers.unshift(layerToAdd);
+    return;
+  }
+
+  const result = findChildLayerAndParentById(root, relativeToId);
+  if (!result) {
+    root.layers.unshift(layerToAdd);
+    return;
+  }
+
+  result.parent.layers.splice(result.layerIndex, 0, layerToAdd);
+};
+
 const expect = <T>(value: T | null | undefined, name: string): T => {
   if (!value) {
     throw new Error(`Expected to get: ${name}`);
