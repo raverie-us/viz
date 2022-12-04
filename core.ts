@@ -76,11 +76,16 @@ export interface CompiledUniformSampler2D extends CompiledUniformBase {
 // tags: <types>
 export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
 
+export interface CompiledError {
+  line: number;
+  text: string;
+}
+
 export interface CompiledLayerShader {
   type: "shader";
   layer: LayerShader;
   uniforms: CompiledUniform[];
-  error?: string;
+  errors: CompiledError[];
 }
 
 export type CompiledLayer = CompiledLayerShader | CompiledLayerGroup;
@@ -233,6 +238,21 @@ const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { u
 
 export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => any;
 
+const newlineRegex = /\r|\n|\r\n/u;
+const fragmentShaderHeader = `#version 300 es
+precision highp float;
+const float gPI = acos(-1.0);
+const float gPI2 = gPI * 2.0;
+in vec2 gPosition;
+in vec2 gUV;
+out vec4 gFragColor;
+uniform sampler2D gPreviousLayer;
+uniform vec2 gResolution;
+uniform float gTime;
+`;
+
+const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
+
 export class RaverieVisualizer {
   private width: number;
   private height: number;
@@ -345,17 +365,6 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    const fragmentShaderHeader = `#version 300 es
-      precision highp float;
-      const float gPI = acos(-1.0);
-      const float gPI2 = gPI * 2.0;
-      in vec2 gPosition;
-      in vec2 gUV;
-      out vec4 gFragColor;
-      uniform sampler2D gPreviousLayer;
-      uniform vec2 gResolution;
-      uniform float gTime;
-    `;
     const processedFragmentShader =
       this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
@@ -549,13 +558,37 @@ export class RaverieVisualizer {
     layerShader.values.push(...processedUniforms.map((processedUniform) =>
       processedUniform.compiledUniform.shaderValue));
 
+    const errors: CompiledError[] = [];
+    if (processedProgram.error) {
+      // WebGL errors in Chrome actually have a null terminator in them (\x00)
+      const lines = processedProgram.error.split(/\r|\n|\r\n|\x00/u);
+      for (const line of lines) {
+        if (line.trim() === "") {
+          continue;
+        }
+        const result = /^ERROR: 0:([0-9]+): (.*)/gum.exec(line);
+        if (result) {
+          errors.push({
+            line: Number(result[1]) - fragmentShaderHeaderLineCount,
+            text: result[2]
+          });
+        } else {
+          errors.push({
+            line: 1,
+            text: line
+          });
+        }
+      }
+    }
+
+
     return {
       type: "shader",
       compiledLayer: {
         type: "shader",
         layer: layerShader,
         uniforms: processedUniforms.map((processedUniform) => processedUniform.compiledUniform),
-        error: processedProgram.error,
+        errors,
       },
       uniforms: processedUniforms,
       program,
