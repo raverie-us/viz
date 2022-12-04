@@ -2,6 +2,9 @@ export interface LayerBase {
   name: string;
   id: string;
   visible: boolean;
+  forkedFromId?: string;
+  authorName?: string;
+  authorUrl?: string;
 }
 
 export type Layer = LayerShader | LayerGroup;
