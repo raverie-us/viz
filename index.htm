@@ -13,11 +13,13 @@
 {
   type: "group",
   name: "root",
+  id: "root",
   visible: true,
   layers: [
     {
       type: "shader",
       name: "spiral",
+      id: "spiral",
       visible: true,
       code: `
         uniform float centerWarp; // default: 0.4
@@ -44,6 +46,7 @@
     {
       type: "shader",
       name: "lines",
+      id: "lines",
       visible: true,
       code: `
         uniform float lines; // default: 3
@@ -69,6 +72,7 @@
     {
       type: "shader",
       name: "texture",
+      id: "texture",
       visible: true,
       code: `
         uniform sampler2D textureInput;
@@ -94,6 +98,7 @@
     {
       type: "shader",
       name: "blue",
+      id: "blue",
       visible: true,
       code: `
         uniform float blue;
