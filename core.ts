@@ -571,7 +571,7 @@ export class RaverieVisualizer {
         if (line.trim() === "") {
           continue;
         }
-        const result = /^ERROR: 0:([0-9]+): (.*)/gum.exec(line);
+        const result = /^(?:ERROR|WARNING): 0:([0-9]+): (.*)/gum.exec(line);
         if (result) {
           errors.push({
             line: Number(result[1]) - fragmentShaderHeaderLineCount,
