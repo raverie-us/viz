@@ -140,6 +140,7 @@ interface ProcessedUniformSampler2D extends ProcessedUniformBase {
   type: "sampler2D";
   compiledUniform: CompiledUniformSampler2D;
   cachedTexture?: WebGLTexture;
+  cachedTextureUrl?: string;
 }
 
 type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
@@ -655,13 +656,14 @@ export class RaverieVisualizer {
               processedUniform.compiledUniform.defaultValue);
             const shaderTexture = validatedValue as ShaderTexture;
             let texture: WebGLTexture | null = null;
-            if (processedUniform.cachedTexture) {
+            if (processedUniform.cachedTexture && processedUniform.cachedTextureUrl === shaderTexture.url) {
               texture = processedUniform.cachedTexture;
             } else {
               texture = this.createTexture();
               this.loadTexture(shaderTexture.url, texture, gl);
             }
             processedUniform.cachedTexture = texture;
+            processedUniform.cachedTextureUrl = shaderTexture.url;
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(processedUniform.location, textureSamplerIndex);
