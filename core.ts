@@ -443,6 +443,11 @@ export class RaverieVisualizer {
         break;
       }
       const name = result[2];
+      // Ignore uniforms of the same name which happens often while editing code live
+      if (newUniformNames[name]) {
+        continue;
+      }
+
       newUniformNames[name] = true;
       newUniforms.push({
         type: result[1] as GLSLType,
