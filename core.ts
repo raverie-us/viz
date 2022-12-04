@@ -1,5 +1,6 @@
 export interface LayerBase {
   name: string;
+  id: string;
   visible: boolean;
 }
 
@@ -88,10 +89,14 @@ export interface CompiledLayerGroup {
   type: "group";
   layer: LayerGroup;
   layers: CompiledLayer[];
+
+  // A complete flattened hierarchy of every layer (recursive) under this group 
+  idToLayer: Record<string, CompiledLayer>;
 }
 
 export const defaultEmptyLayerGroup = (): LayerGroup => ({
   type: "group",
+  id: "",
   name: "",
   visible: true,
   layers: []
@@ -99,6 +104,7 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
 
 export const defaultEmptyLayerShader = (): LayerShader => ({
   type: "shader",
+  id: "",
   name: "",
   visible: true,
   blendMode: "normal",
@@ -559,29 +565,45 @@ export class RaverieVisualizer {
   }
 
   private compileLayerGroup(layerGroup: LayerGroup): ProcessedLayerGroup {
-    const processedGroup: ProcessedLayerGroup = {
+    const compiledLayerGroup: CompiledLayerGroup = {
       type: "group",
-      compiledLayer: {
-        type: "group",
-        layer: layerGroup,
-        layers: []
-      },
+      layer: layerGroup,
+      layers: [],
+      idToLayer: {}
+    };
+    const processedLayerGroup: ProcessedLayerGroup = {
+      type: "group",
+      compiledLayer: compiledLayerGroup,
       layers: [],
       timeSeconds: 0
     };
+
+    const mapLayerById = (compiledLayer: CompiledLayer) => {
+      const id = compiledLayer.layer.id;
+      if (id in compiledLayerGroup.idToLayer) {
+        throw new Error(`Layer id '${id}' was not unique (another layer had the same id)`);
+      }
+      compiledLayerGroup.idToLayer[id] = compiledLayer;
+    }
+
     for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
         const processedLayerShader = this.compileLayerShader(layer);
-        processedGroup.layers.push(processedLayerShader);
-        processedGroup.compiledLayer.layers.push(processedLayerShader.compiledLayer);
+        processedLayerGroup.layers.push(processedLayerShader);
+        compiledLayerGroup.layers.push(processedLayerShader.compiledLayer);
+        mapLayerById(processedLayerShader.compiledLayer);
       } else {
         // Recursively compile the child group
         const processedChildGroup = this.compileLayerGroup(layer);
-        processedGroup.layers.push(processedChildGroup);
-        processedGroup.compiledLayer.layers.push(processedChildGroup.compiledLayer);
+        processedLayerGroup.layers.push(processedChildGroup);
+        compiledLayerGroup.layers.push(processedChildGroup.compiledLayer);
+        mapLayerById(processedChildGroup.compiledLayer);
+        for (const nestedCompiledLayer of Object.values(processedChildGroup.compiledLayer.idToLayer)) {
+          mapLayerById(nestedCompiledLayer);
+        }
       }
     }
-    return processedGroup;
+    return processedLayerGroup;
   }
 
   public render(): void {

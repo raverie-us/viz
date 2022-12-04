@@ -97,12 +97,11 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
 
 const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
   const compiledLayerGroup = visualizer.compile({
-    type: "group",
-    name: "root",
-    visible: true,
+    ...defaultEmptyLayerGroup(),
     layers: [
       {
         type: "group",
+        id: "nested",
         name: "nested",
         visible: true,
         layers: []
