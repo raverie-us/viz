@@ -124,7 +124,10 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
   opacity: 1.0,
   timeMode: "normal",
   timeScale: 1.0,
-  code: "",
+  code: `
+void main() {
+  gFragColor = texture(gPreviousLayer, gUV);
+}`.trim(),
   values: []
 });
 
