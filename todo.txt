@@ -1,0 +1,217 @@
+
+visualization maker
+ - auto generate
+ - mix a bunch of primitives together
+ - layers
+ - DJ logos
+ - Record video (infinite loops)
+
+raverie visualizer
+- allow editing glsl to make a "filter"
+  - do we have generators vs filters?
+- All effects must use all inputs we provide
+- Can apply effects to the map function, or as a post process
+
+- can input logo or DJ logo
+ - Centers it, puts effects on it, etc
+
+Can make a looping video, common output sizes:
+ - tiktok, instagram, desktop, 1080p, etc
+
+
+thing that goes over every function and changes it in some weird way
+ - effects
+ - vector2, 3, floats, ints, etc
+ - or potentially every variable!
+ - mess it up in some weird way
+
+audio input can come from microphone or an audio file
+ - except when rendering, just from file
+ - but this isn't part of the visualization, we don't upload music
+ - We can also eventually allow the user to make a graph to control just volume, or bass, mid, high
+   - So they can author a visualization with perfect timing, even if they didn't write the code
+   - To go with their music or something
+
+
+types of inputs shaders can have:
+ - float/int
+   - min
+   - max
+   - slider if min/max is set (does it by default, but you can also type in value)
+   - can also be set to a graph - indexed by time for now, but maybe by other properties later
+ - vector (just N many text inputs)
+ - string
+   - automatically creates a 1d texture with letters
+ - texture
+   - allow file or video upload, also webcam
+
+When making any visualization that's a combined group, you can flag any property as a tweakable
+ - meaning it will have a default value as whatever you set it as, but it shows up on the outside without expanding it
+
+
+ultimately, audio input, background input, and logo input are effectively globals
+ - e.g. they can be set per visualizer and have defaults, but they're always exposed like "tweakables"
+ - end users can easily set them with no work
+
+When you publish a shader, it always publishes the full blit of all dependencies
+ - So that we don't need to worry about
+
+Shaders cannot include shaders that depend on them
+
+We do an automatically incremented version per published shader
+ - We keep full history
+
+All shaders are immutable
+
+We depend on a specific shader at a specific version
+
+First version of this should be just a JSON editor
+ - We can do the whole color picker / number slider things over values
+ - And if we know which value, we can show the slider (min/max, step)
+
+When you take in a texture (declaring a sampler uniform)
+ - You can also set it to be the previous texture that was rendered
+ - Also possible to set that to the default
+ - Hidden uniforms
+ - uniform sampler2D previous; // default: "previous", hidden: true
+
+Maybe if the shader samples from previousLayer, we can't set the blend mode?
+ - Would kinda make sense, it's more of an effect
+ - We can separate the concepts, generators and effects
+ - Effect Layer / Generator Layer
+   - Generator layers can have blend modes
+   - Groups can also have blend modes, but not if the first thing is an effect
+
+Get textures working
+ - Need to be able to specify a texture string and then something returns a webgl texture
+ - then get a texture "generator" shader working, where we can do Cover, fit, background color, etc
+
+When we download for offline use, we can encode all the images and videos as data urls
+ - it will be large, but we can export the whole thing I think
+
+If a user wants, they can make their layer transformable
+ - By implementing certain properties, and possibly bounding box
+ - Maybe binding a matrix3d (affine) and marking as transform
+ - We'll bind Movable
+ - Not quite sure how we actually do the scaling part, maybe we can put a special comment
+   that says like, my size comes from this texture?
+ - But how do we do modes like Cover/fit/stretch, etc?
+
+Eventually we'll want to do minimal rebuild and partial compilation
+ - Basically compile what we can, and mark others as errors / fallback
+   - But also keep the old valid shader around if possible so that it still renders
+   - Just return "errors" on the compiled shader
+   - Probably tolerate as much as we can too without causing undefined or bad behavior
+
+Write a shader toy importer
+ - Mention we love shader toy and it was a huge inspiration
+ - Download the json file they have and attempt to map everything into layers
+ - #defines for all the builtin types (mapping to ours)
+ - A special main that just calls their main
+ - You can pick one channel to become the "previousLayer" if it's an effect
+   - But otherwise the rest of the video/image channels become
+ - Sound cloud / audio / mic channels have a direct translation to a built in texture
+ - If you do "buffer A / B / C / D" we attempt to re-arrange them into layers, but no guarantee
+   - Only works if we can flatten it, e.g. no cycles
+   - If it fails, we'll notify the user that it's not supported, but we'll make a best effort
+ - This should not be part of the core, just part of raverie, or potentially a side module that can be imported
+
+Detect renames of variables (use position and type)
+
+Better handling for when layers don't compile / are disabled (treat as not visible maybe?)
+
+Ability to bind a color to the UI, but we say like: color: true
+ - Only works on vec3/vec4, and maybe ivec3/ivec4 (with size 256)
+
+Other ideas for pickers:
+ - hue: true (single float)
+
+BUG: When we add an int before "textureInput"
+
+When we compile a shader, the external needs to know about:
+ - errors
+ - new uniforms (well really all uniforms, but if there wasn't a value before...)
+ - We should return a sort of compiled version of the tree, but not an internal version
+ - Should we modify the structure they pass in?
+   - It would make it pretty easy if it did, because then we could just directly point at it
+   - and it would always be up to date
+
+What are the next steps to integrating?
+ - Maybe every node gets an id that can be used as a key
+   - When we compile a scene, we ensure the id is unique
+ - When we submit on raverie, either generate a new id or ensure the id used is unique
+ - But not really needed, react can just walk the tree
+   - When we upload, do we upload the whole thing?
+   - The thing is, we could have modified any layer
+   - So yeah, upload the whole thing but keep a reference id
+
+DONE - Detect renames if possible
+DONE - Ensure that no extra values exist
+DONE - We should always make uniform values into objects
+
+Need a way to render thumbnails (same WebGL context?)
+ - https://stackoverflow.com/questions/15824840/display-different-scenes-sharing-resources-on-multiple-canvases
+ - Not really great ways to render to multiple canvases
+ - But maybe can copy, or potentailly use OffscreenCanvas / transferToImageBitmap
+
+Add enforced unique ids (automatically re-assigned ids and returns an error)
+ - Use key={} for the <Editor> so that we create different editors and don't treat them as the same
+
+Put the parsed comments onto the compiled uniforms, users can use that for anything they want
+
+Make sure we don't actually get WebGL errors by using a default / dummy program
+
+When we recompile a program, don't get rid of it's values!
+ - That way if you bring the property back, it will still be there
+ - Make that an option when compiling, strip invalid values
+   - We'll do this when uploading
+
+Allow Shader values to be undefined
+ - We'll correct them to defaults anyways at runtime
+ - But it allows us to change the defaults until the user sets something
+ - And we can have a "reset to default" option
+
+Goals:
+ - Give it to each DJ to create their own logo visuals for Dec 10
+ - Preset number of layer effects, I can add new ones as I see fit
+   - People can write their own, but no real way to share
+ - You can download the full JSON of the shaders/layers
+ - And also upload it so you can keep working on it
+ - Create layer
+ - Delete layer
+ - Create folder/group
+ - Re-order and re-parent layers
+ - Blend modes working (especially texture alpha blending)
+ - Opacity
+ - Preview layer images
+
+Eventually:
+ - Invert layer style...
+   - Might be way faster with shader compositing
+   - But for now it is what it is
+     - Maybe get rid of gFragColor and just do return vec4
+
+Layers always apply effect to the previous layer, whilst "effects" are like layers and apply
+to an individual layer or group themselves
+ - Maybe blend modes can just be effects?
+
+built in hardness functions?
+
+support curves
+ - Any float or int or whatever can be set to a curves
+   - Keyed by time, volume, etc (bunch of preset things you can pick on the cpu side)
+ - shaders can also input a curve, which we render to a texture as [0, 1]
+
+
+if it's a type="color" and vec4, we should default to [0,0,0,1] if none is provided
+
+blend modes can be any effect that reads two textures and combines them into one
+ - but takes no uniform parameters, must be simple
+
+As an optimization, some built in blend modes can be simplified if they do not read from the previous texture
+
+We could use shader recompiling as a way of doing blend modes generically and decently fast
+ - We always have the previous layer, and we know what the output color is supposed to be
+ - We don't currently composite shaders, other than the header (but the shader doesn't change based on options)
+   - But really may not be a bad thing...
+   
