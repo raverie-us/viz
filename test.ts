@@ -51,8 +51,8 @@ const validateUniform = (uniform: CompiledUniform, type: string, name: string, v
 const runUniformRenameTest = (visualizer: RaverieVisualizer) => {
   const compiledLayerGroup = compileTestLayerGroup(visualizer, `
     uniform float a; // default: 987
-    void main() {
-      gFragColor = vec4(a, 0.0, 0.0, 1.0);
+    vec4 render() {
+      return vec4(a, 0.0, 0.0, 1.0);
     }`,
     [{
       name: "b",
@@ -71,8 +71,8 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
   const compiledLayerGroup = compileTestLayerGroup(visualizer, `
     uniform float a; // default: 987
     uniform float b; // default: 654
-    void main() {
-      gFragColor = vec4(a, b, 0.0, 1.0);
+    vec4 render() {
+      return vec4(a, b, 0.0, 1.0);
     }`,
     [
       {

@@ -144,8 +144,8 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
   timeMode: "normal",
   timeScale: 1.0,
   code: `
-void main() {
-  gFragColor = texture(gPreviousLayer, gUV);
+vec4 render() {
+  return texture(gPreviousLayer, gUV);
 }`.trim(),
   values: []
 });
@@ -374,6 +374,11 @@ uniform float gTime;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
 
+const fragmentShaderFooter = `
+void main() {
+  gFragColor = render();
+}`;
+
 export class RaverieVisualizer {
   private width: number;
   private height: number;
@@ -442,26 +447,26 @@ export class RaverieVisualizer {
       }`;
 
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
-    this.vertexShader = expect(this.createShader(vertexShader, gl.VERTEX_SHADER).shader,
+    this.vertexShader = expect(processedVertexShader.shader,
       processedVertexShader.error!);
 
     this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
       code: `
       uniform float checkerPixelSize; // default: 8
-      void main() {
+      vec4 render() {
         vec2 pixels = gUV * gResolution;
         vec2 uv = floor(pixels / vec2(checkerPixelSize));
         float checker = mod(uv.x + uv.y, 2.0);
-        gFragColor = vec4(vec3(max(checker, 0.8)), 1);
+        return vec4(vec3(max(checker, 0.8)), 1);
       }`
     }, null, true);
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
       code: `
-      void main() {
-        gFragColor = texture(gPreviousLayer, gUV);
+      vec4 render() {
+        return texture(gPreviousLayer, gUV);
       }`
     }, null, true);
   }
@@ -489,7 +494,7 @@ export class RaverieVisualizer {
     const program = expect(gl.createProgram(), "WebGLProgram");
 
     const processedFragmentShader =
-      this.createShader(`${fragmentShaderHeader}\n${fragmentShader}`, gl.FRAGMENT_SHADER);
+      this.createShader(`${fragmentShaderHeader}\n${fragmentShader}\n${fragmentShaderFooter}`, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
       return {
         program: null,

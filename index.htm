@@ -23,12 +23,12 @@
       visible: true,
       code: `
         uniform float centerWarp; // default: 0.4
-        void main() {
+        vec4 render() {
           vec2 uv = vec2(gPosition.x, gPosition.y * gResolution.y / gResolution.x);
           float r = length(uv);
           float theta = atan(uv.y, uv.x);
           vec4 prev = texture(gPreviousLayer, gUV);
-          gFragColor = fract(2.5 * theta / gPI + 7.0 * pow(r, centerWarp) - gTime) < 0.5 ? vec4(1.0) : prev;
+          return fract(2.5 * theta / gPI + 7.0 * pow(r, centerWarp) - gTime) < 0.5 ? vec4(1.0) : prev;
         }
       `,
       blendMode: "normal",
@@ -50,11 +50,11 @@
       visible: true,
       code: `
         uniform float lines; // default: 3
-        void main() {
+        vec4 render() {
           float radians = (gUV.y + gTime) * (2.0 * 3.14159265359) * lines;
           float value = sin(radians);
           vec4 prev = texture(gPreviousLayer, gUV);
-          gFragColor = vec4(vec3(value), 1.0) + prev;
+          return vec4(vec3(value), 1.0) + prev;
         }
       `,
       blendMode: "normal",
@@ -76,9 +76,9 @@
       visible: true,
       code: `
         uniform sampler2D textureInput;
-        void main() {
+        vec4 render() {
           vec2 uv = gUV * vec2(1, gResolution.y / gResolution.x);
-          gFragColor = texture(textureInput, uv);
+          return texture(textureInput, uv);
         }
       `,
       blendMode: "normal",
@@ -102,8 +102,8 @@
       visible: true,
       code: `
         uniform float blue;
-        void main() {
-          gFragColor = vec4(gUV, blue, 1.0);
+        vec4 render() {
+          return vec4(gUV, blue, 1.0);
         }
       `,
       blendMode: "normal",
