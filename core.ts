@@ -17,10 +17,34 @@ export interface LayerGroup extends LayerBase {
 export type LayerShaderBlendMode =
   "overwrite" |
   "normal" |
+
   "darken" |
   "multiply" |
+  "colorBurn" |
+  "linearBurn" |
+  "darkerColor" |
+
   "lighten" |
-  "screen";
+  "screen" |
+  "colorDodge" |
+  "linearDodge" |
+  "lighterColor";
+
+export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
+  "normal",
+  null,
+  "darken",
+  "multiply",
+  "colorBurn",
+  "linearBurn",
+  "darkerColor",
+  null,
+  "lighten",
+  "screen",
+  "colorDodge",
+  "linearDodge",
+  "lighterColor",
+];
 
 export type LayerShaderTimeMode =
   "normal" |
@@ -370,6 +394,9 @@ out vec4 gFragColor;
 uniform sampler2D gPreviousLayer;
 uniform vec2 gResolution;
 uniform float gTime;
+float gLuminance(vec3 rgb) {
+  return (0.2126 * rgb.r) + (0.7152 * rgb.g) + (0.0722 * rgb.b);
+}
 `;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
@@ -386,11 +413,18 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
   const blendEquation = (() => {
     switch (blendMode) {
       case "normal": return "src";
+
       case "multiply": return "src * dst";
       case "darken": return "min(src, dst)";
-      // TODO(trevor): Not correct, need to figure out how alpha works with screen
-      case "screen": return "src + dst";
+      case "colorBurn": return "one - (one - dst) / max(src, epsilon)";
+      case "linearBurn": return "src + dst - one";
+      case "darkerColor": return "gLuminance(src) < gLuminance(dst) ? src : dst";
+
+      case "screen": return "one - (one - src) * (one - dst)";
       case "lighten": return "max(src, dst)";
+      case "colorDodge": return "dst / max(one - src, epsilon)";
+      case "linearDodge": return "src + dst";
+      case "lighterColor": return "gLuminance(src) > gLuminance(dst) ? src : dst";
       default: throw new Error(`Unexpected blend mode ${blendMode}`);
     }
   })();
@@ -402,6 +436,8 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
     // TODO(trevor): Multiply srcAlpha by opacity
     float srcAlpha = result.a;
     vec3 dst = texture(gPreviousLayer, gUV).rgb;
+    vec3 one = vec3(1.0);
+    vec3 epsilon = vec3(0.1);
     vec3 blended = ${blendEquation};
     gFragColor = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
   }`;
