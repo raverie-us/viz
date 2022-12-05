@@ -538,8 +538,6 @@ export class RaverieVisualizer {
     if (processedProgram.error) {
       if (throwOnError) {
         throw new Error(processedProgram.error);
-      } else {
-        console.warn(processedProgram.error);
       }
     }
 
