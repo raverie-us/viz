@@ -177,7 +177,12 @@ export const addLayer = (root: LayerGroup, layerToAdd: Layer, relativeToId?: str
     return;
   }
 
-  result.parent.layers.splice(result.layerIndex, 0, layerToAdd);
+  // As a special case, if we're adding relative to a group layer, we'll add it as a child
+  if (result.layer.type === "group") {
+    result.layer.layers.unshift(layerToAdd);
+  } else {
+    result.parent.layers.splice(result.layerIndex, 0, layerToAdd);
+  }
 };
 
 const expect = <T>(value: T | null | undefined, name: string): T => {
