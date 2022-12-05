@@ -204,8 +204,6 @@ interface ProcessedUniformNumber extends ProcessedUniformBase {
 interface ProcessedUniformSampler2D extends ProcessedUniformBase {
   type: "sampler2D";
   compiledUniform: CompiledUniformSampler2D;
-  cachedTexture?: WebGLTexture;
-  cachedTextureUrl?: string;
 }
 
 type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
@@ -296,7 +294,7 @@ const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { u
   }
 }
 
-export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => any;
+export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => void;
 
 const newlineRegex = /\r|\n|\r\n/u;
 const fragmentShaderHeader = `#version 300 es
@@ -321,6 +319,8 @@ export class RaverieVisualizer {
   private readonly loadTexture: LoadTextureFunction;
 
   private processedGroup: ProcessedLayerGroup | null = null;
+
+  private textureCache: Record<string, WebGLTexture | undefined> = {};
 
   private readonly vertexShader: WebGLShader;
 
@@ -760,15 +760,13 @@ export class RaverieVisualizer {
             const validatedValue = validateGLSLSampler2D(value,
               processedUniform.compiledUniform.defaultValue);
             const shaderTexture = validatedValue as ShaderTexture;
-            let texture: WebGLTexture | null = null;
-            if (processedUniform.cachedTexture && processedUniform.cachedTextureUrl === shaderTexture.url) {
-              texture = processedUniform.cachedTexture;
-            } else {
+            let texture: WebGLTexture | undefined = undefined;
+            texture = this.textureCache[shaderTexture.url];
+            if (!texture) {
               texture = this.createTexture();
+              this.textureCache[shaderTexture.url] = texture;
               this.loadTexture(shaderTexture.url, texture, gl);
             }
-            processedUniform.cachedTexture = texture;
-            processedUniform.cachedTextureUrl = shaderTexture.url;
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(processedUniform.location, textureSamplerIndex);
