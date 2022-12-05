@@ -16,7 +16,9 @@ export interface LayerGroup extends LayerBase {
 
 export type LayerShaderBlendMode =
   "overwrite" |
+
   "normal" |
+  "dissolve" |
 
   "darken" |
   "multiply" |
@@ -28,10 +30,29 @@ export type LayerShaderBlendMode =
   "screen" |
   "colorDodge" |
   "linearDodge" |
-  "lighterColor";
+  "lighterColor" |
+
+  "overlay" |
+  "softLight" |
+  "hardLight" |
+  "vividLight" |
+  "linearLight" |
+  "pinLight" |
+  "hardMix" |
+
+  "difference" |
+  "exclusion" |
+  "subtract" |
+  "divide" |
+
+  "hue" |
+  "saturation" |
+  "color" |
+  "luminosity";
 
 export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
   "normal",
+  "dissolve",
   null,
   "darken",
   "multiply",
@@ -44,6 +65,24 @@ export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
   "colorDodge",
   "linearDodge",
   "lighterColor",
+  null,
+  "overlay",
+  "softLight",
+  "hardLight",
+  "vividLight",
+  "linearLight",
+  "pinLight",
+  "hardMix",
+  null,
+  "difference",
+  "exclusion",
+  "subtract",
+  "divide",
+  null,
+  "hue",
+  "saturation",
+  "color",
+  "luminosity"
 ];
 
 export type LayerShaderTimeMode =
@@ -397,6 +436,9 @@ uniform float gTime;
 float gLuminance(vec3 rgb) {
   return (0.2126 * rgb.r) + (0.7152 * rgb.g) + (0.0722 * rgb.b);
 }
+float gNoise2D(vec2 value) {
+  return fract(sin(value.x * 3433.8 + value.y * 3843.98) * 45933.8);
+}
 `;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
@@ -406,7 +448,26 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
   if (blendMode === "overwrite") {
     return `
       void main() {
-        gFragColor = render();
+        gFragColor = vec4(render().rgb, 1);
+      }`
+  }
+
+  // We also handle dissolve as a special case since it never blends (always opaque)
+  if (blendMode === "dissolve") {
+    return `
+      void main() {
+        vec4 src = render();
+        vec4 dst = texture(gPreviousLayer, gUV);
+        float noise = gNoise2D(gUV);
+        vec4 color;
+        if (src.a == 1.0) {
+          color = src;
+        } else if (src.a == 0.0) {
+          color = dst;
+        } else {
+          color = src.a < noise ? dst : src;
+        }
+        gFragColor = vec4(color.rgb, 1);
       }`
   }
 
@@ -425,6 +486,25 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
       case "colorDodge": return "dst / max(one - src, epsilon)";
       case "linearDodge": return "src + dst";
       case "lighterColor": return "gLuminance(src) > gLuminance(dst) ? src : dst";
+
+      case "overlay": return "vec3(greaterThan(dst,hlf))*(one-(one-two*(dst-hlf))*(one-src))+vec3(lessThanEqual(dst,hlf))*((two*dst)*src)";
+      case "softLight": return "vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(src+hlf))";
+      case "hardLight": return "vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-two*(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(two*src))";
+      case "vividLight": return "vec3(greaterThan(src,hlf))*(dst/max(one-two*(src-hlf),epsilon))+vec3(lessThanEqual(src,hlf))*(one-(one-dst)/max(two*src,epsilon))";
+      case "linearLight": return "vec3(greaterThan(src,hlf))*(dst+two*(src-hlf))+vec3(lessThanEqual(src,hlf))*(dst+two*src-one)";
+      case "pinLight": return "vec3(greaterThan(src,hlf))*max(dst,two*(src-hlf))+vec3(lessThanEqual(src,hlf))*min(dst,two*src)";
+      case "hardMix": return "src";
+
+      case "difference": return "abs(dst - src)";
+      case "exclusion": return "hlf - two * (dst - hlf) * (src - hlf)";
+      case "subtract": return "dst - src";
+      case "divide": return "dst / max(src, epsilon)";
+
+      case "hue": return "src";
+      case "saturation": return "src";
+      case "color": return "src";
+      case "luminosity": return "src";
+
       default: throw new Error(`Unexpected blend mode ${blendMode}`);
     }
   })();
@@ -436,7 +516,9 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
     // TODO(trevor): Multiply srcAlpha by opacity
     float srcAlpha = result.a;
     vec3 dst = texture(gPreviousLayer, gUV).rgb;
+    vec3 hlf = vec3(0.5);
     vec3 one = vec3(1.0);
+    vec3 two = vec3(2.0);
     vec3 epsilon = vec3(0.1);
     vec3 blended = ${blendEquation};
     gFragColor = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
@@ -985,7 +1067,7 @@ export class RaverieVisualizer {
           // Treat this like it's an invisible layer
           if (layer.program) {
             renderTargetIndex = Number(!renderTargetIndex);
-            
+
             renderLayerShader(
               layer,
               this.renderTargets[renderTargetIndex].buffer,
