@@ -623,11 +623,9 @@ export class RaverieVisualizer {
       if (commentStart !== -1) {
         // Check if we can parse the comment as JSON (skip 2 characters for the //)
         const commentText = afterUniform.substring(commentStart + 2);
-        const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*/gum, (found) => {
-          if (found === "true" || found === "false") {
-            return found;
-          }
-          return `"${found}"`;
+        const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*\s*:/gum, (found) => {
+          const identifier = found.substring(0, found.indexOf(":")).trim();
+          return `"${identifier}":`;
         });
 
         const json = `{${innerJson}}`;
