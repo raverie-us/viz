@@ -912,12 +912,12 @@ export class RaverieVisualizer {
           // We only render the layer if it has a valid program (also don't swap buffers)
           // Treat this like it's an invisible layer
           if (layer.program) {
+            renderTargetIndex = Number(!renderTargetIndex);
+            
             renderLayerShader(
               layer,
               this.renderTargets[renderTargetIndex].buffer,
               this.renderTargets[Number(!renderTargetIndex)].texture);
-
-            renderTargetIndex = Number(!renderTargetIndex);
           }
         } else {
           renderRecursive(layer);
@@ -940,6 +940,6 @@ export class RaverieVisualizer {
     renderLayerShader(
       this.copyShader,
       null,
-      this.renderTargets[Number(!renderTargetIndex)].texture);
+      this.renderTargets[renderTargetIndex].texture);
   }
 }
