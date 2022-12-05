@@ -26,13 +26,22 @@ export type LayerShaderTimeMode =
   "normal" |
   "pingpong";
 
+export type NumberType = "int" | "float";
+export type VectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
+export type Sampler2DType = "sampler2D";
+
 export interface ShaderValueBase {
   name: string;
 }
 
 export interface ShaderValueNumber extends ShaderValueBase {
-  type: "int" | "float";
+  type: NumberType;
   value: number;
+}
+
+export interface ShaderValueVector extends ShaderValueBase {
+  type: VectorType;
+  value: number[];
 }
 
 export interface ShaderTexture {
@@ -40,12 +49,14 @@ export interface ShaderTexture {
 };
 
 export interface ShaderValueSampler2D extends ShaderValueBase {
-  type: "sampler2D";
+  type: Sampler2DType;
   value: ShaderTexture;
 }
 
 // tags: <types>
-export type ShaderValue = ShaderValueNumber | ShaderValueSampler2D;
+export type ShaderValue = ShaderValueNumber | ShaderValueVector | ShaderValueSampler2D;
+
+export type ShaderType = number | number[] | ShaderTexture;
 
 export interface LayerShader extends LayerBase {
   type: "shader";
@@ -64,21 +75,29 @@ export interface CompiledUniformBase {
 }
 
 export interface CompiledUniformNumber extends CompiledUniformBase {
-  type: "int" | "float";
+  type: NumberType;
   shaderValue: ShaderValueNumber;
   defaultValue: number;
   minValue: number;
   maxValue: number;
 }
 
+export interface CompiledUniformVector extends CompiledUniformBase {
+  type: VectorType;
+  shaderValue: ShaderValueVector;
+  defaultValue: number[];
+  minValue: number[];
+  maxValue: number[];
+}
+
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
-  type: "sampler2D";
+  type: Sampler2DType;
   shaderValue: ShaderValueSampler2D;
   defaultValue: ShaderTexture;
 }
 
 // tags: <types>
-export type CompiledUniform = CompiledUniformNumber | CompiledUniformSampler2D;
+export type CompiledUniform = CompiledUniformNumber | CompiledUniformVector | CompiledUniformSampler2D;
 
 export interface CompiledError {
   line: number;
@@ -193,25 +212,30 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 }
 
 // tags: <types>
-type GLSLType = "int" | "float" | "sampler2D";
+type GLSLType = NumberType | VectorType | Sampler2DType;
 
-// tags: <types> (see below, the different uniform types)
 interface ProcessedUniformBase {
   compiledUniform: CompiledUniformBase;
   location: WebGLUniformLocation | null;
 }
 
 interface ProcessedUniformNumber extends ProcessedUniformBase {
-  type: "int" | "float";
+  type: NumberType;
   compiledUniform: CompiledUniformNumber;
 }
 
+interface ProcessedUniformVector extends ProcessedUniformBase {
+  type: VectorType;
+  compiledUniform: CompiledUniformVector;
+}
+
 interface ProcessedUniformSampler2D extends ProcessedUniformBase {
-  type: "sampler2D";
+  type: Sampler2DType;
   compiledUniform: CompiledUniformSampler2D;
 }
 
-type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformSampler2D;
+// tags: <types>
+type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformVector | ProcessedUniformSampler2D;
 
 interface NewUniform {
   type: GLSLType;
@@ -270,18 +294,52 @@ interface RenderTarget {
 const pass = <T>(value: T): T => value;
 
 // tags: <types>
-const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
-  value === undefined ? validatedDefault : Math.floor(Number(value));
-
-// tags: <types>
 const validateGLSLFloat = (value: any, validatedDefault: number = 0): number =>
-  value === undefined ? validatedDefault : Number(value);
+  value === undefined ? validatedDefault : (Number(value) || 0);
 
 // tags: <types>
-const validateGLSLNumber = (glslType: "int" | "float", value: any, validatedDefault: number = 0): number =>
+const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
+  Math.floor(validateGLSLFloat(value, validatedDefault));
+
+// tags: <types>
+const validateGLSLNumber = (glslType: NumberType, value: any, validatedDefault: number = 0): number =>
   glslType === "int"
     ? validateGLSLInt(value, validatedDefault)
     : validateGLSLFloat(value, validatedDefault)
+
+interface VectorParts {
+  numberType: NumberType;
+  components: number;
+}
+
+export const getVectorParts = (glslType: VectorType): VectorParts => ({
+  numberType: glslType[0] === "i" ? "int" : "float",
+  components: Number(glslType[glslType.length - 1])
+});
+
+const vectorScalarConstructor = (glslType: VectorType, fillValue: number = 0): number[] => {
+  const parts = getVectorParts(glslType);
+  const result = new Array<number>(parts.components);
+  result.fill(fillValue);
+  return result;
+}
+
+// tags: <types>
+const validateGLSLVector = (
+  glslType: VectorType,
+  value: any,
+  validatedDefault: number[] = vectorScalarConstructor(glslType)): number[] => {
+  if (!Array.isArray(value)) {
+    return validatedDefault;
+  }
+
+  const parts = getVectorParts(glslType);
+  const result: number[] = [];
+  for (let i = 0; i < parts.components; ++i) {
+    result[i] = validateGLSLNumber(parts.numberType, value[i], validatedDefault[i]);
+  }
+  return result;
+}
 
 // tags: <types>
 const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
@@ -498,7 +556,7 @@ export class RaverieVisualizer {
       : null;
 
     // tags: <types>
-    const uniformRegex = /uniform\s+(int|float|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+    const uniformRegex = /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
@@ -629,6 +687,32 @@ export class RaverieVisualizer {
             }
           });
         }
+        case "vec2":
+        case "vec3":
+        case "vec4":
+        case "ivec2":
+        case "ivec3":
+        case "ivec4":
+          const defaultValue = validateGLSLVector(type, parsedComment.default);
+          return pass<ProcessedUniformVector>({
+            type,
+            location,
+            compiledUniform: {
+              name,
+              parent: compiledLayer,
+              type,
+              parsedComment,
+              shaderValue: {
+                name,
+                type,
+                value: validateGLSLVector(type, foundShaderValue?.value, defaultValue)
+              },
+              defaultValue,
+              minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
+              maxValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
+            }
+          });
+          break;
         case "sampler2D": {
           const defaultValue = validateGLSLSampler2D(parsedComment.default);
           return pass<ProcessedUniformSampler2D>({
@@ -758,6 +842,36 @@ export class RaverieVisualizer {
               gl.uniform1i(processedUniform.location, validatedValue);
             } else {
               gl.uniform1f(processedUniform.location, validatedValue);
+            }
+            break;
+          }
+          case "vec2":
+          case "vec3":
+          case "vec4":
+          case "ivec2":
+          case "ivec3":
+          case "ivec4": {
+            const validatedValue = validateGLSLVector(processedUniform.type, value,
+              processedUniform.compiledUniform.defaultValue);
+            switch (processedUniform.type) {
+              case "vec2":
+                gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
+                break;
+              case "vec3":
+                gl.uniform3f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+                break;
+              case "vec4":
+                gl.uniform4f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+                break;
+              case "ivec2":
+                gl.uniform2i(processedUniform.location, validatedValue[0], validatedValue[1]);
+                break;
+              case "ivec3":
+                gl.uniform3i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+                break;
+              case "ivec4":
+                gl.uniform4i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+                break;
             }
             break;
           }
