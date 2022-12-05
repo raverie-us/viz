@@ -448,7 +448,6 @@ export class RaverieVisualizer {
       const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
       const texture = this.createTexture();
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -555,6 +554,7 @@ export class RaverieVisualizer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     return texture;
   }
 
