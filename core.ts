@@ -15,7 +15,7 @@ export interface LayerGroup extends LayerBase {
 }
 
 export type LayerShaderBlendMode =
-  "effect" |
+  "overwrite" |
   "normal" |
   "darken" |
   "multiply" |
@@ -374,13 +374,36 @@ uniform float gTime;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
 
-const generateFragmentFooter = () => {
+const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
+  // Overwrite is a special case we use internally when we want to render without a previous layer
+  if (blendMode === "overwrite") {
+    return `
+      void main() {
+        gFragColor = render();
+      }`
+  }
+
+  const blendEquation = (() => {
+    switch (blendMode) {
+      case "normal": return "src";
+      case "multiply": return "src * dst";
+      case "darken": return "min(src, dst)";
+      // TODO(trevor): Not correct, need to figure out how alpha works with screen
+      case "screen": return "src + dst";
+      case "lighten": return "max(src, dst)";
+      default: throw new Error(`Unexpected blend mode ${blendMode}`);
+    }
+  })();
+
   return `
   void main() {
-    vec4 src = render();
-    // TODO(trevor): Multiply src.a by opacity
-    vec4 dst = texture(gPreviousLayer, gUV);
-    gFragColor = vec4(src.a * src.rgb + (1.0 - src.a) * dst.rgb, 1.0);
+    vec4 result = render();
+    vec3 src = result.rgb;
+    // TODO(trevor): Multiply srcAlpha by opacity
+    float srcAlpha = result.a;
+    vec3 dst = texture(gPreviousLayer, gUV).rgb;
+    vec3 blended = ${blendEquation};
+    gFragColor = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
   }`;
 }
 
@@ -457,6 +480,7 @@ export class RaverieVisualizer {
 
     this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
+      blendMode: "overwrite",
       code: `
       uniform float checkerPixelSize; // default: 8
       vec4 render() {
@@ -469,6 +493,7 @@ export class RaverieVisualizer {
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
+      blendMode: "overwrite",
       code: `
       vec4 render() {
         return texture(gPreviousLayer, gUV);
@@ -494,11 +519,11 @@ export class RaverieVisualizer {
     return { shader };
   }
 
-  private createProgram(fragmentShader: string): ProcessedProgram {
+  private createProgram(fragmentShader: string, blendMode: LayerShaderBlendMode): ProcessedProgram {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    const fragmentFooter = generateFragmentFooter();
+    const fragmentFooter = generateFragmentFooter(blendMode);
     const fragmentComposited = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentFooter}`;
     const processedFragmentShader = this.createShader(fragmentComposited, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
@@ -544,7 +569,7 @@ export class RaverieVisualizer {
 
   private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
-    const processedProgram = this.createProgram(layerShader.code);
+    const processedProgram = this.createProgram(layerShader.code, layerShader.blendMode);
 
     if (processedProgram.error) {
       if (throwOnError) {
