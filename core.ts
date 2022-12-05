@@ -374,10 +374,15 @@ uniform float gTime;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
 
-const fragmentShaderFooter = `
-void main() {
-  gFragColor = render();
-}`;
+const generateFragmentFooter = () => {
+  return `
+  void main() {
+    vec4 src = render();
+    // TODO(trevor): Multiply src.a by opacity
+    vec4 dst = texture(gPreviousLayer, gUV);
+    gFragColor = vec4(src.a * src.rgb + (1.0 - src.a) * dst.rgb, 1.0);
+  }`;
+}
 
 export class RaverieVisualizer {
   private width: number;
@@ -493,8 +498,9 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    const processedFragmentShader =
-      this.createShader(`${fragmentShaderHeader}\n${fragmentShader}\n${fragmentShaderFooter}`, gl.FRAGMENT_SHADER);
+    const fragmentFooter = generateFragmentFooter();
+    const fragmentComposited = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentFooter}`;
+    const processedFragmentShader = this.createShader(fragmentComposited, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
       return {
         program: null,
