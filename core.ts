@@ -109,8 +109,26 @@ export interface ShaderValueVector extends ShaderValueBase {
   value: number[];
 }
 
+export type FilterMode = "nearest" | "linear" | "mipmap";
+export type WrapMode = "repeat" | "mirrored" | "clamp";
+
 export interface ShaderTexture {
   url: string;
+
+  /**
+   * @default "mipmap"
+   */
+  filter?: FilterMode;
+
+  /**
+   * @default "repeat"
+   */
+  wrapHorizontal?: WrapMode;
+
+  /**
+   * @default "repeat"
+   */
+  wrapVertical?: WrapMode;
 }
 
 export interface ShaderValueSampler2D extends ShaderValueBase {
@@ -1203,6 +1221,49 @@ export class RaverieVisualizer {
 
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
+              if (typeof first !== "undefined") {
+                return first;
+              }
+              if (typeof second !== "undefined") {
+                return second;
+              }
+              return fallback;
+            };
+
+            const filter = choose(validatedValue.filter, processedUniform.compiledUniform.defaultValue.filter, "mipmap");
+            const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.compiledUniform.defaultValue.wrapHorizontal, "repeat");
+            const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.compiledUniform.defaultValue.wrapVertical, "repeat");
+
+            const wrapModeToGLParam = (wrapMode: WrapMode) => {
+              switch (wrapMode) {
+                case "repeat": return gl.REPEAT;
+                case "mirrored": return gl.MIRRORED_REPEAT;
+                case "clamp": return gl.CLAMP_TO_EDGE;
+                default: throw new Error(`Unexpected wrap mode ${wrapMode}`);
+              }
+            };
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapModeToGLParam(wrapHorizontal));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapModeToGLParam(wrapVertical));
+
+            const [minFilter, magFilter] = (() => {
+              switch (filter) {
+                case "nearest": return [gl.NEAREST, gl.NEAREST];
+                case "linear": return [gl.LINEAR, gl.LINEAR];
+                case "mipmap": return [gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR];
+                default: throw new Error(`Unexpected filter ${filter}`);
+              }
+            })();
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+
+            if (filter === "mipmap") {
+              gl.generateMipmap(gl.TEXTURE_2D);
+            }
+
             gl.uniform1i(processedUniform.location, textureSamplerIndex);
             ++textureSamplerIndex;
             break;
