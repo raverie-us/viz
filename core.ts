@@ -565,6 +565,16 @@ float gNoise2D(vec2 value) {
   return fract(sin(value.x * 3433.8 + value.y * 3843.98) * 45933.8);
 }
 
+float gDegreesToRadians(float degrees) {
+  return degrees / 180.0 * gPI;
+}
+
+mat2 gRotateMatrix2D(float radians) {
+  float c = cos(radians);
+  float s = sin(radians);
+  return mat2(c, s, -s, c);
+}
+
 struct GradientStop {
   float t;
   vec4 color;

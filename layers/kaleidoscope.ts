@@ -12,24 +12,18 @@ uniform int divisions; // default: 10, min: 1, max: 50
 uniform float rotationsPerSecond; // default: 0.1, min: -2, max: 2
 uniform vec2 scrollSpeed; // default: [0.05, 0.05], min: [-1, -1], max: [1, 1]
 
-mat2 rotate(float radians) {
-  float c = cos(radians);
-  float s = sin(radians);
-  return mat2(c, s, -s, c);
-}
-
 vec2 angleMod(vec2 pos, float divisions) {
   float radiansPerDivision = gPI2 / divisions;
   float radians = atan(pos.x, pos.y) + radiansPerDivision;
   radians = floor(radians / radiansPerDivision) * radiansPerDivision;
-  return pos * rotate(-radians);
+  return pos * gRotateMatrix2D(-radians);
 }
 
 vec4 render() {
   vec2 pos = gPosition - vec2(position);
   pos.y *= gResolution.y / gResolution.x;
   vec2 uv = angleMod(pos, float(divisions)) * 0.5;
-  uv = uv * rotate(gTime * rotationsPerSecond);
+  uv = uv * gRotateMatrix2D(gTime * rotationsPerSecond);
   uv += scrollSpeed * gTime;
   return texture(gPreviousLayer, uv);
 }`,

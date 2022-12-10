@@ -23,13 +23,6 @@ float aspect(vec2 dimensions) {
   return dimensions.x / dimensions.y;
 }
 
-mat2 rotate(float degrees) {
-  float radians = degrees / 180.0 * gPI;
-  float c = cos(radians);
-  float s = sin(radians);
-  return mat2(c, s, -s, c);
-}
-
 vec4 render() {
   ivec2 texSize = textureSize(textureInput, 0);
   float resAspect = aspect(gResolution);
@@ -42,19 +35,18 @@ vec4 render() {
   // object-fit: cover
   if (true) {
     pos /= scale;
+    mat2 rotation = gRotateMatrix2D(gDegreesToRadians(-rotationDegrees));
     if (texAspect > resAspect) {
       pos.y /= resAspect;
-      pos *= rotate(-rotationDegrees);
+      pos *= rotation;
       pos.y *= texAspect;
-      pos += center;
-      uv = pos * 0.5 + 0.5;
     } else {
       pos.x *= resAspect;
-      pos *= rotate(-rotationDegrees);
+      pos *= rotation;
       pos.x /= texAspect;
-      pos += center;
-      uv = pos * 0.5 + 0.5;
     }
+    pos += center;
+    uv = pos * 0.5 + 0.5;
   }
 
   if (horizontalBackground == 1 && (uv.x < 0.0 || uv.x > 1.0)) {
