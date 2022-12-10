@@ -784,7 +784,7 @@ export class RaverieVisualizer {
     return this.processedGroup.compiledLayer;
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = true): ProcessedLayerShader {
+  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code, layerShader.blendMode);
 
