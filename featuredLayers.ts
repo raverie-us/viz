@@ -25,7 +25,7 @@ const untrimmedLayers: LayerShader[] = [
   tunnelLayer,
 ]
 
-export const featuredLayers = untrimmedLayers.map((layer) => ({
+export const featuredLayers: LayerShader[] = untrimmedLayers.map((layer) => ({
   ...layer,
   code: layer.code.trim()
 }));
