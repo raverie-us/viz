@@ -538,7 +538,7 @@ const int gMaxGradientStops = ${maxGradientStops};
 
 vec4 gSampleGradient(gradient stops, float t) {
   // Since the array is always a fixed size, the last entries are duplicated to fill the array
-  t = fract(t);
+  t = t == 1.0 ? 1.0 : fract(t);
   GradientStop prevStop = stops[0];
   prevStop.t = 0.0;
   for (int i = 0; i < gMaxGradientStops; ++i) {
