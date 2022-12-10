@@ -2,6 +2,7 @@ export interface LayerBase {
   name: string;
   id: string;
   visible: boolean;
+  opacity: number;
   forkedFromId?: string;
   authorName?: string;
   authorUrl?: string;
@@ -126,7 +127,6 @@ export interface LayerShader extends LayerBase {
   code: string;
   values: ShaderValue[];
   blendMode: LayerShaderBlendMode;
-  opacity: number;
   timeScale: number;
   timeMode: LayerShaderTimeMode;
 }
@@ -194,6 +194,7 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   id: "",
   name: "",
   visible: true,
+  opacity: 1.0,
   layers: []
 });
 
@@ -202,8 +203,8 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
   id: "",
   name: "",
   visible: true,
-  blendMode: "normal",
   opacity: 1.0,
+  blendMode: "normal",
   timeMode: "normal",
   timeScale: 1.0,
   code: `
@@ -313,6 +314,7 @@ interface ProcessedLayerShader {
   program: WebGLProgram | null;
 
   // Global uniforms (entirely possible to be null if they are unused)
+  gOpacity: WebGLUniformLocation | null;
   gResolution: WebGLUniformLocation | null;
   gTime: WebGLUniformLocation | null;
   gPreviousLayer: WebGLUniformLocation | null;
@@ -431,6 +433,7 @@ in vec2 gPosition;
 in vec2 gUV;
 out vec4 gFragColor;
 uniform sampler2D gPreviousLayer;
+uniform float gOpacity;
 uniform vec2 gResolution;
 uniform float gTime;
 float gLuminance(vec3 rgb) {
@@ -457,6 +460,7 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
     return `
       void main() {
         vec4 src = render();
+        src.a *= gOpacity;
         vec4 dst = texture(gPreviousLayer, gUV);
         float noise = gNoise2D(gUV);
         vec4 color;
@@ -513,8 +517,7 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
   void main() {
     vec4 result = render();
     vec3 src = result.rgb;
-    // TODO(trevor): Multiply srcAlpha by opacity
-    float srcAlpha = result.a;
+    float srcAlpha = result.a * gOpacity;
     vec3 dst = texture(gPreviousLayer, gUV).rgb;
     vec3 hlf = vec3(0.5);
     vec3 one = vec3(1.0);
@@ -902,6 +905,7 @@ export class RaverieVisualizer {
       compiledLayer,
       uniforms: processedUniforms,
       program,
+      gOpacity: getUniformLocation("gOpacity"),
       gResolution: getUniformLocation("gResolution"),
       gTime: getUniformLocation("gTime"),
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
@@ -959,12 +963,14 @@ export class RaverieVisualizer {
 
     const renderLayerShader = (
       processedLayerShader: ProcessedLayerShader,
+      parentOpacity: number,
       frameBuffer: WebGLFramebuffer | null,
       previousLayerTexture: WebGLTexture | null) => {
       gl.useProgram(processedLayerShader.program);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
       // Apply global uniforms
+      gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
       gl.uniform2f(processedLayerShader.gResolution, this.width, this.height);
       gl.uniform1f(processedLayerShader.gTime, performance.now() / 1000);
 
@@ -1054,7 +1060,8 @@ export class RaverieVisualizer {
     }
 
     let renderTargetIndex = 0;
-    const renderRecursive = (processedLayerGroup: ProcessedLayerGroup) => {
+    const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
+      const groupOpacity = processedLayerGroup.compiledLayer.layer.opacity * parentOpacity;
       for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
         const layer = processedLayerGroup.layers[i];
         // Skip invisible layers
@@ -1070,11 +1077,12 @@ export class RaverieVisualizer {
 
             renderLayerShader(
               layer,
+              groupOpacity,
               this.renderTargets[renderTargetIndex].buffer,
               this.renderTargets[Number(!renderTargetIndex)].texture);
           }
         } else {
-          renderRecursive(layer);
+          renderRecursive(layer, groupOpacity);
         }
       }
     }
@@ -1083,16 +1091,17 @@ export class RaverieVisualizer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
       gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      renderLayerShader(this.checkerboardShader, renderTarget.buffer, null);
+      renderLayerShader(this.checkerboardShader, 1.0, renderTarget.buffer, null);
     };
 
     clearRenderTarget(this.renderTargets[0]);
     clearRenderTarget(this.renderTargets[1]);
 
-    renderRecursive(this.processedGroup);
+    renderRecursive(this.processedGroup, 1.0);
 
     renderLayerShader(
       this.copyShader,
+      1.0,
       null,
       this.renderTargets[renderTargetIndex].texture);
   }
