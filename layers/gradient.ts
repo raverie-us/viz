@@ -6,9 +6,15 @@ export const gradientLayer: LayerShader = {
   id: "gradient",
   visible: true,
   code: `
-uniform gradient colors;
+uniform gradient colors; // default: {0: [1,1,1,1], 0.5: [0,0,0,1], 1: [1,1,1,1]}
+uniform float colorCycleRate; // default: 0.2, min: 0, max: 1
+uniform float rotationDegrees; // min: -360, max: 360
+uniform float rotationsPerSecond; // default: 0, min: -2, max: 2
+
 vec4 render() {
-  return gSampleGradient(colors, gUV.x);
+  vec2 uv = gUV * gRotateMatrix2D(gDegreesToRadians(rotationDegrees));
+  uv = uv * gRotateMatrix2D(gTime * rotationsPerSecond);
+  return gSampleGradient(colors, uv.x + colorCycleRate * gTime);
 }`,
   blendMode: "normal",
   opacity: 1,
