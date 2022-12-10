@@ -93,6 +93,7 @@ export type LayerShaderTimeMode =
 export type NumberType = "int" | "float";
 export type VectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
 export type Sampler2DType = "sampler2D";
+export type GradientType = "gradient";
 
 export interface ShaderValueBase {
   name: string;
@@ -110,15 +111,29 @@ export interface ShaderValueVector extends ShaderValueBase {
 
 export interface ShaderTexture {
   url: string;
-};
+}
 
 export interface ShaderValueSampler2D extends ShaderValueBase {
   type: Sampler2DType;
   value: ShaderTexture;
 }
 
+export interface ShaderGradientStop {
+  t: number;
+  color: number[];
+}
+
+export interface ShaderGradient {
+  stops: ShaderGradientStop[];
+}
+
+export interface ShaderValueGradient extends ShaderValueBase {
+  type: GradientType;
+  value: ShaderGradient;
+}
+
 // tags: <types>
-export type ShaderValue = ShaderValueNumber | ShaderValueVector | ShaderValueSampler2D;
+export type ShaderValue = ShaderValueNumber | ShaderValueVector | ShaderValueSampler2D | ShaderValueGradient;
 
 export type ShaderType = number | number[] | ShaderTexture;
 
@@ -159,8 +174,14 @@ export interface CompiledUniformSampler2D extends CompiledUniformBase {
   defaultValue: ShaderTexture;
 }
 
+export interface CompiledUniformGradient extends CompiledUniformBase {
+  type: GradientType;
+  shaderValue: ShaderValueGradient;
+  defaultValue: ShaderGradient;
+}
+
 // tags: <types>
-export type CompiledUniform = CompiledUniformNumber | CompiledUniformVector | CompiledUniformSampler2D;
+export type CompiledUniform = CompiledUniformNumber | CompiledUniformVector | CompiledUniformSampler2D | CompiledUniformGradient;
 
 export interface CompiledError {
   line: number;
@@ -212,6 +233,19 @@ vec4 render() {
   return texture(gPreviousLayer, gUV);
 }`.trim(),
   values: []
+});
+
+export const defaultGradient = (): ShaderGradient => ({
+  stops: [
+    {
+      t: 0,
+      color: [0, 0, 0, 1]
+    },
+    {
+      t: 1,
+      color: [1, 1, 1, 1]
+    },
+  ]
 });
 
 export interface FoundLayer {
@@ -276,30 +310,45 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 }
 
 // tags: <types>
-type GLSLType = NumberType | VectorType | Sampler2DType;
+type GLSLType = NumberType | VectorType | Sampler2DType | GradientType;
 
 interface ProcessedUniformBase {
+  compiledUniform: CompiledUniformBase;
+}
+
+interface ProcessedUniformBaseSingleLocation {
   compiledUniform: CompiledUniformBase;
   location: WebGLUniformLocation | null;
 }
 
-interface ProcessedUniformNumber extends ProcessedUniformBase {
+interface ProcessedUniformNumber extends ProcessedUniformBaseSingleLocation {
   type: NumberType;
   compiledUniform: CompiledUniformNumber;
 }
 
-interface ProcessedUniformVector extends ProcessedUniformBase {
+interface ProcessedUniformVector extends ProcessedUniformBaseSingleLocation {
   type: VectorType;
   compiledUniform: CompiledUniformVector;
 }
 
-interface ProcessedUniformSampler2D extends ProcessedUniformBase {
+interface ProcessedUniformSampler2D extends ProcessedUniformBaseSingleLocation {
   type: Sampler2DType;
   compiledUniform: CompiledUniformSampler2D;
 }
 
+interface ProcessedGradientLocation {
+  t: WebGLUniformLocation;
+  color: WebGLUniformLocation;
+}
+
+interface ProcessedUniformGradient extends ProcessedUniformBase {
+  type: GradientType;
+  compiledUniform: CompiledUniformGradient;
+  location: ProcessedGradientLocation[] | null;
+}
+
 // tags: <types>
-type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformVector | ProcessedUniformSampler2D;
+type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformVector | ProcessedUniformSampler2D | ProcessedUniformGradient;
 
 interface NewUniform {
   type: GLSLType;
@@ -358,15 +407,12 @@ interface RenderTarget {
 
 const pass = <T>(value: T): T => value;
 
-// tags: <types>
 const validateGLSLFloat = (value: any, validatedDefault: number = 0): number =>
   value === undefined ? validatedDefault : (Number(value) || 0);
 
-// tags: <types>
 const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
   Math.floor(validateGLSLFloat(value, validatedDefault));
 
-// tags: <types>
 const validateGLSLNumber = (glslType: NumberType, value: any, validatedDefault: number = 0): number =>
   glslType === "int"
     ? validateGLSLInt(value, validatedDefault)
@@ -389,7 +435,6 @@ const vectorScalarConstructor = (glslType: VectorType, fillValue: number = 0): n
   return result;
 }
 
-// tags: <types>
 const validateGLSLVector = (
   glslType: VectorType,
   value: any,
@@ -406,7 +451,6 @@ const validateGLSLVector = (
   return result;
 }
 
-// tags: <types>
 const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
   if (value === undefined) {
     return validatedDefault;
@@ -422,7 +466,34 @@ const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { u
   }
 }
 
+const validateGLSLGradient = (value: any, validatedDefault: ShaderGradient = defaultGradient()): ShaderGradient => {
+  if (value === undefined) {
+    return validatedDefault;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    if (Array.isArray(value.stops)) {
+      const stops = value.stops as ShaderGradientStop[];
+      stops.sort((a, b) => {
+        return a.t - b.t;
+      });
+      return value;
+    }
+  }
+  return validatedDefault;
+}
+
+// tags: <types>
+// validateGLSLFloat
+// validateGLSLInt
+// validateGLSLNumber
+// validateGLSLVector
+// validateGLSLSampler2D
+// validateGLSLGradient
+
 export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => void;
+
+export const maxGradientStops = 16;
 
 const newlineRegex = /\r|\n|\r\n/u;
 const fragmentShaderHeader = `#version 300 es
@@ -436,11 +507,36 @@ uniform sampler2D gPreviousLayer;
 uniform float gOpacity;
 uniform vec2 gResolution;
 uniform float gTime;
+
 float gLuminance(vec3 rgb) {
   return (0.2126 * rgb.r) + (0.7152 * rgb.g) + (0.0722 * rgb.b);
 }
+
 float gNoise2D(vec2 value) {
   return fract(sin(value.x * 3433.8 + value.y * 3843.98) * 45933.8);
+}
+
+struct GradientStop {
+  float t;
+  vec4 color;
+};
+const int gMaxGradientStops = ${maxGradientStops};
+#define gradient GradientStop[gMaxGradientStops]
+
+vec4 sampleGradient(gradient stops, float t) {
+  // The gradient values always come in sorted (minimum 2)
+  // Since the array is always a fixed size, the last entries are duplicated to fill the array
+  GradientStop prevStop = stops[0];
+  prevStop.t = 0.0;
+  for (int i = 0; i < gMaxGradientStops; ++i) {
+    GradientStop stop = stops[i];
+    if (t < stop.t) {
+      float interpolant = (t - prevStop.t) / (stop.t - prevStop.t);
+      return mix(prevStop.color, stop.color, interpolant);
+    }
+    prevStop = stop;
+  }
+  return prevStop.color;
 }
 `;
 
@@ -688,7 +784,7 @@ export class RaverieVisualizer {
     return this.processedGroup.compiledLayer;
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = false): ProcessedLayerShader {
+  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = true): ProcessedLayerShader {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code, layerShader.blendMode);
 
@@ -706,12 +802,9 @@ export class RaverieVisualizer {
       gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
     }
 
-    const getUniformLocation = (name: string) => program
-      ? gl.getUniformLocation(program, name)
-      : null;
-
     // tags: <types>
-    const uniformRegex = /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|sampler2D)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+    const uniformRegex =
+      /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|sampler2D|gradient)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
@@ -767,6 +860,10 @@ export class RaverieVisualizer {
       uniforms: [],
       errors,
     };
+
+    const getUniformLocation = (name: string) => program
+      ? gl.getUniformLocation(program, name)
+      : null;
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
       const { type, name, afterUniform } = unprocessedUniform;
@@ -880,6 +977,36 @@ export class RaverieVisualizer {
                 name,
                 type,
                 value: validateGLSLSampler2D(foundShaderValue?.value, defaultValue)
+              },
+              defaultValue,
+            }
+          });
+        }
+        case "gradient": {
+          const defaultValue = validateGLSLGradient(parsedComment.default);
+          let location: ProcessedGradientLocation[] | null = [];
+          for (let i = 0; i < maxGradientStops; ++i) {
+            const t = getUniformLocation(`${name}[${i}].t`);
+            const color = getUniformLocation(`${name}[${i}].color`);
+            if (!t || !color) {
+              console.log("COULD NOT FIND GRADIENT UNIFORMS", name, i);
+              location = null;
+              break;
+            }
+            location.push({t, color});
+          }
+          return pass<ProcessedUniformGradient>({
+            type,
+            location,
+            compiledUniform: {
+              name,
+              parent: compiledLayer,
+              type,
+              parsedComment,
+              shaderValue: {
+                name,
+                type,
+                value: validateGLSLGradient(foundShaderValue?.value, defaultValue)
               },
               defaultValue,
             }
@@ -1034,18 +1161,34 @@ export class RaverieVisualizer {
           case "sampler2D": {
             const validatedValue = validateGLSLSampler2D(value,
               processedUniform.compiledUniform.defaultValue);
-            const shaderTexture = validatedValue as ShaderTexture;
             let texture: WebGLTexture | undefined = undefined;
-            texture = this.textureCache[shaderTexture.url];
+            texture = this.textureCache[validatedValue.url];
             if (!texture) {
               texture = this.createTexture();
-              this.textureCache[shaderTexture.url] = texture;
-              this.loadTexture(shaderTexture.url, texture, gl);
+              this.textureCache[validatedValue.url] = texture;
+              this.loadTexture(validatedValue.url, texture, gl);
             }
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(processedUniform.location, textureSamplerIndex);
             ++textureSamplerIndex;
+            break;
+          }
+          case "gradient": {
+            const validatedValue = validateGLSLGradient(value,
+              processedUniform.compiledUniform.defaultValue);
+
+            let lastStop: ShaderGradientStop = {
+              t: 1,
+              color: [0, 0, 0, 1]
+            };
+            for (let i = 0; i < maxGradientStops; ++i) {
+              const gradientLocation = processedUniform.location[i];
+              const stop = validatedValue.stops[i] || lastStop;
+              gl.uniform1f(gradientLocation.t, stop.t);
+              gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
+              lastStop = stop;
+            }
             break;
           }
           default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
