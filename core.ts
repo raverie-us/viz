@@ -260,6 +260,9 @@ export const wrapLayerShaderInGroup = (layerShader: LayerShader): LayerGroup => 
   layers: [layerShader]
 });
 
+export const cloneLayer = <T extends Layer>(layer: T): T =>
+  JSON.parse(JSON.stringify(layer));
+
 export const defaultGradient = (): ShaderGradient => ({
   stops: [
     {
