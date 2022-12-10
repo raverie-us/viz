@@ -15,12 +15,14 @@
   name: "root",
   id: "root",
   visible: true,
+  opacity: 1,
   layers: [
     {
       type: "shader",
       name: "spiral",
       id: "spiral",
       visible: true,
+      opacity: 1,
       code: `
         uniform float centerWarp; // default: 0.4
         vec4 render() {
@@ -48,6 +50,7 @@
       name: "lines",
       id: "lines",
       visible: true,
+      opacity: 1,
       code: `
         uniform float lines; // default: 3
         vec4 render() {
@@ -74,6 +77,7 @@
       name: "texture",
       id: "texture",
       visible: true,
+      opacity: 1,
       code: `
         uniform sampler2D textureInput;
         vec4 render() {
@@ -100,6 +104,7 @@
       name: "blue",
       id: "blue",
       visible: true,
+      opacity: 1,
       code: `
         uniform float blue;
         vec4 render() {

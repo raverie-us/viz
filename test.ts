@@ -104,6 +104,7 @@ const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
         id: "nested",
         name: "nested",
         visible: true,
+        opacity: 1.0,
         layers: []
       }
     ]
