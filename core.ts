@@ -1025,7 +1025,7 @@ export class RaverieVisualizer {
               location = null;
               break;
             }
-            location.push({t, color});
+            location.push({ t, color });
           }
           return pass<ProcessedUniformGradient>({
             type,
@@ -1200,6 +1200,7 @@ export class RaverieVisualizer {
               this.textureCache[validatedValue.url] = texture;
               this.loadTexture(validatedValue.url, texture, gl);
             }
+
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.uniform1i(processedUniform.location, textureSamplerIndex);
