@@ -158,6 +158,7 @@ export interface CompiledUniformNumber extends CompiledUniformBase {
   defaultValue: number;
   minValue: number;
   maxValue: number;
+  stepValue: number;
 }
 
 export interface CompiledUniformVector extends CompiledUniformBase {
@@ -166,6 +167,7 @@ export interface CompiledUniformVector extends CompiledUniformBase {
   defaultValue: number[];
   minValue: number[];
   maxValue: number[];
+  stepValue: number[];
 }
 
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
@@ -391,6 +393,7 @@ interface ProcessedComment {
   default?: any;
   min?: any;
   max?: any;
+  step?: any;
 }
 
 interface ProcessedShaderSuccess {
@@ -937,7 +940,8 @@ export class RaverieVisualizer {
               },
               defaultValue,
               minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
-              maxValue: validateGLSLNumber(type, parsedComment.min, Number.POSITIVE_INFINITY),
+              maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
+              stepValue: validateGLSLNumber(type, parsedComment.step, 0),
             }
           });
         }
@@ -963,7 +967,8 @@ export class RaverieVisualizer {
               },
               defaultValue,
               minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
-              maxValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
+              maxValue: validateGLSLVector(type, parsedComment.max, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
+              stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, 0)),
             }
           });
           break;
