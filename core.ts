@@ -429,13 +429,19 @@ const validateGLSLNumber = (glslType: NumberType, value: any, validatedDefault: 
     ? validateGLSLInt(value, validatedDefault)
     : validateGLSLFloat(value, validatedDefault)
 
+const numberType = (glslType: VectorType | NumberType) =>
+  glslType[0] === "i" ? "int" : "float";
+
+const minimumStepValue = (glslType: VectorType | NumberType) =>
+  numberType(glslType) === "int" ? 1 : 0;
+
 interface VectorParts {
   numberType: NumberType;
   components: number;
 }
 
 export const getVectorParts = (glslType: VectorType): VectorParts => ({
-  numberType: glslType[0] === "i" ? "int" : "float",
+  numberType: numberType(glslType),
   components: Number(glslType[glslType.length - 1])
 });
 
@@ -941,7 +947,7 @@ export class RaverieVisualizer {
               defaultValue,
               minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
               maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
-              stepValue: validateGLSLNumber(type, parsedComment.step, 0),
+              stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
             }
           });
         }
@@ -968,7 +974,7 @@ export class RaverieVisualizer {
               defaultValue,
               minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
               maxValue: validateGLSLVector(type, parsedComment.max, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
-              stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, 0)),
+              stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, minimumStepValue(type))),
             }
           });
           break;
