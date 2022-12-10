@@ -993,7 +993,6 @@ export class RaverieVisualizer {
             const t = getUniformLocation(`${name}[${i}].t`);
             const color = getUniformLocation(`${name}[${i}].color`);
             if (!t || !color) {
-              console.log("COULD NOT FIND GRADIENT UNIFORMS", name, i);
               location = null;
               break;
             }
