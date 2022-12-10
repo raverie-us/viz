@@ -537,8 +537,8 @@ const int gMaxGradientStops = ${maxGradientStops};
 #define gradient GradientStop[gMaxGradientStops]
 
 vec4 sampleGradient(gradient stops, float t) {
-  // The gradient values always come in sorted (minimum 2)
   // Since the array is always a fixed size, the last entries are duplicated to fill the array
+  t = fract(t);
   GradientStop prevStop = stops[0];
   prevStop.t = 0.0;
   for (int i = 0; i < gMaxGradientStops; ++i) {
