@@ -255,6 +255,11 @@ vec4 render() {
   values: []
 });
 
+export const wrapLayerShaderInGroup = (layerShader: LayerShader): LayerGroup => ({
+  ...defaultEmptyLayerGroup(),
+  layers: [layerShader]
+});
+
 export const defaultGradient = (): ShaderGradient => ({
   stops: [
     {
