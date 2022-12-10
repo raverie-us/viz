@@ -18,8 +18,8 @@ float sinInOut(float t) {
 }
 
 vec4 render() {
-  vec2 uv = vec2(gPosition.x, gPosition.y * gResolution.y / gResolution.x);
-  uv -= position;
+  vec2 pos = gPosition - position;
+  vec2 uv = vec2(pos.x, pos.y * gResolution.y / gResolution.x);
   float radius = length(uv);
   float radians = atan(uv.y, uv.x);
   vec4 prev = texture(gPreviousLayer, gUV);
