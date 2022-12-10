@@ -492,6 +492,24 @@ const validateGLSLGradient = (value: any, validatedDefault: ShaderGradient = def
     if (Array.isArray(value.stops)) {
       return value;
     }
+
+    // Support for the gradient shorthand, e.g. a black to a white gradient would be:
+    // {0: [0,0,0,1], 1: [1,1,1,1]}
+    const gradient: ShaderGradient = {
+      stops: []
+    };
+
+    for (const key of Object.keys(value)) {
+      const t = Number(key);
+      if (isNaN(t)) {
+        return validatedDefault;
+      }
+      gradient.stops.push({
+        t,
+        color: value[t]
+      })
+    }
+    return gradient;
   }
   return validatedDefault;
 }
@@ -888,7 +906,7 @@ export class RaverieVisualizer {
       if (commentStart !== -1) {
         // Check if we can parse the comment as JSON (skip 2 characters for the //)
         const commentText = afterUniform.substring(commentStart + 2);
-        const innerJson = commentText.replace(/[a-zA-Z_][a-zA-Z0-9_]*\s*:/gum, (found) => {
+        const innerJson = commentText.replace(/[a-zA-Z0-9_.]+\s*:/gum, (found) => {
           const identifier = found.substring(0, found.indexOf(":")).trim();
           return `"${identifier}":`;
         });
