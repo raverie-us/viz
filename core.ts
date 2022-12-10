@@ -248,6 +248,14 @@ export const defaultGradient = (): ShaderGradient => ({
   ]
 });
 
+export const sortGradientStops = (gradient: ShaderGradient): ShaderGradientStop[] => {
+  const stops = [...gradient.stops];
+  stops.sort((a, b) => {
+    return a.t - b.t;
+  });
+  return stops;
+}
+
 export interface FoundLayer {
   layer: Layer;
   layerIndex: number;
@@ -473,10 +481,6 @@ const validateGLSLGradient = (value: any, validatedDefault: ShaderGradient = def
 
   if (typeof value === "object" && value !== null) {
     if (Array.isArray(value.stops)) {
-      const stops = value.stops as ShaderGradientStop[];
-      stops.sort((a, b) => {
-        return a.t - b.t;
-      });
       return value;
     }
   }
@@ -1178,13 +1182,14 @@ export class RaverieVisualizer {
             const validatedValue = validateGLSLGradient(value,
               processedUniform.compiledUniform.defaultValue);
 
+            const stops = sortGradientStops(validatedValue);
             let lastStop: ShaderGradientStop = {
               t: 1,
               color: [0, 0, 0, 1]
             };
             for (let i = 0; i < maxGradientStops; ++i) {
               const gradientLocation = processedUniform.location[i];
-              const stop = validatedValue.stops[i] || lastStop;
+              const stop = stops[i] || lastStop;
               gl.uniform1f(gradientLocation.t, stop.t);
               gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
               lastStop = stop;
