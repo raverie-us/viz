@@ -536,7 +536,7 @@ struct GradientStop {
 const int gMaxGradientStops = ${maxGradientStops};
 #define gradient GradientStop[gMaxGradientStops]
 
-vec4 sampleGradient(gradient stops, float t) {
+vec4 gSampleGradient(gradient stops, float t) {
   // Since the array is always a fixed size, the last entries are duplicated to fill the array
   t = fract(t);
   GradientStop prevStop = stops[0];
