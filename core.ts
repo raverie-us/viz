@@ -416,7 +416,7 @@ interface RenderTarget {
 const pass = <T>(value: T): T => value;
 
 const validateGLSLFloat = (value: any, validatedDefault: number = 0): number =>
-  value === undefined ? validatedDefault : (Number(value) || 0);
+  value === undefined || value === null ? validatedDefault : (Number(value) || 0);
 
 const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
   Math.floor(validateGLSLFloat(value, validatedDefault));
