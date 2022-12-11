@@ -13,10 +13,6 @@ uniform float warpExponent; // default: 0.4, min: -0.2, max: 2
 uniform float warpFactor; // default: 7.0, min: -10, max: 10
 uniform float speed; // default: 1, min: 0, max: 2
 
-float sinInOut(float t) {
-  return -cos(t * gPI) * 0.5 + 0.5;
-}
-
 vec4 render() {
   vec2 pos = gPosition - position;
   vec2 uv = vec2(pos.x, pos.y * gResolution.y / gResolution.x);
