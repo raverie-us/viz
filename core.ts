@@ -706,6 +706,10 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
   }`;
 }
 
+export type RenderCallback = (frameTimeSeconds: number) => void;
+
+export const defaultFrameTime = 1 / 60;
+
 export class RaverieVisualizer {
   private width: number;
   private height: number;
@@ -726,6 +730,8 @@ export class RaverieVisualizer {
   private readonly copyShader: ProcessedLayerShader;
 
   private lastTimeStampMs: number = -1;
+
+  public onBeforeRender: RenderCallback | null = null;
 
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
     this.gl = gl;
@@ -804,7 +810,7 @@ export class RaverieVisualizer {
   public resize(width: number, height: number) {
     this.width = Math.max(width, 1);
     this.height = Math.max(height, 1);
-    
+
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[0].texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -1193,13 +1199,17 @@ export class RaverieVisualizer {
   }
 
   public render(timeStampMs: number): number {
-    const dt = this.lastTimeStampMs === -1
-      ? 1 / 60
-      : timeStampMs - this.lastTimeStampMs;
+    const frameTimeSeconds = this.lastTimeStampMs === -1
+      ? defaultFrameTime
+      : (timeStampMs - this.lastTimeStampMs) / 1000;
     this.lastTimeStampMs = timeStampMs;
 
+    if (this.onBeforeRender) {
+      this.onBeforeRender(frameTimeSeconds);
+    }
+
     if (!this.processedGroup) {
-      return dt;
+      return frameTimeSeconds;
     }
     const gl = this.gl;
 
@@ -1400,6 +1410,6 @@ export class RaverieVisualizer {
       1.0,
       null,
       this.renderTargets[renderTargetIndex].texture);
-    return dt;
+    return frameTimeSeconds;
   }
 }
