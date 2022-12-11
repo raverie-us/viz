@@ -475,7 +475,7 @@ const validateGLSLNumber = (glslType: NumberType, value: any, validatedDefault: 
     ? validateGLSLInt(value, validatedDefault)
     : validateGLSLFloat(value, validatedDefault)
 
-const numberType = (glslType: VectorType | NumberType) =>
+export const numberType = (glslType: VectorType | NumberType) =>
   glslType[0] === "i" ? "int" : "float";
 
 const minimumStepValue = (glslType: VectorType | NumberType) =>
