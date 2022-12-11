@@ -710,11 +710,30 @@ export type RenderCallback = (frameTimeSeconds: number) => void;
 
 export const defaultFrameTime = 1 / 60;
 
+export class RenderTargets {
+  public get width() {
+    return this.widthInternal;
+  }
+
+  public get height() {
+    return this.heightInternal;
+  }
+
+  public constructor(
+    private widthInternal: number,
+    private heightInternal: number,
+    private readonly targets: [RenderTarget, RenderTarget]) {
+  }
+}
+
+interface RenderTargetsInternal {
+  widthInternal: number;
+  heightInternal: number;
+  targets: [RenderTarget, RenderTarget];
+}
+
 export class RaverieVisualizer {
-  private width: number;
-  private height: number;
   private readonly gl: WebGL2RenderingContext;
-  private readonly renderTargets: [RenderTarget, RenderTarget];
   private readonly loadTexture: LoadTextureFunction;
 
   private processedGroup: ProcessedLayerGroup | null = null;
@@ -733,11 +752,9 @@ export class RaverieVisualizer {
 
   public onBeforeRender: RenderCallback | null = null;
 
-  public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
+  public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction) {
     this.gl = gl;
     this.loadTexture = loadTexture;
-    this.width = Math.max(width, 1);
-    this.height = Math.max(height, 1);
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
@@ -750,24 +767,6 @@ export class RaverieVisualizer {
       +1, +1, // Top right
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-    const createRenderTarget = (): RenderTarget => {
-      const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
-      gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
-      const texture = this.createTexture();
-
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      return {
-        texture: texture,
-        buffer: buffer
-      };
-    }
-
-    this.renderTargets = [
-      createRenderTarget(),
-      createRenderTarget(),
-    ]
 
     // All effects currently use the same vertex shader
     const vertexShader = `#version 300 es
@@ -807,18 +806,52 @@ export class RaverieVisualizer {
     }, null, true);
   }
 
-  public resize(width: number, height: number) {
-    this.width = Math.max(width, 1);
-    this.height = Math.max(height, 1);
+  private createRenderTarget(width: number, height: number): RenderTarget {
+    const gl = this.gl;
+    const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
+    gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
+    const texture = this.createTexture();
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return {
+      texture: texture,
+      buffer: buffer
+    };
+  }
+
+  private deleteRenderTarget(renderTarget: RenderTarget) {
+    const gl = this.gl;
+    gl.deleteFramebuffer(renderTarget.buffer);
+    gl.deleteTexture(renderTarget.texture);
+  }
+
+  public createRenderTargets(width: number, height: number): RenderTargets {
+    return new RenderTargets(Math.max(width, 1), Math.max(height, 1), [
+      this.createRenderTarget(width, height),
+      this.createRenderTarget(width, height),
+    ]);
+  }
+
+  public resizeRenderTargets(targets: RenderTargets, width: number, height: number) {
+    const targetsInternal = targets as any as RenderTargetsInternal;
+    targetsInternal.widthInternal = Math.max(width, 1);
+    targetsInternal.heightInternal = Math.max(height, 1);
 
     const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[0].texture);
+    gl.bindTexture(gl.TEXTURE_2D, targetsInternal.targets[0].texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[1].texture);
+    gl.bindTexture(gl.TEXTURE_2D, targetsInternal.targets[1].texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
+  }
 
-    gl.viewport(0, 0, width, height);
+  public deleteRenderTargets(targets: RenderTargets) {
+    const targetsInternal = targets as any as RenderTargetsInternal;
+    this.deleteRenderTarget(targetsInternal.targets[0]);
+    this.deleteRenderTarget(targetsInternal.targets[1]);
+    const gl = this.gl;
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
@@ -875,7 +908,6 @@ export class RaverieVisualizer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     return texture;
   }
 
@@ -1193,12 +1225,18 @@ export class RaverieVisualizer {
       return texture;
     }
     const newTexture = this.createTexture();
+
+    const gl = this.gl;
+    // By default unloaded textures are just 1x1 pixel black with no alpha (0,0,0,0)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
     this.textureCache[url] = newTexture;
     this.loadTexture(url, newTexture, this.gl);
     return newTexture;
   }
 
-  public render(timeStampMs: number): number {
+  public render(timeStampMs: number, renderTargets: RenderTargets): number {
+
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
       : (timeStampMs - this.lastTimeStampMs) / 1000;
@@ -1211,7 +1249,10 @@ export class RaverieVisualizer {
     if (!this.processedGroup) {
       return frameTimeSeconds;
     }
+
     const gl = this.gl;
+    const targetsInternal = renderTargets as any as RenderTargetsInternal;
+    gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
     const renderLayerShader = (
       processedLayerShader: ProcessedLayerShader,
@@ -1223,7 +1264,7 @@ export class RaverieVisualizer {
 
       // Apply global uniforms
       gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
-      gl.uniform2f(processedLayerShader.gResolution, this.width, this.height);
+      gl.uniform2f(processedLayerShader.gResolution, targetsInternal.widthInternal, targetsInternal.heightInternal);
       gl.uniform1f(processedLayerShader.gTime, timeStampMs / 1000);
 
       gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
@@ -1384,8 +1425,8 @@ export class RaverieVisualizer {
             renderLayerShader(
               layer,
               groupOpacity,
-              this.renderTargets[renderTargetIndex].buffer,
-              this.renderTargets[Number(!renderTargetIndex)].texture);
+              targetsInternal.targets[renderTargetIndex].buffer,
+              targetsInternal.targets[Number(!renderTargetIndex)].texture);
           }
         } else {
           renderRecursive(layer, groupOpacity);
@@ -1400,8 +1441,8 @@ export class RaverieVisualizer {
       renderLayerShader(this.checkerboardShader, 1.0, renderTarget.buffer, null);
     };
 
-    clearRenderTarget(this.renderTargets[0]);
-    clearRenderTarget(this.renderTargets[1]);
+    clearRenderTarget(targetsInternal.targets[0]);
+    clearRenderTarget(targetsInternal.targets[1]);
 
     renderRecursive(this.processedGroup, 1.0);
 
@@ -1409,7 +1450,7 @@ export class RaverieVisualizer {
       this.copyShader,
       1.0,
       null,
-      this.renderTargets[renderTargetIndex].texture);
+      targetsInternal.targets[renderTargetIndex].texture);
     return frameTimeSeconds;
   }
 }
