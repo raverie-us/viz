@@ -1165,6 +1165,17 @@ export class RaverieVisualizer {
     return processedLayerGroup;
   }
 
+  public getOrCacheTexture(url: string): WebGLTexture {
+    const texture = this.textureCache[url];
+    if (texture) {
+      return texture;
+    }
+    const newTexture = this.createTexture();
+    this.textureCache[url] = newTexture;
+    this.loadTexture(url, newTexture, this.gl);
+    return newTexture;
+  }
+
   public render(): void {
     if (!this.processedGroup) {
       return;
@@ -1244,14 +1255,7 @@ export class RaverieVisualizer {
           case "sampler2D": {
             const validatedValue = validateGLSLSampler2D(value,
               processedUniform.compiledUniform.defaultValue);
-            let texture: WebGLTexture | undefined = undefined;
-            texture = this.textureCache[validatedValue.url];
-            if (!texture) {
-              texture = this.createTexture();
-              this.textureCache[validatedValue.url] = texture;
-              this.loadTexture(validatedValue.url, texture, gl);
-            }
-
+            const texture = this.getOrCacheTexture(validatedValue.url);
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
             gl.bindTexture(gl.TEXTURE_2D, texture);
 
