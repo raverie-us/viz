@@ -1224,7 +1224,7 @@ export class RaverieVisualizer {
       // Apply global uniforms
       gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
       gl.uniform2f(processedLayerShader.gResolution, this.width, this.height);
-      gl.uniform1f(processedLayerShader.gTime, performance.now() / 1000);
+      gl.uniform1f(processedLayerShader.gTime, timeStampMs / 1000);
 
       gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
       gl.activeTexture(gl.TEXTURE0);
