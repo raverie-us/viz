@@ -725,6 +725,8 @@ export class RaverieVisualizer {
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
 
+  private lastTimeStampMs: number = -1;
+
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
     this.gl = gl;
     this.loadTexture = loadTexture;
@@ -1190,9 +1192,14 @@ export class RaverieVisualizer {
     return newTexture;
   }
 
-  public render(): void {
+  public render(timeStampMs: number): number {
+    const dt = this.lastTimeStampMs === -1
+      ? 1 / 60
+      : timeStampMs - this.lastTimeStampMs;
+    this.lastTimeStampMs = timeStampMs;
+
     if (!this.processedGroup) {
-      return;
+      return dt;
     }
     const gl = this.gl;
 
@@ -1393,5 +1400,6 @@ export class RaverieVisualizer {
       1.0,
       null,
       this.renderTargets[renderTargetIndex].texture);
+    return dt;
   }
 }
