@@ -214,4 +214,16 @@ We could use shader recompiling as a way of doing blend modes generically and de
  - We always have the previous layer, and we know what the output color is supposed to be
  - We don't currently composite shaders, other than the header (but the shader doesn't change based on options)
    - But really may not be a bad thing...
-   
+
+When we bind a texture that can't be loaded / does not exist
+
+Ability to bind a blend mode (shows up as the enum drop down)
+ - Have a function that takes an int which is the blend mode
+ - You pass in both colors, and the blend mode, and it returns the value
+ - We just call that internally for our blend modes, gBlend()
+
+Ability to make a "time accumulator"
+ - But we accumulate time based on the scalar uniform value
+
+Allow for simpler definition of gradient
+ - array of arrays, where 5th element is t (or first?)
