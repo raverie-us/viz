@@ -44,12 +44,37 @@ export type LayerShaderBlendMode =
   "difference" |
   "exclusion" |
   "subtract" |
-  "divide" |
+  "divide";
 
-  "hue" |
-  "saturation" |
-  "color" |
-  "luminosity";
+export const blendModeList: LayerShaderBlendMode[] = [
+  "normal",
+  "dissolve",
+
+  "darken",
+  "multiply",
+  "colorBurn",
+  "linearBurn",
+  "darkerColor",
+
+  "lighten",
+  "screen",
+  "colorDodge",
+  "linearDodge",
+  "lighterColor",
+
+  "overlay",
+  "softLight",
+  "hardLight",
+  "vividLight",
+  "linearLight",
+  "pinLight",
+  "hardMix",
+
+  "difference",
+  "exclusion",
+  "subtract",
+  "divide",
+];
 
 export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
   "normal",
@@ -78,12 +103,7 @@ export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
   "difference",
   "exclusion",
   "subtract",
-  "divide",
-  null,
-  "hue",
-  "saturation",
-  "color",
-  "luminosity"
+  "divide"
 ];
 
 export type LayerShaderTimeMode =
@@ -666,11 +686,6 @@ const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
       case "exclusion": return "hlf - two * (dst - hlf) * (src - hlf)";
       case "subtract": return "dst - src";
       case "divide": return "dst / max(src, epsilon)";
-
-      case "hue": return "src";
-      case "saturation": return "src";
-      case "color": return "src";
-      case "luminosity": return "src";
 
       default: throw new Error(`Unexpected blend mode ${blendMode}`);
     }
