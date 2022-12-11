@@ -13,7 +13,6 @@ import { tunnelLayer } from "./layers/tunnel";
 
 const untrimmedLayers: LayerShader[] = [
   connnectedPointsLayer,
-  emptyLayer,
   glitchLayer,
   godRaysLayer,
   gradientLayer,
@@ -21,8 +20,9 @@ const untrimmedLayers: LayerShader[] = [
   kaleidoscopeLayer,
   liquidLayer,
   spiralLayer,
-  textureLayer,
   tunnelLayer,
+  textureLayer,
+  emptyLayer,
 ]
 
 export const featuredLayers: LayerShader[] = untrimmedLayers.map((layer) => ({
