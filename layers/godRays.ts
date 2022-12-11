@@ -120,7 +120,7 @@ float bccNoiseWrapZ(float zValue) {
 
 //////////////////////////////// End noise code ////////////////////////////////
 
-const int ITERATIONS = 40;
+const int ITERATIONS = 20;
 vec4 render() {
   vec4 color = vec4(0);
   float totalNoise = 0.0;
