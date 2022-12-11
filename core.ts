@@ -728,8 +728,8 @@ export class RaverieVisualizer {
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction, width: number, height: number) {
     this.gl = gl;
     this.loadTexture = loadTexture;
-    this.width = width;
-    this.height = height;
+    this.width = Math.max(width, 1);
+    this.height = Math.max(height, 1);
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
@@ -743,7 +743,7 @@ export class RaverieVisualizer {
     ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
-    const createRenderTarget = (width: number, height: number): RenderTarget => {
+    const createRenderTarget = (): RenderTarget => {
       const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
       const texture = this.createTexture();
@@ -757,8 +757,8 @@ export class RaverieVisualizer {
     }
 
     this.renderTargets = [
-      createRenderTarget(width, height),
-      createRenderTarget(width, height),
+      createRenderTarget(),
+      createRenderTarget(),
     ]
 
     // All effects currently use the same vertex shader
@@ -797,6 +797,20 @@ export class RaverieVisualizer {
         return texture(gPreviousLayer, gUV);
       }`
     }, null, true);
+  }
+
+  public resize(width: number, height: number) {
+    this.width = Math.max(width, 1);
+    this.height = Math.max(height, 1);
+    
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[0].texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, this.renderTargets[1].texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    gl.viewport(0, 0, width, height);
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
