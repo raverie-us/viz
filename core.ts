@@ -710,6 +710,20 @@ export type RenderCallback = (frameTimeSeconds: number) => void;
 
 export const defaultFrameTime = 1 / 60;
 
+export interface RenderOptions {
+  /**
+   * Called each time a layer is rendered while the render target we just rendered to is still bound.
+   * Useful to perform operations such as copying pixels from the render target.
+   */
+  renderLayerCallback?: (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
+
+  /**
+   * Whether we draw the final result to the back buffer at the end of render all visible layers.
+   * @default true
+   */
+  drawToBackBuffer?: boolean;
+};
+
 export class RenderTargets {
   public get width() {
     return this.widthInternal;
@@ -1235,8 +1249,7 @@ export class RaverieVisualizer {
     return newTexture;
   }
 
-  public render(timeStampMs: number, renderTargets: RenderTargets): number {
-
+  public render(timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
       : (timeStampMs - this.lastTimeStampMs) / 1000;
@@ -1402,6 +1415,11 @@ export class RaverieVisualizer {
       gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      if (options?.renderLayerCallback) {
+        options.renderLayerCallback(processedLayerShader.compiledLayer, gl);
+      }
+
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
@@ -1446,11 +1464,17 @@ export class RaverieVisualizer {
 
     renderRecursive(this.processedGroup, 1.0);
 
-    renderLayerShader(
-      this.copyShader,
-      1.0,
-      null,
-      targetsInternal.targets[renderTargetIndex].texture);
+    const drawToBackBuffer = options?.drawToBackBuffer === undefined
+      ? true
+      : options?.drawToBackBuffer;
+
+    if (drawToBackBuffer) {
+      renderLayerShader(
+        this.copyShader,
+        1.0,
+        null,
+        targetsInternal.targets[renderTargetIndex].texture);
+    }
     return frameTimeSeconds;
   }
 }
