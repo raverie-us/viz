@@ -561,12 +561,12 @@ const vectorScalarConstructor = <T>(componentCount: number, fillValue: T): T[] =
   return result;
 }
 
-const vectorNumberScalarConstructor = (glslType: NumberVectorType, fillValue: number = 0): number[] => {
+export const vectorNumberScalarConstructor = (glslType: NumberVectorType, fillValue: number = 0): number[] => {
   const parts = getNumberVectorParts(glslType);
   return vectorScalarConstructor<number>(parts.components, fillValue);
 }
 
-const vectorBoolScalarConstructor = (glslType: BoolVectorType, fillValue: boolean = false): boolean[] => {
+export const vectorBoolScalarConstructor = (glslType: BoolVectorType, fillValue: boolean = false): boolean[] => {
   const components = getBoolVectorComponents(glslType);
   return vectorScalarConstructor<boolean>(components, fillValue);
 }
