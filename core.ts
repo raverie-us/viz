@@ -1238,152 +1238,179 @@ export class RaverieVisualizer {
     timeSeconds: number,
     onRender?: RenderLayerShaderCallback) {
     const gl = this.gl;
-    gl.useProgram(processedLayerShader.program);
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-
-    // Apply global uniforms
-    gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
-    gl.uniform2f(processedLayerShader.gResolution, width, height);
-    gl.uniform1f(processedLayerShader.gTime, timeSeconds);
-
-    const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
-    gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
-
-    gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
-
-    // Apply layer uniforms
-    let textureSamplerIndex = 1;
-    for (const processedUniform of processedLayerShader.uniforms) {
-      // Don't set uniforms that don't have locations. These can occur if we
-      // found the uniform via a regex, but it was optimized out by the compiler
-      if (!processedUniform.location) {
-        continue;
-      }
-
-      const value = processedUniform.shaderValue.value;
-      // tags: <types>
-      switch (processedUniform.type) {
-        case "int":
-        case "float": {
-          const validatedValue = validateGLSLNumber(processedUniform.type, value,
-            processedUniform.defaultValue);
-          if (processedUniform.type === "int") {
-            gl.uniform1i(processedUniform.location, validatedValue);
-          } else {
-            gl.uniform1f(processedUniform.location, validatedValue);
-          }
-          break;
-        }
-        case "vec2":
-        case "vec3":
-        case "vec4":
-        case "ivec2":
-        case "ivec3":
-        case "ivec4": {
-          const validatedValue = validateGLSLVector(processedUniform.type, value,
-            processedUniform.defaultValue);
-          switch (processedUniform.type) {
-            case "vec2":
-              gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
-              break;
-            case "vec3":
-              gl.uniform3f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
-              break;
-            case "vec4":
-              gl.uniform4f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
-              break;
-            case "ivec2":
-              gl.uniform2i(processedUniform.location, validatedValue[0], validatedValue[1]);
-              break;
-            case "ivec3":
-              gl.uniform3i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
-              break;
-            case "ivec4":
-              gl.uniform4i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
-              break;
-          }
-          break;
-        }
-        case "sampler2D": {
-          const validatedValue = validateGLSLSampler2D(value,
-            processedUniform.defaultValue);
-          const texture = this.getOrCacheTexture(validatedValue.url);
-          gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
-          gl.bindTexture(gl.TEXTURE_2D, texture);
-
-          const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
-            if (typeof first !== "undefined") {
-              return first;
-            }
-            if (typeof second !== "undefined") {
-              return second;
-            }
-            return fallback;
-          };
-
-          const filter = choose(validatedValue.filter, processedUniform.defaultValue.filter, "mipmap");
-          const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.defaultValue.wrapHorizontal, "repeat");
-          const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.defaultValue.wrapVertical, "repeat");
-
-          const wrapModeToGLParam = (wrapMode: WrapMode) => {
-            switch (wrapMode) {
-              case "repeat": return gl.REPEAT;
-              case "mirrored": return gl.MIRRORED_REPEAT;
-              case "clamp": return gl.CLAMP_TO_EDGE;
-              default: throw new Error(`Unexpected wrap mode ${wrapMode}`);
-            }
-          };
-
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapModeToGLParam(wrapHorizontal));
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapModeToGLParam(wrapVertical));
-
-          const [minFilter, magFilter] = (() => {
-            switch (filter) {
-              case "nearest": return [gl.NEAREST, gl.NEAREST];
-              case "linear": return [gl.LINEAR, gl.LINEAR];
-              case "mipmap": return [gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR];
-              default: throw new Error(`Unexpected filter ${filter}`);
-            }
-          })();
-
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
-
-          if (filter === "mipmap") {
-            gl.generateMipmap(gl.TEXTURE_2D);
-          }
-
-          gl.uniform1i(processedUniform.location, textureSamplerIndex);
-          ++textureSamplerIndex;
-          break;
-        }
-        case "gradient": {
-          const validatedValue = validateGLSLGradient(value,
-            processedUniform.defaultValue);
-
-          const stops = sortGradientStops(validatedValue);
-          let lastStop: ShaderGradientStop = {
-            t: 1,
-            color: [0, 0, 0, 1]
-          };
-          for (let i = 0; i < maxGradientStops; ++i) {
-            const gradientLocation = processedUniform.location[i];
-            const stop = stops[i] || lastStop;
-            gl.uniform1f(gradientLocation.t, stop.t);
-            gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
-            lastStop = stop;
-          }
-          break;
-        }
-        default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
-      }
-    }
 
     gl.clearColor(1, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    if (processedLayerShader.program) {
+      gl.useProgram(processedLayerShader.program);
+
+      // Apply global uniforms
+      gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
+      gl.uniform2f(processedLayerShader.gResolution, width, height);
+      gl.uniform1f(processedLayerShader.gTime, timeSeconds);
+
+      const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
+      gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
+
+      gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
+
+      // Apply layer uniforms
+      let textureSamplerIndex = 1;
+      for (const processedUniform of processedLayerShader.uniforms) {
+        // Don't set uniforms that don't have locations. These can occur if we
+        // found the uniform via a regex, but it was optimized out by the compiler
+        if (!processedUniform.location) {
+          continue;
+        }
+
+        const value = processedUniform.shaderValue.value;
+        // tags: <types>
+        switch (processedUniform.type) {
+          case "int":
+          case "float": {
+            const validatedValue = validateGLSLNumber(processedUniform.type, value,
+              processedUniform.defaultValue);
+            if (processedUniform.type === "int") {
+              gl.uniform1i(processedUniform.location, validatedValue);
+            } else {
+              gl.uniform1f(processedUniform.location, validatedValue);
+            }
+            break;
+          }
+          case "vec2":
+          case "vec3":
+          case "vec4":
+          case "ivec2":
+          case "ivec3":
+          case "ivec4": {
+            const validatedValue = validateGLSLNumberVector(processedUniform.type, value,
+              processedUniform.defaultValue);
+            switch (processedUniform.type) {
+              case "vec2":
+                gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
+                break;
+              case "vec3":
+                gl.uniform3f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+                break;
+              case "vec4":
+                gl.uniform4f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+                break;
+              case "ivec2":
+                gl.uniform2i(processedUniform.location, validatedValue[0], validatedValue[1]);
+                break;
+              case "ivec3":
+                gl.uniform3i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+                break;
+              case "ivec4":
+                gl.uniform4i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+                break;
+            }
+            break;
+          }
+          case "bool": {
+            const validatedValue = validateGLSLBool(value, processedUniform.defaultValue);
+            gl.uniform1i(processedUniform.location, Number(validatedValue));
+            break;
+          }
+          case "bvec2":
+          case "bvec3":
+          case "bvec4": {
+            const validatedValue = validateGLSLBoolVector(processedUniform.type, value,
+              processedUniform.defaultValue);
+            switch (processedUniform.type) {
+              case "bvec2":
+                gl.uniform2i(processedUniform.location, Number(validatedValue[0]), Number(validatedValue[1]));
+                break;
+              case "bvec3":
+                gl.uniform3i(processedUniform.location, Number(validatedValue[0]), Number(validatedValue[1]), Number(validatedValue[2]));
+                break;
+              case "bvec4":
+                gl.uniform4i(processedUniform.location, Number(validatedValue[0]), Number(validatedValue[1]), Number(validatedValue[2]), Number(validatedValue[3]));
+                break;
+            }
+            break;
+          }
+          case "sampler2D": {
+            const validatedValue = validateGLSLSampler2D(value,
+              processedUniform.defaultValue);
+            const texture = this.getOrCacheTexture(validatedValue.url);
+            gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
+              if (typeof first !== "undefined") {
+                return first;
+              }
+              if (typeof second !== "undefined") {
+                return second;
+              }
+              return fallback;
+            };
+
+            const filter = choose(validatedValue.filter, processedUniform.defaultValue.filter, "mipmap");
+            const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.defaultValue.wrapHorizontal, "repeat");
+            const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.defaultValue.wrapVertical, "repeat");
+
+            const wrapModeToGLParam = (wrapMode: WrapMode) => {
+              switch (wrapMode) {
+                case "repeat": return gl.REPEAT;
+                case "mirrored": return gl.MIRRORED_REPEAT;
+                case "clamp": return gl.CLAMP_TO_EDGE;
+                default: throw new Error(`Unexpected wrap mode ${wrapMode}`);
+              }
+            };
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapModeToGLParam(wrapHorizontal));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapModeToGLParam(wrapVertical));
+
+            const [minFilter, magFilter] = (() => {
+              switch (filter) {
+                case "nearest": return [gl.NEAREST, gl.NEAREST];
+                case "linear": return [gl.LINEAR, gl.LINEAR];
+                case "mipmap": return [gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR];
+                default: throw new Error(`Unexpected filter ${filter}`);
+              }
+            })();
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+
+            if (filter === "mipmap") {
+              gl.generateMipmap(gl.TEXTURE_2D);
+            }
+
+            gl.uniform1i(processedUniform.location, textureSamplerIndex);
+            ++textureSamplerIndex;
+            break;
+          }
+          case "gradient": {
+            const validatedValue = validateGLSLGradient(value,
+              processedUniform.defaultValue);
+
+            const stops = sortGradientStops(validatedValue);
+            let lastStop: ShaderGradientStop = {
+              t: 1,
+              color: [0, 0, 0, 1]
+            };
+            for (let i = 0; i < maxGradientStops; ++i) {
+              const gradientLocation = processedUniform.location[i];
+              const stop = stops[i] || lastStop;
+              gl.uniform1f(gradientLocation.t, stop.t);
+              gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
+              lastStop = stop;
+            }
+            break;
+          }
+          default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
+        }
+      }
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
     if (onRender) {
       onRender(processedLayerShader, gl);
     }
