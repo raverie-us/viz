@@ -734,6 +734,10 @@ interface RenderTargetsInternal {
   targets: [RenderTarget, RenderTarget];
 }
 
+const DEFAULT_CHECKER_SIZE = 8;
+
+export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
+
 export class RaverieVisualizer {
   private readonly gl: WebGL2RenderingContext;
   private readonly loadTexture: LoadTextureFunction;
@@ -744,6 +748,7 @@ export class RaverieVisualizer {
 
   // For rendering checker-board "transparent" background
   private readonly checkerboardShader: ProcessedLayerShader;
+  private readonly checkerboardSize: ShaderValueNumber;
 
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
@@ -787,7 +792,7 @@ export class RaverieVisualizer {
       ...defaultEmptyLayerShader(),
       blendMode: "overwrite",
       code: `
-      uniform float checkerPixelSize; // default: 8
+      uniform float checkerPixelSize; // default: ${DEFAULT_CHECKER_SIZE}
       vec4 render() {
         vec2 pixels = gUV * gResolution;
         vec2 uv = floor(pixels / vec2(checkerPixelSize));
@@ -795,6 +800,12 @@ export class RaverieVisualizer {
         return vec4(vec3(max(checker, 0.8)), 1);
       }`
     }, null, true);
+    const checkerboardSize = this.checkerboardShader.layer.values.find(
+      (shaderValue) => shaderValue.name === "checkerPixelSize");
+    if (!checkerboardSize) {
+      throw new Error("Unable to find 'checkerboardSize' shader value");
+    }
+    this.checkerboardSize = checkerboardSize as ShaderValueNumber;
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
@@ -1217,7 +1228,8 @@ export class RaverieVisualizer {
     previousLayerTexture: WebGLTexture | null,
     width: number,
     height: number,
-    timeSeconds: number) {
+    timeSeconds: number,
+    onRender?: RenderLayerShaderCallback) {
     const gl = this.gl;
     gl.useProgram(processedLayerShader.program);
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
@@ -1362,16 +1374,20 @@ export class RaverieVisualizer {
     gl.clearColor(1, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if (onRender) {
+      onRender(processedLayerShader, gl);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  private clearRenderTargetInternal(renderTarget: RenderTarget, width: number, height: number) {
+  private clearRenderTargetInternal(renderTarget: RenderTarget, width: number, height: number, checkerSize = DEFAULT_CHECKER_SIZE) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
     gl.clearColor(1, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
+    this.checkerboardSize.value = checkerSize;
     this.renderLayerShaderInternal(
       this.checkerboardShader,
       1.0,
@@ -1382,8 +1398,52 @@ export class RaverieVisualizer {
       0);
   };
 
-  public render(group: CompiledLayerGroup, timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
-    const processedGroup = group as ProcessedLayerGroup;
+  public renderLayerShaderPreviews(
+    compiledLayerGroup: CompiledLayerGroup,
+    timeStampMs: number,
+    renderTargets: RenderTargets,
+    onRender: RenderLayerShaderCallback,
+    checkerSize: number = DEFAULT_CHECKER_SIZE) {
+    const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
+
+    const targetsInternal = renderTargets as any as RenderTargetsInternal;
+    this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
+
+    this.clearRenderTargetInternal(
+      targetsInternal.targets[0],
+      targetsInternal.widthInternal,
+      targetsInternal.heightInternal,
+      checkerSize);
+
+    const frameBuffer = targetsInternal.targets[1].buffer;
+    const checkerTexture = targetsInternal.targets[0].texture;
+
+    const timeSeconds = timeStampMs / 1000;
+
+    // We render each layer as if it is a standalone with only the checkerboard behind it
+    const results: Record<string, Uint8Array> = {};
+    for (const processedLayer of Object.values(processedLayerGroup.idToLayer)) {
+      if (processedLayer.type === "shader") {
+        this.renderLayerShaderInternal(
+          processedLayer,
+          1.0,
+          frameBuffer,
+          checkerTexture,
+          targetsInternal.widthInternal,
+          targetsInternal.heightInternal,
+          timeSeconds,
+          onRender);
+      }
+    }
+    return results;
+  };
+
+  public render(
+    compiledLayerGroup: CompiledLayerGroup,
+    timeStampMs: number,
+    renderTargets: RenderTargets,
+    options?: RenderOptions): number {
+    const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
       : (timeStampMs - this.lastTimeStampMs) / 1000;
@@ -1433,7 +1493,7 @@ export class RaverieVisualizer {
     this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
     this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    renderRecursive(processedGroup, 1.0);
+    renderRecursive(processedLayerGroup, 1.0);
 
     const drawToBackBuffer = options?.drawToBackBuffer === undefined
       ? true
