@@ -121,7 +121,9 @@ export type LayerShaderTimeMode =
   "pingpong";
 
 export type NumberType = "int" | "float";
-export type VectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
+export type NumberVectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
+export type BoolType = "bool";
+export type BoolVectorType = "bvec2" | "bvec3" | "bvec4";
 export type Sampler2DType = "sampler2D";
 export type GradientType = "gradient";
 
@@ -134,9 +136,19 @@ export interface ShaderValueNumber extends ShaderValueBase {
   value: number;
 }
 
-export interface ShaderValueVector extends ShaderValueBase {
-  type: VectorType;
+export interface ShaderValueNumberVector extends ShaderValueBase {
+  type: NumberVectorType;
   value: number[];
+}
+
+export interface ShaderValueBool extends ShaderValueBase {
+  type: BoolType;
+  value: boolean;
+}
+
+export interface ShaderValueBoolVector extends ShaderValueBase {
+  type: BoolVectorType;
+  value: boolean[];
 }
 
 export type FilterMode = "nearest" | "linear" | "mipmap";
@@ -181,7 +193,13 @@ export interface ShaderValueGradient extends ShaderValueBase {
 }
 
 // tags: <types>
-export type ShaderValue = ShaderValueNumber | ShaderValueVector | ShaderValueSampler2D | ShaderValueGradient;
+export type ShaderValue =
+  ShaderValueNumber |
+  ShaderValueNumberVector |
+  ShaderValueBool |
+  ShaderValueBoolVector |
+  ShaderValueSampler2D |
+  ShaderValueGradient;
 
 export type ShaderType = number | number[] | ShaderTexture;
 
@@ -209,13 +227,25 @@ export interface CompiledUniformNumber extends CompiledUniformBase {
   stepValue: number;
 }
 
-export interface CompiledUniformVector extends CompiledUniformBase {
-  type: VectorType;
-  shaderValue: ShaderValueVector;
+export interface CompiledUniformNumberVector extends CompiledUniformBase {
+  type: NumberVectorType;
+  shaderValue: ShaderValueNumberVector;
   defaultValue: number[];
   minValue: number[];
   maxValue: number[];
   stepValue: number[];
+}
+
+export interface CompiledUniformBool extends CompiledUniformBase {
+  type: BoolType;
+  shaderValue: ShaderValueBool;
+  defaultValue: boolean;
+}
+
+export interface CompiledUniformBoolVector extends CompiledUniformBase {
+  type: BoolVectorType;
+  shaderValue: ShaderValueBoolVector;
+  defaultValue: boolean[];
 }
 
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
@@ -231,7 +261,13 @@ export interface CompiledUniformGradient extends CompiledUniformBase {
 }
 
 // tags: <types>
-export type CompiledUniform = CompiledUniformNumber | CompiledUniformVector | CompiledUniformSampler2D | CompiledUniformGradient;
+export type CompiledUniform =
+  CompiledUniformNumber |
+  CompiledUniformNumberVector |
+  CompiledUniformBool |
+  CompiledUniformBoolVector |
+  CompiledUniformSampler2D |
+  CompiledUniformGradient;
 
 export interface CompiledError {
   line: number;
@@ -376,7 +412,13 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 }
 
 // tags: <types>
-type GLSLType = NumberType | VectorType | Sampler2DType | GradientType;
+type GLSLType =
+  NumberType |
+  NumberVectorType |
+  BoolType |
+  BoolVectorType |
+  Sampler2DType |
+  GradientType;
 
 interface ProcessedUniformBase extends CompiledUniformBase {
   parent: ProcessedLayerShader;
@@ -386,11 +428,19 @@ interface ProcessedUniformBaseSingleLocation extends ProcessedUniformBase {
   location: WebGLUniformLocation | null;
 }
 
-interface ProcessedUniformNumber extends CompiledUniformNumber, ProcessedUniformBaseSingleLocation {
+interface ProcessedUniformNumber extends ProcessedUniformBaseSingleLocation, CompiledUniformNumber {
   parent: ProcessedLayerShader;
 }
 
-interface ProcessedUniformVector extends ProcessedUniformBaseSingleLocation, CompiledUniformVector {
+interface ProcessedUniformNumberVector extends ProcessedUniformBaseSingleLocation, CompiledUniformNumberVector {
+  parent: ProcessedLayerShader;
+}
+
+interface ProcessedUniformBool extends ProcessedUniformBaseSingleLocation, CompiledUniformBool {
+  parent: ProcessedLayerShader;
+}
+
+interface ProcessedUniformBoolVector extends ProcessedUniformBaseSingleLocation, CompiledUniformBoolVector {
   parent: ProcessedLayerShader;
 }
 
@@ -409,7 +459,13 @@ interface ProcessedUniformGradient extends ProcessedUniformBase, CompiledUniform
 }
 
 // tags: <types>
-type ProcessedUniform = ProcessedUniformNumber | ProcessedUniformVector | ProcessedUniformSampler2D | ProcessedUniformGradient;
+type ProcessedUniform =
+  ProcessedUniformNumber |
+  ProcessedUniformNumberVector |
+  ProcessedUniformBool |
+  ProcessedUniformBoolVector |
+  ProcessedUniformSampler2D |
+  ProcessedUniformGradient;
 
 interface NewUniform {
   type: GLSLType;
@@ -470,7 +526,7 @@ interface RenderTarget {
 const pass = <T>(value: T): T => value;
 
 const validateGLSLFloat = (value: any, validatedDefault: number = 0): number =>
-  value === undefined || value === null ? validatedDefault : (Number(value) || 0);
+  (value === undefined || value === null) ? validatedDefault : (Number(value) || 0);
 
 const validateGLSLInt = (value: any, validatedDefault: number = 0): number =>
   Math.floor(validateGLSLFloat(value, validatedDefault));
@@ -480,38 +536,50 @@ const validateGLSLNumber = (glslType: NumberType, value: any, validatedDefault: 
     ? validateGLSLInt(value, validatedDefault)
     : validateGLSLFloat(value, validatedDefault)
 
-export const numberType = (glslType: VectorType | NumberType) =>
+export const numberType = (glslType: NumberVectorType | NumberType) =>
   glslType[0] === "i" ? "int" : "float";
 
-const minimumStepValue = (glslType: VectorType | NumberType) =>
+const minimumStepValue = (glslType: NumberVectorType | NumberType) =>
   numberType(glslType) === "int" ? 1 : 0;
 
-interface VectorParts {
+interface NumberVectorParts {
   numberType: NumberType;
   components: number;
 }
 
-export const getVectorParts = (glslType: VectorType): VectorParts => ({
+export const getNumberVectorParts = (glslType: NumberVectorType): NumberVectorParts => ({
   numberType: numberType(glslType),
   components: Number(glslType[glslType.length - 1])
 });
 
-const vectorScalarConstructor = (glslType: VectorType, fillValue: number = 0): number[] => {
-  const parts = getVectorParts(glslType);
-  const result = new Array<number>(parts.components);
+export const getBoolVectorComponents = (glslType: BoolVectorType): number =>
+  Number(glslType[glslType.length - 1]);
+
+const vectorScalarConstructor = <T>(componentCount: number, fillValue: T): T[] => {
+  const result = new Array<T>(componentCount);
   result.fill(fillValue);
   return result;
 }
 
-const validateGLSLVector = (
-  glslType: VectorType,
+const vectorNumberScalarConstructor = (glslType: NumberVectorType, fillValue: number = 0): number[] => {
+  const parts = getNumberVectorParts(glslType);
+  return vectorScalarConstructor<number>(parts.components, fillValue);
+}
+
+const vectorBoolScalarConstructor = (glslType: BoolVectorType, fillValue: boolean = false): boolean[] => {
+  const components = getBoolVectorComponents(glslType);
+  return vectorScalarConstructor<boolean>(components, fillValue);
+}
+
+const validateGLSLNumberVector = (
+  glslType: NumberVectorType,
   value: any,
-  validatedDefault: number[] = vectorScalarConstructor(glslType)): number[] => {
+  validatedDefault: number[] = vectorNumberScalarConstructor(glslType)): number[] => {
   if (!Array.isArray(value)) {
     return validatedDefault;
   }
 
-  const parts = getVectorParts(glslType);
+  const parts = getNumberVectorParts(glslType);
   const result: number[] = [];
   for (let i = 0; i < parts.components; ++i) {
     result[i] = validateGLSLNumber(parts.numberType, value[i], validatedDefault[i]);
@@ -519,7 +587,26 @@ const validateGLSLVector = (
   return result;
 }
 
-const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
+const validateGLSLBool = (glslType: BoolType, value: any, validatedDefault: boolean = false): boolean =>
+  (value === undefined || value === null) ? validatedDefault : Boolean(value);
+
+const validateGLSLBoolVector = (
+  glslType: BoolVectorType,
+  value: any,
+  validatedDefault: boolean[] = vectorBoolScalarConstructor(glslType)): boolean[] => {
+  if (!Array.isArray(value)) {
+    return validatedDefault;
+  }
+
+  const components = getBoolVectorComponents(glslType);
+  const result: boolean[] = [];
+  for (let i = 0; i < components; ++i) {
+    result[i] = validateGLSLBool(value[i], validatedDefault[i]);
+  }
+  return result;
+}
+
+const validateGLSLSampler2D = (glslType: Sampler2DType, value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
   if (value === undefined) {
     return validatedDefault;
   }
@@ -534,7 +621,7 @@ const validateGLSLSampler2D = (value: any, validatedDefault: ShaderTexture = { u
   }
 }
 
-const validateGLSLGradient = (value: any, validatedDefault: ShaderGradient = defaultGradient()): ShaderGradient => {
+const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefault: ShaderGradient = defaultGradient()): ShaderGradient => {
   if (value === undefined) {
     return validatedDefault;
   }
@@ -569,7 +656,9 @@ const validateGLSLGradient = (value: any, validatedDefault: ShaderGradient = def
 // validateGLSLFloat
 // validateGLSLInt
 // validateGLSLNumber
-// validateGLSLVector
+// validateGLSLNumberVector
+// validateGLSLBool
+// validateGLSLBoolVector
 // validateGLSLSampler2D
 // validateGLSLGradient
 
@@ -956,7 +1045,7 @@ export class RaverieVisualizer {
 
     // tags: <types>
     const uniformRegex =
-      /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|sampler2D|gradient)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+      /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|bool|bvec2|bvec3|bvec4|sampler2D|gradient)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
@@ -1098,9 +1187,9 @@ export class RaverieVisualizer {
         case "vec4":
         case "ivec2":
         case "ivec3":
-        case "ivec4":
-          const defaultValue = validateGLSLVector(type, parsedComment.default);
-          return pass<ProcessedUniformVector>({
+        case "ivec4": {
+          const defaultValue = validateGLSLNumberVector(type, parsedComment.default);
+          return pass<ProcessedUniformNumberVector>({
             type,
             location,
             name,
@@ -1109,16 +1198,50 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLVector(type, foundShaderValue?.value, defaultValue)
+              value: validateGLSLNumberVector(type, foundShaderValue?.value, defaultValue)
             },
             defaultValue,
-            minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
-            maxValue: validateGLSLVector(type, parsedComment.max, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
-            stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, minimumStepValue(type))),
+            minValue: validateGLSLNumberVector(type, parsedComment.min, vectorNumberScalarConstructor(type, Number.NEGATIVE_INFINITY)),
+            maxValue: validateGLSLNumberVector(type, parsedComment.max, vectorNumberScalarConstructor(type, Number.POSITIVE_INFINITY)),
+            stepValue: validateGLSLNumberVector(type, parsedComment.step, vectorNumberScalarConstructor(type, minimumStepValue(type))),
           });
-          break;
+        }
+        case "bool": {
+          const defaultValue = validateGLSLBool(type, parsedComment.default);
+          return pass<ProcessedUniformBool>({
+            type,
+            location,
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLBool(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue
+          });
+        }
+        case "bvec2":
+        case "bvec3":
+        case "bvec4": {
+          const defaultValue = validateGLSLBoolVector(type, parsedComment.default);
+          return pass<ProcessedUniformBoolVector>({
+            type,
+            location,
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLBoolVector(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue
+          });
+        }
         case "sampler2D": {
-          const defaultValue = validateGLSLSampler2D(parsedComment.default);
+          const defaultValue = validateGLSLSampler2D(type, parsedComment.default);
           return pass<ProcessedUniformSampler2D>({
             type,
             location,
@@ -1128,13 +1251,13 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLSampler2D(foundShaderValue?.value, defaultValue)
+              value: validateGLSLSampler2D(type, foundShaderValue?.value, defaultValue)
             },
             defaultValue,
           });
         }
         case "gradient": {
-          const defaultValue = validateGLSLGradient(parsedComment.default);
+          const defaultValue = validateGLSLGradient(type, parsedComment.default);
           let location: ProcessedGradientLocation[] | null = [];
           for (let i = 0; i < maxGradientStops; ++i) {
             const t = getUniformLocation(`${name}[${i}].t`);
@@ -1154,7 +1277,7 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLGradient(foundShaderValue?.value, defaultValue)
+              value: validateGLSLGradient(type, foundShaderValue?.value, defaultValue)
             },
             defaultValue,
           });
@@ -1312,7 +1435,7 @@ export class RaverieVisualizer {
             break;
           }
           case "bool": {
-            const validatedValue = validateGLSLBool(value, processedUniform.defaultValue);
+            const validatedValue = validateGLSLBool(processedUniform.type, value, processedUniform.defaultValue);
             gl.uniform1i(processedUniform.location, Number(validatedValue));
             break;
           }
@@ -1335,7 +1458,7 @@ export class RaverieVisualizer {
             break;
           }
           case "sampler2D": {
-            const validatedValue = validateGLSLSampler2D(value,
+            const validatedValue = validateGLSLSampler2D(processedUniform.type, value,
               processedUniform.defaultValue);
             const texture = this.getOrCacheTexture(validatedValue.url);
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
@@ -1388,7 +1511,7 @@ export class RaverieVisualizer {
             break;
           }
           case "gradient": {
-            const validatedValue = validateGLSLGradient(value,
+            const validatedValue = validateGLSLGradient(processedUniform.type, value,
               processedUniform.defaultValue);
 
             const stops = sortGradientStops(validatedValue);
