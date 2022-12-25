@@ -47,6 +47,8 @@ export type LayerShaderBlendMode =
   "divide";
 
 export const blendModeList: LayerShaderBlendMode[] = [
+  "overwrite",
+
   "normal",
   "dissolve",
 
@@ -75,6 +77,14 @@ export const blendModeList: LayerShaderBlendMode[] = [
   "subtract",
   "divide",
 ];
+
+export const blendModeToIndex = (() => {
+  const results: Record<string, number> = {};
+  for (let i = 0; i < blendModeList.length; ++i) {
+    results[blendModeList[i]] = i;
+  }
+  return results;
+})();
 
 export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
   "normal",
@@ -417,6 +427,7 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gResolution: WebGLUniformLocation | null;
   gTime: WebGLUniformLocation | null;
   gPreviousLayer: WebGLUniformLocation | null;
+  gBlendMode: WebGLUniformLocation | null;
 }
 
 type ProcessedLayer = ProcessedLayerShader | ProcessedLayerGroup;
@@ -578,6 +589,7 @@ uniform sampler2D gPreviousLayer;
 uniform float gOpacity;
 uniform vec2 gResolution;
 uniform float gTime;
+uniform int gBlendMode;
 
 float gLuminance(vec3 rgb) {
   return (0.2126 * rgb.r) + (0.7152 * rgb.g) + (0.0722 * rgb.b);
@@ -619,86 +631,81 @@ vec4 gSampleGradient(gradient stops, float t) {
   }
   return prevStop.color;
 }
+
+${blendModeList.map((blendMode, index) =>
+  `const int gBlendMode${blendMode[0].toUpperCase()}${blendMode.substring(1)} = ${index};`).join("\n")}
+
+vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
+  // Overwrite is a special case we use internally when we want to render without a previous layer
+  if (blendMode == gBlendModeOverwrite) {
+    return vec4(source.rgb, 1);
+  }
+
+  // We also handle dissolve as a special case since it never blends (always opaque)
+  if (blendMode == gBlendModeDissolve) {
+    source.a *= opacity;
+    float noise = gNoise2D(gUV);
+    vec4 color;
+    if (source.a == 1.0) {
+      color = source;
+    } else if (source.a == 0.0) {
+      color = dest;
+    } else {
+      color = source.a < noise ? dest : source;
+    }
+    return vec4(color.rgb, 1);
+  }
+  
+  vec3 src = source.rgb;
+  float srcAlpha = source.a * opacity;
+  vec3 dst = dest.rgb;
+  vec3 hlf = vec3(0.5);
+  vec3 one = vec3(1.0);
+  vec3 two = vec3(2.0);
+  vec3 epsilon = vec3(0.1);
+
+  vec3 blended = vec3(0);
+  switch (blendMode) {
+    case gBlendModeNormal: blended = src; break;
+
+    case gBlendModeMultiply: blended = src * dst; break;
+    case gBlendModeDarken: blended = min(src, dst); break;
+    case gBlendModeColorBurn: blended = one - (one - dst) / max(src, epsilon); break;
+    case gBlendModeLinearBurn: blended = src + dst - one; break;
+    case gBlendModeDarkerColor: blended = gLuminance(src) < gLuminance(dst) ? src : dst; break;
+
+    case gBlendModeScreen: blended = one - (one - src) * (one - dst); break;
+    case gBlendModeLighten: blended = max(src, dst); break;
+    case gBlendModeColorDodge: blended = dst / max(one - src, epsilon); break;
+    case gBlendModeLinearDodge: blended = src + dst; break;
+    case gBlendModeLighterColor: blended = gLuminance(src) > gLuminance(dst) ? src : dst; break;
+
+    case gBlendModeOverlay: blended = vec3(greaterThan(dst,hlf))*(one-(one-two*(dst-hlf))*(one-src))+vec3(lessThanEqual(dst,hlf))*((two*dst)*src); break;
+    case gBlendModeSoftLight: blended = vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(src+hlf)); break;
+    case gBlendModeHardLight: blended = vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-two*(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(two*src)); break;
+    case gBlendModeVividLight: blended = vec3(greaterThan(src,hlf))*(dst/max(one-two*(src-hlf),epsilon))+vec3(lessThanEqual(src,hlf))*(one-(one-dst)/max(two*src,epsilon)); break;
+    case gBlendModeLinearLight: blended = vec3(greaterThan(src,hlf))*(dst+two*(src-hlf))+vec3(lessThanEqual(src,hlf))*(dst+two*src-one); break;
+    case gBlendModePinLight: blended = vec3(greaterThan(src,hlf))*max(dst,two*(src-hlf))+vec3(lessThanEqual(src,hlf))*min(dst,two*src); break;
+    case gBlendModeHardMix: blended = src; break;
+
+    case gBlendModeDifference: blended = abs(dst - src); break;
+    case gBlendModeExclusion: blended = hlf - two * (dst - hlf) * (src - hlf); break;
+    case gBlendModeSubtract: blended = dst - src; break;
+    case gBlendModeDivide: blended = dst / max(src, epsilon); break;
+  }
+
+  return vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
+}
 `;
 
 const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
 
-const generateFragmentFooter = (blendMode: LayerShaderBlendMode) => {
-  // Overwrite is a special case we use internally when we want to render without a previous layer
-  if (blendMode === "overwrite") {
-    return `
-      void main() {
-        gFragColor = vec4(render().rgb, 1);
-      }`
-  }
-
-  // We also handle dissolve as a special case since it never blends (always opaque)
-  if (blendMode === "dissolve") {
-    return `
-      void main() {
-        vec4 src = render();
-        src.a *= gOpacity;
-        vec4 dst = texture(gPreviousLayer, gUV);
-        float noise = gNoise2D(gUV);
-        vec4 color;
-        if (src.a == 1.0) {
-          color = src;
-        } else if (src.a == 0.0) {
-          color = dst;
-        } else {
-          color = src.a < noise ? dst : src;
-        }
-        gFragColor = vec4(color.rgb, 1);
-      }`
-  }
-
-  const blendEquation = (() => {
-    switch (blendMode) {
-      case "normal": return "src";
-
-      case "multiply": return "src * dst";
-      case "darken": return "min(src, dst)";
-      case "colorBurn": return "one - (one - dst) / max(src, epsilon)";
-      case "linearBurn": return "src + dst - one";
-      case "darkerColor": return "gLuminance(src) < gLuminance(dst) ? src : dst";
-
-      case "screen": return "one - (one - src) * (one - dst)";
-      case "lighten": return "max(src, dst)";
-      case "colorDodge": return "dst / max(one - src, epsilon)";
-      case "linearDodge": return "src + dst";
-      case "lighterColor": return "gLuminance(src) > gLuminance(dst) ? src : dst";
-
-      case "overlay": return "vec3(greaterThan(dst,hlf))*(one-(one-two*(dst-hlf))*(one-src))+vec3(lessThanEqual(dst,hlf))*((two*dst)*src)";
-      case "softLight": return "vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(src+hlf))";
-      case "hardLight": return "vec3(greaterThan(src,hlf))*(one-(one-dst)*(one-two*(src-hlf)))+vec3(lessThanEqual(src,hlf))*(dst*(two*src))";
-      case "vividLight": return "vec3(greaterThan(src,hlf))*(dst/max(one-two*(src-hlf),epsilon))+vec3(lessThanEqual(src,hlf))*(one-(one-dst)/max(two*src,epsilon))";
-      case "linearLight": return "vec3(greaterThan(src,hlf))*(dst+two*(src-hlf))+vec3(lessThanEqual(src,hlf))*(dst+two*src-one)";
-      case "pinLight": return "vec3(greaterThan(src,hlf))*max(dst,two*(src-hlf))+vec3(lessThanEqual(src,hlf))*min(dst,two*src)";
-      case "hardMix": return "src";
-
-      case "difference": return "abs(dst - src)";
-      case "exclusion": return "hlf - two * (dst - hlf) * (src - hlf)";
-      case "subtract": return "dst - src";
-      case "divide": return "dst / max(src, epsilon)";
-
-      default: throw new Error(`Unexpected blend mode ${blendMode}`);
-    }
-  })();
-
-  return `
-  void main() {
-    vec4 result = render();
-    vec3 src = result.rgb;
-    float srcAlpha = result.a * gOpacity;
-    vec3 dst = texture(gPreviousLayer, gUV).rgb;
-    vec3 hlf = vec3(0.5);
-    vec3 one = vec3(1.0);
-    vec3 two = vec3(2.0);
-    vec3 epsilon = vec3(0.1);
-    vec3 blended = ${blendEquation};
-    gFragColor = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
-  }`;
-}
+const fragmentShaderFooter = `
+void main() {
+  vec4 source = render();
+  vec4 dest = texture(gPreviousLayer, gUV);
+  gFragColor = gApplyBlendMode(gBlendMode, gOpacity, source, dest);
+}`;
 
 export type RenderCallback = (frameTimeSeconds: number) => void;
 
@@ -887,8 +894,7 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    const fragmentFooter = generateFragmentFooter(blendMode);
-    const fragmentComposited = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentFooter}`;
+    const fragmentComposited = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentShaderFooter}`;
     const processedFragmentShader = this.createShader(fragmentComposited, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
       return {
@@ -1014,6 +1020,7 @@ export class RaverieVisualizer {
       gResolution: getUniformLocation("gResolution"),
       gTime: getUniformLocation("gTime"),
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
+      gBlendMode: getUniformLocation("gBlendMode"),
     };
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
@@ -1238,6 +1245,9 @@ export class RaverieVisualizer {
     gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
     gl.uniform2f(processedLayerShader.gResolution, width, height);
     gl.uniform1f(processedLayerShader.gTime, timeSeconds);
+
+    const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
+    gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
 
     gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
     gl.activeTexture(gl.TEXTURE0);
