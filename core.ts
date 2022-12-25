@@ -712,12 +712,6 @@ export const defaultFrameTime = 1 / 60;
 
 export interface RenderOptions {
   /**
-   * Called each time a layer is rendered while the render target we just rendered to is still bound.
-   * Useful to perform operations such as copying pixels from the render target.
-   */
-  renderLayerCallback?: (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
-
-  /**
    * Whether we draw the final result to the back buffer at the end of render all visible layers.
    * @default true
    */
@@ -1249,6 +1243,162 @@ export class RaverieVisualizer {
     return newTexture;
   }
 
+  private renderLayerShaderInternal(
+    processedLayerShader: ProcessedLayerShader,
+    parentOpacity: number,
+    frameBuffer: WebGLFramebuffer | null,
+    previousLayerTexture: WebGLTexture | null,
+    width: number,
+    height: number,
+    timeSeconds: number) {
+    const gl = this.gl;
+    gl.useProgram(processedLayerShader.program);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+
+    // Apply global uniforms
+    gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
+    gl.uniform2f(processedLayerShader.gResolution, width, height);
+    gl.uniform1f(processedLayerShader.gTime, timeSeconds);
+
+    gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
+
+    // Apply layer uniforms
+    let textureSamplerIndex = 1;
+    for (const processedUniform of processedLayerShader.uniforms) {
+      // Don't set uniforms that don't have locations. These can occur if we
+      // found the uniform via a regex, but it was optimized out by the compiler
+      if (!processedUniform.location) {
+        continue;
+      }
+
+      const value = processedUniform.compiledUniform.shaderValue.value;
+      // tags: <types>
+      switch (processedUniform.type) {
+        case "int":
+        case "float": {
+          const validatedValue = validateGLSLNumber(processedUniform.type, value,
+            processedUniform.compiledUniform.defaultValue);
+          if (processedUniform.type === "int") {
+            gl.uniform1i(processedUniform.location, validatedValue);
+          } else {
+            gl.uniform1f(processedUniform.location, validatedValue);
+          }
+          break;
+        }
+        case "vec2":
+        case "vec3":
+        case "vec4":
+        case "ivec2":
+        case "ivec3":
+        case "ivec4": {
+          const validatedValue = validateGLSLVector(processedUniform.type, value,
+            processedUniform.compiledUniform.defaultValue);
+          switch (processedUniform.type) {
+            case "vec2":
+              gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
+              break;
+            case "vec3":
+              gl.uniform3f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+              break;
+            case "vec4":
+              gl.uniform4f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+              break;
+            case "ivec2":
+              gl.uniform2i(processedUniform.location, validatedValue[0], validatedValue[1]);
+              break;
+            case "ivec3":
+              gl.uniform3i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
+              break;
+            case "ivec4":
+              gl.uniform4i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
+              break;
+          }
+          break;
+        }
+        case "sampler2D": {
+          const validatedValue = validateGLSLSampler2D(value,
+            processedUniform.compiledUniform.defaultValue);
+          const texture = this.getOrCacheTexture(validatedValue.url);
+          gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+
+          const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
+            if (typeof first !== "undefined") {
+              return first;
+            }
+            if (typeof second !== "undefined") {
+              return second;
+            }
+            return fallback;
+          };
+
+          const filter = choose(validatedValue.filter, processedUniform.compiledUniform.defaultValue.filter, "mipmap");
+          const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.compiledUniform.defaultValue.wrapHorizontal, "repeat");
+          const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.compiledUniform.defaultValue.wrapVertical, "repeat");
+
+          const wrapModeToGLParam = (wrapMode: WrapMode) => {
+            switch (wrapMode) {
+              case "repeat": return gl.REPEAT;
+              case "mirrored": return gl.MIRRORED_REPEAT;
+              case "clamp": return gl.CLAMP_TO_EDGE;
+              default: throw new Error(`Unexpected wrap mode ${wrapMode}`);
+            }
+          };
+
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapModeToGLParam(wrapHorizontal));
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapModeToGLParam(wrapVertical));
+
+          const [minFilter, magFilter] = (() => {
+            switch (filter) {
+              case "nearest": return [gl.NEAREST, gl.NEAREST];
+              case "linear": return [gl.LINEAR, gl.LINEAR];
+              case "mipmap": return [gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR];
+              default: throw new Error(`Unexpected filter ${filter}`);
+            }
+          })();
+
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+
+          if (filter === "mipmap") {
+            gl.generateMipmap(gl.TEXTURE_2D);
+          }
+
+          gl.uniform1i(processedUniform.location, textureSamplerIndex);
+          ++textureSamplerIndex;
+          break;
+        }
+        case "gradient": {
+          const validatedValue = validateGLSLGradient(value,
+            processedUniform.compiledUniform.defaultValue);
+
+          const stops = sortGradientStops(validatedValue);
+          let lastStop: ShaderGradientStop = {
+            t: 1,
+            color: [0, 0, 0, 1]
+          };
+          for (let i = 0; i < maxGradientStops; ++i) {
+            const gradientLocation = processedUniform.location[i];
+            const stop = stops[i] || lastStop;
+            gl.uniform1f(gradientLocation.t, stop.t);
+            gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
+            lastStop = stop;
+          }
+          break;
+        }
+        default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
+      }
+    }
+
+    gl.clearColor(1, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
   public render(timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
@@ -1267,162 +1417,7 @@ export class RaverieVisualizer {
     const targetsInternal = renderTargets as any as RenderTargetsInternal;
     gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    const renderLayerShader = (
-      processedLayerShader: ProcessedLayerShader,
-      parentOpacity: number,
-      frameBuffer: WebGLFramebuffer | null,
-      previousLayerTexture: WebGLTexture | null) => {
-      gl.useProgram(processedLayerShader.program);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-
-      // Apply global uniforms
-      gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
-      gl.uniform2f(processedLayerShader.gResolution, targetsInternal.widthInternal, targetsInternal.heightInternal);
-      gl.uniform1f(processedLayerShader.gTime, timeStampMs / 1000);
-
-      gl.uniform1i(processedLayerShader.gPreviousLayer, 0);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
-
-      // Apply layer uniforms
-      let textureSamplerIndex = 1;
-      for (const processedUniform of processedLayerShader.uniforms) {
-        // Don't set uniforms that don't have locations. These can occur if we
-        // found the uniform via a regex, but it was optimized out by the compiler
-        if (!processedUniform.location) {
-          continue;
-        }
-
-        const value = processedUniform.compiledUniform.shaderValue.value;
-        // tags: <types>
-        switch (processedUniform.type) {
-          case "int":
-          case "float": {
-            const validatedValue = validateGLSLNumber(processedUniform.type, value,
-              processedUniform.compiledUniform.defaultValue);
-            if (processedUniform.type === "int") {
-              gl.uniform1i(processedUniform.location, validatedValue);
-            } else {
-              gl.uniform1f(processedUniform.location, validatedValue);
-            }
-            break;
-          }
-          case "vec2":
-          case "vec3":
-          case "vec4":
-          case "ivec2":
-          case "ivec3":
-          case "ivec4": {
-            const validatedValue = validateGLSLVector(processedUniform.type, value,
-              processedUniform.compiledUniform.defaultValue);
-            switch (processedUniform.type) {
-              case "vec2":
-                gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
-                break;
-              case "vec3":
-                gl.uniform3f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
-                break;
-              case "vec4":
-                gl.uniform4f(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
-                break;
-              case "ivec2":
-                gl.uniform2i(processedUniform.location, validatedValue[0], validatedValue[1]);
-                break;
-              case "ivec3":
-                gl.uniform3i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2]);
-                break;
-              case "ivec4":
-                gl.uniform4i(processedUniform.location, validatedValue[0], validatedValue[1], validatedValue[2], validatedValue[3]);
-                break;
-            }
-            break;
-          }
-          case "sampler2D": {
-            const validatedValue = validateGLSLSampler2D(value,
-              processedUniform.compiledUniform.defaultValue);
-            const texture = this.getOrCacheTexture(validatedValue.url);
-            gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-
-            const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
-              if (typeof first !== "undefined") {
-                return first;
-              }
-              if (typeof second !== "undefined") {
-                return second;
-              }
-              return fallback;
-            };
-
-            const filter = choose(validatedValue.filter, processedUniform.compiledUniform.defaultValue.filter, "mipmap");
-            const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.compiledUniform.defaultValue.wrapHorizontal, "repeat");
-            const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.compiledUniform.defaultValue.wrapVertical, "repeat");
-
-            const wrapModeToGLParam = (wrapMode: WrapMode) => {
-              switch (wrapMode) {
-                case "repeat": return gl.REPEAT;
-                case "mirrored": return gl.MIRRORED_REPEAT;
-                case "clamp": return gl.CLAMP_TO_EDGE;
-                default: throw new Error(`Unexpected wrap mode ${wrapMode}`);
-              }
-            };
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapModeToGLParam(wrapHorizontal));
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapModeToGLParam(wrapVertical));
-
-            const [minFilter, magFilter] = (() => {
-              switch (filter) {
-                case "nearest": return [gl.NEAREST, gl.NEAREST];
-                case "linear": return [gl.LINEAR, gl.LINEAR];
-                case "mipmap": return [gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR];
-                default: throw new Error(`Unexpected filter ${filter}`);
-              }
-            })();
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
-
-            if (filter === "mipmap") {
-              gl.generateMipmap(gl.TEXTURE_2D);
-            }
-
-            gl.uniform1i(processedUniform.location, textureSamplerIndex);
-            ++textureSamplerIndex;
-            break;
-          }
-          case "gradient": {
-            const validatedValue = validateGLSLGradient(value,
-              processedUniform.compiledUniform.defaultValue);
-
-            const stops = sortGradientStops(validatedValue);
-            let lastStop: ShaderGradientStop = {
-              t: 1,
-              color: [0, 0, 0, 1]
-            };
-            for (let i = 0; i < maxGradientStops; ++i) {
-              const gradientLocation = processedUniform.location[i];
-              const stop = stops[i] || lastStop;
-              gl.uniform1f(gradientLocation.t, stop.t);
-              gl.uniform4f(gradientLocation.color, stop.color[0], stop.color[1], stop.color[2], stop.color[3]);
-              lastStop = stop;
-            }
-            break;
-          }
-          default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
-        }
-      }
-
-      gl.clearColor(1, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-      if (options?.renderLayerCallback) {
-        options.renderLayerCallback(processedLayerShader.compiledLayer, gl);
-      }
-
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-    }
+    const timeSeconds = timeStampMs / 1000;
 
     let renderTargetIndex = 0;
     const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
@@ -1440,11 +1435,14 @@ export class RaverieVisualizer {
           if (layer.program) {
             renderTargetIndex = Number(!renderTargetIndex);
 
-            renderLayerShader(
+            this.renderLayerShaderInternal(
               layer,
               groupOpacity,
               targetsInternal.targets[renderTargetIndex].buffer,
-              targetsInternal.targets[Number(!renderTargetIndex)].texture);
+              targetsInternal.targets[Number(!renderTargetIndex)].texture,
+              targetsInternal.widthInternal,
+              targetsInternal.heightInternal,
+              timeSeconds);
           }
         } else {
           renderRecursive(layer, groupOpacity);
@@ -1456,7 +1454,14 @@ export class RaverieVisualizer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
       gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      renderLayerShader(this.checkerboardShader, 1.0, renderTarget.buffer, null);
+      this.renderLayerShaderInternal(
+        this.checkerboardShader,
+        1.0,
+        renderTarget.buffer,
+        null,
+        targetsInternal.widthInternal,
+        targetsInternal.heightInternal,
+        timeSeconds);
     };
 
     clearRenderTarget(targetsInternal.targets[0]);
@@ -1469,11 +1474,14 @@ export class RaverieVisualizer {
       : options?.drawToBackBuffer;
 
     if (drawToBackBuffer) {
-      renderLayerShader(
+      this.renderLayerShaderInternal(
         this.copyShader,
         1.0,
         null,
-        targetsInternal.targets[renderTargetIndex].texture);
+        targetsInternal.targets[renderTargetIndex].texture,
+        targetsInternal.widthInternal,
+        targetsInternal.heightInternal,
+        timeSeconds);
     }
     return frameTimeSeconds;
   }
