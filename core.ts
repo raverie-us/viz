@@ -246,7 +246,7 @@ export interface CompiledLayerGroup extends CompiledLayerBase {
   layer: LayerGroup;
   layers: CompiledLayer[];
 
-  // A complete flattened hierarchy of every layer (recursive) under this group 
+  // A complete flattened hierarchy of every layer (recursive) under this group
   idToLayer: Record<string, CompiledLayer>;
 }
 
@@ -368,28 +368,24 @@ const expect = <T>(value: T | null | undefined, name: string): T => {
 // tags: <types>
 type GLSLType = NumberType | VectorType | Sampler2DType | GradientType;
 
-interface ProcessedUniformBase {
-  compiledUniform: CompiledUniformBase;
+interface ProcessedUniformBase extends CompiledUniformBase {
+  parent: ProcessedLayerShader;
 }
 
-interface ProcessedUniformBaseSingleLocation {
-  compiledUniform: CompiledUniformBase;
+interface ProcessedUniformBaseSingleLocation extends ProcessedUniformBase {
   location: WebGLUniformLocation | null;
 }
 
-interface ProcessedUniformNumber extends ProcessedUniformBaseSingleLocation {
-  type: NumberType;
-  compiledUniform: CompiledUniformNumber;
+interface ProcessedUniformNumber extends CompiledUniformNumber, ProcessedUniformBaseSingleLocation {
+  parent: ProcessedLayerShader;
 }
 
-interface ProcessedUniformVector extends ProcessedUniformBaseSingleLocation {
-  type: VectorType;
-  compiledUniform: CompiledUniformVector;
+interface ProcessedUniformVector extends ProcessedUniformBaseSingleLocation, CompiledUniformVector {
+  parent: ProcessedLayerShader;
 }
 
-interface ProcessedUniformSampler2D extends ProcessedUniformBaseSingleLocation {
-  type: Sampler2DType;
-  compiledUniform: CompiledUniformSampler2D;
+interface ProcessedUniformSampler2D extends ProcessedUniformBaseSingleLocation, CompiledUniformSampler2D {
+  parent: ProcessedLayerShader;
 }
 
 interface ProcessedGradientLocation {
@@ -397,9 +393,8 @@ interface ProcessedGradientLocation {
   color: WebGLUniformLocation;
 }
 
-interface ProcessedUniformGradient extends ProcessedUniformBase {
-  type: GradientType;
-  compiledUniform: CompiledUniformGradient;
+interface ProcessedUniformGradient extends ProcessedUniformBase, CompiledUniformGradient {
+  parent: ProcessedLayerShader;
   location: ProcessedGradientLocation[] | null;
 }
 
@@ -412,9 +407,8 @@ interface NewUniform {
   afterUniform: string;
 }
 
-interface ProcessedLayerShader {
-  type: "shader";
-  compiledLayer: CompiledLayerShader;
+interface ProcessedLayerShader extends CompiledLayerShader {
+  parent: ProcessedLayerGroup | null;
   uniforms: ProcessedUniform[];
   program: WebGLProgram | null;
 
@@ -427,10 +421,10 @@ interface ProcessedLayerShader {
 
 type ProcessedLayer = ProcessedLayerShader | ProcessedLayerGroup;
 
-interface ProcessedLayerGroup {
-  type: "group";
-  compiledLayer: CompiledLayerGroup;
+interface ProcessedLayerGroup extends CompiledLayerGroup {
+  parent: ProcessedLayerGroup | null;
   layers: ProcessedLayer[];
+  idToLayer: Record<string, ProcessedLayer>;
   timeSeconds: number;
 }
 
@@ -925,10 +919,10 @@ export class RaverieVisualizer {
     this.processedGroup = this.compileLayerGroup(mode === "clone"
       ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
       : layerGroup, null);
-    return this.processedGroup.compiledLayer;
+    return this.processedGroup;
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: CompiledLayerGroup | null, throwOnError = false): ProcessedLayerShader {
+  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code, layerShader.blendMode);
 
@@ -997,17 +991,22 @@ export class RaverieVisualizer {
       }
     }
 
-    const compiledLayer: CompiledLayerShader = {
+    const getUniformLocation = (name: string) => program
+      ? gl.getUniformLocation(program, name)
+      : null;
+
+    const processedLayerShader: ProcessedLayerShader = {
       type: "shader",
       parent,
       layer: layerShader,
       uniforms: [],
       errors,
+      program,
+      gOpacity: getUniformLocation("gOpacity"),
+      gResolution: getUniformLocation("gResolution"),
+      gTime: getUniformLocation("gTime"),
+      gPreviousLayer: getUniformLocation("gPreviousLayer"),
     };
-
-    const getUniformLocation = (name: string) => program
-      ? gl.getUniformLocation(program, name)
-      : null;
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
       const { type, name, afterUniform } = unprocessedUniform;
@@ -1065,21 +1064,18 @@ export class RaverieVisualizer {
           return pass<ProcessedUniformNumber>({
             type,
             location,
-            compiledUniform: {
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
               name,
-              parent: compiledLayer,
               type,
-              parsedComment,
-              shaderValue: {
-                name,
-                type,
-                value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
-              },
-              defaultValue,
-              minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
-              maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
-              stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
-            }
+              value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+            minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
+            maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
+            stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
           });
         }
         case "vec2":
@@ -1092,21 +1088,18 @@ export class RaverieVisualizer {
           return pass<ProcessedUniformVector>({
             type,
             location,
-            compiledUniform: {
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
               name,
-              parent: compiledLayer,
               type,
-              parsedComment,
-              shaderValue: {
-                name,
-                type,
-                value: validateGLSLVector(type, foundShaderValue?.value, defaultValue)
-              },
-              defaultValue,
-              minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
-              maxValue: validateGLSLVector(type, parsedComment.max, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
-              stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, minimumStepValue(type))),
-            }
+              value: validateGLSLVector(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+            minValue: validateGLSLVector(type, parsedComment.min, vectorScalarConstructor(type, Number.NEGATIVE_INFINITY)),
+            maxValue: validateGLSLVector(type, parsedComment.max, vectorScalarConstructor(type, Number.POSITIVE_INFINITY)),
+            stepValue: validateGLSLVector(type, parsedComment.step, vectorScalarConstructor(type, minimumStepValue(type))),
           });
           break;
         case "sampler2D": {
@@ -1114,18 +1107,15 @@ export class RaverieVisualizer {
           return pass<ProcessedUniformSampler2D>({
             type,
             location,
-            compiledUniform: {
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
               name,
-              parent: compiledLayer,
               type,
-              parsedComment,
-              shaderValue: {
-                name,
-                type,
-                value: validateGLSLSampler2D(foundShaderValue?.value, defaultValue)
-              },
-              defaultValue,
-            }
+              value: validateGLSLSampler2D(foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
           });
         }
         case "gradient": {
@@ -1143,18 +1133,15 @@ export class RaverieVisualizer {
           return pass<ProcessedUniformGradient>({
             type,
             location,
-            compiledUniform: {
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            shaderValue: {
               name,
-              parent: compiledLayer,
               type,
-              parsedComment,
-              shaderValue: {
-                name,
-                type,
-                value: validateGLSLGradient(foundShaderValue?.value, defaultValue)
-              },
-              defaultValue,
-            }
+              value: validateGLSLGradient(foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
           });
         }
         default: throw new Error(`Unexpected GLSL type '${type}'`)
@@ -1168,58 +1155,41 @@ export class RaverieVisualizer {
     // depending on which option they passed into `compile`
     layerShader.values.length = 0;
     layerShader.values.push(...processedUniforms.map((processedUniform) =>
-      processedUniform.compiledUniform.shaderValue));
+      processedUniform.shaderValue));
 
-    compiledLayer.uniforms = processedUniforms.map((processedUniform) => processedUniform.compiledUniform);
-
-    return {
-      type: "shader",
-      compiledLayer,
-      uniforms: processedUniforms,
-      program,
-      gOpacity: getUniformLocation("gOpacity"),
-      gResolution: getUniformLocation("gResolution"),
-      gTime: getUniformLocation("gTime"),
-      gPreviousLayer: getUniformLocation("gPreviousLayer"),
-    }
+    processedLayerShader.uniforms = processedUniforms;
+    return processedLayerShader;
   }
 
-  private compileLayerGroup(layerGroup: LayerGroup, parent: CompiledLayerGroup | null): ProcessedLayerGroup {
-    const compiledLayerGroup: CompiledLayerGroup = {
+  private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null): ProcessedLayerGroup {
+    const processedLayerGroup: ProcessedLayerGroup = {
       type: "group",
       parent,
       layer: layerGroup,
       layers: [],
-      idToLayer: {}
-    };
-    const processedLayerGroup: ProcessedLayerGroup = {
-      type: "group",
-      compiledLayer: compiledLayerGroup,
-      layers: [],
+      idToLayer: {},
       timeSeconds: 0
     };
 
-    const mapLayerById = (compiledLayer: CompiledLayer) => {
-      const id = compiledLayer.layer.id;
-      if (id in compiledLayerGroup.idToLayer) {
+    const mapLayerById = (processedLayer: ProcessedLayer) => {
+      const id = processedLayer.layer.id;
+      if (id in processedLayerGroup.idToLayer) {
         throw new Error(`Layer id '${id}' was not unique (another layer had the same id)`);
       }
-      compiledLayerGroup.idToLayer[id] = compiledLayer;
+      processedLayerGroup.idToLayer[id] = processedLayer;
     }
 
     for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
-        const processedLayerShader = this.compileLayerShader(layer, compiledLayerGroup);
+        const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup);
         processedLayerGroup.layers.push(processedLayerShader);
-        compiledLayerGroup.layers.push(processedLayerShader.compiledLayer);
-        mapLayerById(processedLayerShader.compiledLayer);
+        mapLayerById(processedLayerShader);
       } else {
         // Recursively compile the child group
-        const processedChildGroup = this.compileLayerGroup(layer, compiledLayerGroup);
+        const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup);
         processedLayerGroup.layers.push(processedChildGroup);
-        compiledLayerGroup.layers.push(processedChildGroup.compiledLayer);
-        mapLayerById(processedChildGroup.compiledLayer);
-        for (const nestedCompiledLayer of Object.values(processedChildGroup.compiledLayer.idToLayer)) {
+        mapLayerById(processedChildGroup);
+        for (const nestedCompiledLayer of Object.values(processedChildGroup.idToLayer)) {
           mapLayerById(nestedCompiledLayer);
         }
       }
@@ -1256,7 +1226,7 @@ export class RaverieVisualizer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
     // Apply global uniforms
-    gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.compiledLayer.layer.opacity * parentOpacity);
+    gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
     gl.uniform2f(processedLayerShader.gResolution, width, height);
     gl.uniform1f(processedLayerShader.gTime, timeSeconds);
 
@@ -1273,13 +1243,13 @@ export class RaverieVisualizer {
         continue;
       }
 
-      const value = processedUniform.compiledUniform.shaderValue.value;
+      const value = processedUniform.shaderValue.value;
       // tags: <types>
       switch (processedUniform.type) {
         case "int":
         case "float": {
           const validatedValue = validateGLSLNumber(processedUniform.type, value,
-            processedUniform.compiledUniform.defaultValue);
+            processedUniform.defaultValue);
           if (processedUniform.type === "int") {
             gl.uniform1i(processedUniform.location, validatedValue);
           } else {
@@ -1294,7 +1264,7 @@ export class RaverieVisualizer {
         case "ivec3":
         case "ivec4": {
           const validatedValue = validateGLSLVector(processedUniform.type, value,
-            processedUniform.compiledUniform.defaultValue);
+            processedUniform.defaultValue);
           switch (processedUniform.type) {
             case "vec2":
               gl.uniform2f(processedUniform.location, validatedValue[0], validatedValue[1]);
@@ -1319,7 +1289,7 @@ export class RaverieVisualizer {
         }
         case "sampler2D": {
           const validatedValue = validateGLSLSampler2D(value,
-            processedUniform.compiledUniform.defaultValue);
+            processedUniform.defaultValue);
           const texture = this.getOrCacheTexture(validatedValue.url);
           gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
           gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -1334,9 +1304,9 @@ export class RaverieVisualizer {
             return fallback;
           };
 
-          const filter = choose(validatedValue.filter, processedUniform.compiledUniform.defaultValue.filter, "mipmap");
-          const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.compiledUniform.defaultValue.wrapHorizontal, "repeat");
-          const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.compiledUniform.defaultValue.wrapVertical, "repeat");
+          const filter = choose(validatedValue.filter, processedUniform.defaultValue.filter, "mipmap");
+          const wrapHorizontal = choose(validatedValue.wrapHorizontal, processedUniform.defaultValue.wrapHorizontal, "repeat");
+          const wrapVertical = choose(validatedValue.wrapVertical, processedUniform.defaultValue.wrapVertical, "repeat");
 
           const wrapModeToGLParam = (wrapMode: WrapMode) => {
             switch (wrapMode) {
@@ -1372,7 +1342,7 @@ export class RaverieVisualizer {
         }
         case "gradient": {
           const validatedValue = validateGLSLGradient(value,
-            processedUniform.compiledUniform.defaultValue);
+            processedUniform.defaultValue);
 
           const stops = sortGradientStops(validatedValue);
           let lastStop: ShaderGradientStop = {
@@ -1437,11 +1407,11 @@ export class RaverieVisualizer {
 
     let renderTargetIndex = 0;
     const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
-      const groupOpacity = processedLayerGroup.compiledLayer.layer.opacity * parentOpacity;
+      const groupOpacity = processedLayerGroup.layer.opacity * parentOpacity;
       for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
         const layer = processedLayerGroup.layers[i];
         // Skip invisible layers
-        if (!layer.compiledLayer.layer.visible) {
+        if (!layer.layer.visible) {
           continue;
         }
 
