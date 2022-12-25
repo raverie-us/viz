@@ -124,6 +124,7 @@ export type NumberType = "int" | "float";
 export type NumberVectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
 export type BoolType = "bool";
 export type BoolVectorType = "bvec2" | "bvec3" | "bvec4";
+export type EnumType = "enum";
 export type Sampler2DType = "sampler2D";
 export type GradientType = "gradient";
 
@@ -149,6 +150,15 @@ export interface ShaderValueBool extends ShaderValueBase {
 export interface ShaderValueBoolVector extends ShaderValueBase {
   type: BoolVectorType;
   value: boolean[];
+}
+
+// The value is either the exact enum numeric value (not the index)
+// or a string which will be used to look up the enum numeric value.
+export type EnumValue = number | string;
+
+export interface ShaderValueEnum extends ShaderValueBase {
+  type: EnumType;
+  value: EnumValue;
 }
 
 export type FilterMode = "nearest" | "linear" | "mipmap";
@@ -198,6 +208,7 @@ export type ShaderValue =
   ShaderValueNumberVector |
   ShaderValueBool |
   ShaderValueBoolVector |
+  ShaderValueEnum |
   ShaderValueSampler2D |
   ShaderValueGradient;
 
@@ -248,6 +259,13 @@ export interface CompiledUniformBoolVector extends CompiledUniformBase {
   defaultValue: boolean[];
 }
 
+export interface CompiledUniformEnum extends CompiledUniformBase {
+  type: EnumType;
+  shaderValue: ShaderValueEnum;
+  defaultValue: number;
+  enumDescription: EnumDescription;
+}
+
 export interface CompiledUniformSampler2D extends CompiledUniformBase {
   type: Sampler2DType;
   shaderValue: ShaderValueSampler2D;
@@ -266,6 +284,7 @@ export type CompiledUniform =
   CompiledUniformNumberVector |
   CompiledUniformBool |
   CompiledUniformBoolVector |
+  CompiledUniformEnum |
   CompiledUniformSampler2D |
   CompiledUniformGradient;
 
@@ -417,6 +436,7 @@ type GLSLType =
   NumberVectorType |
   BoolType |
   BoolVectorType |
+  EnumType |
   Sampler2DType |
   GradientType;
 
@@ -444,6 +464,10 @@ interface ProcessedUniformBoolVector extends ProcessedUniformBaseSingleLocation,
   parent: ProcessedLayerShader;
 }
 
+interface ProcessedUniformEnum extends ProcessedUniformBaseSingleLocation, CompiledUniformEnum {
+  parent: ProcessedLayerShader;
+}
+
 interface ProcessedUniformSampler2D extends ProcessedUniformBaseSingleLocation, CompiledUniformSampler2D {
   parent: ProcessedLayerShader;
 }
@@ -464,6 +488,7 @@ type ProcessedUniform =
   ProcessedUniformNumberVector |
   ProcessedUniformBool |
   ProcessedUniformBoolVector |
+  ProcessedUniformEnum |
   ProcessedUniformSampler2D |
   ProcessedUniformGradient;
 
@@ -501,6 +526,7 @@ interface ProcessedComment {
   min?: any;
   max?: any;
   step?: any;
+  enum?: any;
 }
 
 interface ProcessedShaderSuccess {
@@ -606,6 +632,70 @@ const validateGLSLBoolVector = (
   return result;
 }
 
+interface EnumDescription {
+  stringToInt: Record<string, number>;
+  intToString: Record<number, string>;
+  defaultValue: number;
+}
+
+const parseEnumDescription = (enumDefinition: string[] | Record<string, number> | undefined): EnumDescription | null => {
+  if (enumDefinition === undefined) {
+    return null;
+  }
+
+  const result: EnumDescription = {
+    intToString: {},
+    stringToInt: {},
+    defaultValue: 0
+  };
+
+  if (Array.isArray(enumDefinition)) {
+    if (enumDefinition.length === 0) {
+      return null;
+    }
+
+    for (let i = 0; i < enumDefinition.length; ++i) {
+      result.intToString[i] = enumDefinition[i];
+      result.stringToInt[enumDefinition[i]] = i;
+    }
+  } else {
+    const keys = Object.keys(enumDefinition);
+    if (keys.length === 0) {
+      return null;
+    }
+
+    result.defaultValue = enumDefinition[keys[0]];
+
+    for (const key of keys) {
+      const enumValue = enumDefinition[key];
+      result.intToString[enumValue] = key;
+      result.stringToInt[key] = enumValue;
+    }
+  }
+
+  return result;
+};
+
+const validateGLSLEnum = (glslType: EnumType, value: any, validatedDefault: number, enumDescription: EnumDescription): number => {
+  if (value === undefined || value === null) {
+    return validatedDefault;
+  }
+
+  if (typeof value === "number") {
+    // As long as it's a valid enum value
+    if (enumDescription.intToString[value]) {
+      return value;
+    }
+  } else if (typeof value === "string") {
+    const enumValue = enumDescription.stringToInt[value];
+    if (enumValue !== undefined) {
+      return enumValue;
+    }
+  }
+
+  return validatedDefault;
+}
+
 const validateGLSLSampler2D = (glslType: Sampler2DType, value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
   if (value === undefined) {
     return validatedDefault;
@@ -659,6 +749,7 @@ const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefau
 // validateGLSLNumberVector
 // validateGLSLBool
 // validateGLSLBoolVector
+// validateGLSLEnum
 // validateGLSLSampler2D
 // validateGLSLGradient
 
@@ -1164,6 +1255,27 @@ export class RaverieVisualizer {
       switch (type) {
         case "int":
         case "float": {
+          if (type === "int") {
+            const enumDescription = parseEnumDescription(parsedComment.enum);
+            if (enumDescription) {
+              const defaultValue = validateGLSLEnum("enum", parsedComment.default, 0, enumDescription);
+              return pass<ProcessedUniformEnum>({
+                type: "enum",
+                location,
+                name,
+                parent: processedLayerShader,
+                parsedComment,
+                shaderValue: {
+                  name,
+                  type: "enum",
+                  value: validateGLSLEnum("enum", foundShaderValue?.value, defaultValue, enumDescription)
+                },
+                defaultValue,
+                enumDescription
+              });
+            }
+          }
+
           const defaultValue = validateGLSLNumber(type, parsedComment.default);
           return pass<ProcessedUniformNumber>({
             type,
@@ -1455,6 +1567,12 @@ export class RaverieVisualizer {
                 gl.uniform4i(processedUniform.location, Number(validatedValue[0]), Number(validatedValue[1]), Number(validatedValue[2]), Number(validatedValue[3]));
                 break;
             }
+            break;
+          }
+          case "enum": {
+            const validatedValue = validateGLSLEnum(processedUniform.type, value,
+              processedUniform.defaultValue, processedUniform.enumDescription);
+            gl.uniform1i(processedUniform.location, validatedValue);
             break;
           }
           case "sampler2D": {
