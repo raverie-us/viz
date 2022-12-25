@@ -601,7 +601,7 @@ const validateGLSLBoolVector = (
   const components = getBoolVectorComponents(glslType);
   const result: boolean[] = [];
   for (let i = 0; i < components; ++i) {
-    result[i] = validateGLSLBool(value[i], validatedDefault[i]);
+    result[i] = validateGLSLBool("bool", value[i], validatedDefault[i]);
   }
   return result;
 }
