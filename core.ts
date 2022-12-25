@@ -1399,6 +1399,22 @@ export class RaverieVisualizer {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
+  private clearRenderTargetInternal(renderTarget: RenderTarget, width: number, height: number) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
+    gl.clearColor(1, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    this.renderLayerShaderInternal(
+      this.checkerboardShader,
+      1.0,
+      renderTarget.buffer,
+      null,
+      width,
+      height,
+      0);
+  };
+
   public render(timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
@@ -1450,22 +1466,8 @@ export class RaverieVisualizer {
       }
     }
 
-    const clearRenderTarget = (renderTarget: RenderTarget) => {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
-      gl.clearColor(1, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      this.renderLayerShaderInternal(
-        this.checkerboardShader,
-        1.0,
-        renderTarget.buffer,
-        null,
-        targetsInternal.widthInternal,
-        targetsInternal.heightInternal,
-        timeSeconds);
-    };
-
-    clearRenderTarget(targetsInternal.targets[0]);
-    clearRenderTarget(targetsInternal.targets[1]);
+    this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
+    this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
 
     renderRecursive(this.processedGroup, 1.0);
 
