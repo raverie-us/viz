@@ -738,8 +738,6 @@ export class RaverieVisualizer {
   private readonly gl: WebGL2RenderingContext;
   private readonly loadTexture: LoadTextureFunction;
 
-  private processedGroup: ProcessedLayerGroup | null = null;
-
   private textureCache: Record<string, WebGLTexture | undefined> = {};
 
   private readonly vertexShader: WebGLShader;
@@ -916,10 +914,9 @@ export class RaverieVisualizer {
   public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone"): CompiledLayerGroup {
     // Let the user pick if we make a copy, because we're going to potentially
     // modify the group such as if we find new uniforms within the shaders
-    this.processedGroup = this.compileLayerGroup(mode === "clone"
+    return this.compileLayerGroup(mode === "clone"
       ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
       : layerGroup, null);
-    return this.processedGroup;
   }
 
   private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
@@ -1385,7 +1382,8 @@ export class RaverieVisualizer {
       0);
   };
 
-  public render(timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
+  public render(group: CompiledLayerGroup, timeStampMs: number, renderTargets: RenderTargets, options?: RenderOptions): number {
+    const processedGroup = group as ProcessedLayerGroup;
     const frameTimeSeconds = this.lastTimeStampMs === -1
       ? defaultFrameTime
       : (timeStampMs - this.lastTimeStampMs) / 1000;
@@ -1393,10 +1391,6 @@ export class RaverieVisualizer {
 
     if (this.onBeforeRender) {
       this.onBeforeRender(frameTimeSeconds);
-    }
-
-    if (!this.processedGroup) {
-      return frameTimeSeconds;
     }
 
     const gl = this.gl;
@@ -1439,7 +1433,7 @@ export class RaverieVisualizer {
     this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
     this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    renderRecursive(this.processedGroup, 1.0);
+    renderRecursive(processedGroup, 1.0);
 
     const drawToBackBuffer = options?.drawToBackBuffer === undefined
       ? true
