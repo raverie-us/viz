@@ -1434,6 +1434,8 @@ export class RaverieVisualizer {
     const results: Record<string, Uint8Array> = {};
     for (const processedLayer of Object.values(processedLayerGroup.idToLayer)) {
       if (processedLayer.type === "shader") {
+        const blendMode = processedLayer.layer.blendMode;
+        processedLayer.layer.blendMode = "normal";
         this.renderLayerShaderInternal(
           processedLayer,
           1.0,
@@ -1443,6 +1445,7 @@ export class RaverieVisualizer {
           targetsInternal.heightInternal,
           timeSeconds,
           onRender);
+        processedLayer.layer.blendMode = blendMode;
       }
     }
     return results;
