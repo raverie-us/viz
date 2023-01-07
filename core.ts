@@ -318,7 +318,7 @@ export interface CompiledUniformButton extends CompiledUniformBase {
 }
 
 export type AxisFromButtons = Record<number, InputIdentifier> & {
-  default: number;
+  default?: number;
 }
 
 export type AxisControlDefaults = Record<DeviceIdentifier, InputIdentifier | AxisFromButtons>;
@@ -427,6 +427,8 @@ export const defaultButton = (): ShaderButton => ({
 export const defaultAxis = (): ShaderAxis => ({
   value: 0
 });
+
+export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export const sortGradientStops = (gradient: ShaderGradient): ShaderGradientStop[] => {
   const stops = [...gradient.stops];
@@ -950,12 +952,12 @@ struct gButton {
   bool touchTriggered;
   bool touchReleased;
   float value;
-}
+};
 #define button gButton
 
 struct gAxis {
   float value;
-}
+};
 #define axis gAxis
 
 ${blendModeList.map((blendMode, index) =>
@@ -1072,6 +1074,16 @@ interface RenderTargetsInternal {
 const DEFAULT_CHECKER_SIZE = 8;
 
 export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
+export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => {
+  buttonHeld: boolean;
+  touchHeld: boolean;
+  // [0, 1]
+  value: number;
+};
+export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => {
+  // [-1, 1]
+  value: number;
+};
 
 export class RaverieVisualizer {
   private readonly gl: WebGL2RenderingContext;
@@ -1087,6 +1099,9 @@ export class RaverieVisualizer {
 
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
+
+  private buttonStates: Record<DeviceIdentifier, Record<InputIdentifier, ShaderButton | undefined> | undefined> = {};
+  private axisStates: Record<DeviceIdentifier, Record<InputIdentifier, ShaderAxis | undefined> | undefined> = {};
 
   private lastTimeStampMs: number = -1;
 
@@ -1935,6 +1950,103 @@ export class RaverieVisualizer {
     }
     return results;
   };
+
+  public updateControls(
+    compiledLayerGroup: CompiledLayerGroup,
+    onSampleButton: SampleButtonCallback,
+    onSampleAxis: SampleAxisCallback) {
+
+    const prevButtonStates = this.buttonStates;
+    this.buttonStates = {};
+    const prevAxisStates = this.axisStates;
+    this.axisStates = {};
+
+    const updateButton = (deviceId: DeviceIdentifier, inputId: InputIdentifier): ShaderButton => {
+      const device = this.buttonStates[deviceId] || {};
+      this.buttonStates[deviceId] = device;
+
+      const button = device[inputId];
+      if (button) {
+        return button;
+      } else {
+        let prevButtonHeld = false;
+        let prevTouchHeld = false;
+
+        const prevDevice = prevButtonStates[deviceId];
+        if (prevDevice) {
+          const prevState = prevDevice[inputId];
+          if (prevState) {
+            prevButtonHeld = prevState.buttonHeld;
+            prevTouchHeld = prevState.touchHeld;
+          }
+        }
+
+        const state = onSampleButton(deviceId, inputId);
+        const newButton: ShaderButton = {
+          buttonHeld: state.buttonHeld,
+          buttonTriggered: state.buttonHeld && !prevButtonHeld,
+          buttonReleased: !state.buttonHeld && prevButtonHeld,
+          touchHeld: state.touchHeld,
+          touchTriggered: state.touchHeld && !prevTouchHeld,
+          touchReleased: !state.touchHeld && prevTouchHeld,
+          value: state.value
+        };
+        device[inputId] = newButton;
+        return newButton;
+      }
+    };
+
+    const walk = (compiledLayer: CompiledLayer) => {
+      if (compiledLayer.type === "group") {
+        for (const childLayer of compiledLayer.layers) {
+          walk(childLayer);
+        }
+      } else {
+        for (const uniform of compiledLayer.uniforms) {
+          if (uniform.type === "button") {
+            // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
+            // basically we almost want that to be the "shader value", maybe in the future we'll have it all
+            for (const deviceId in uniform.controlDefaults) {
+              const inputId = uniform.controlDefaults[deviceId];
+              uniform.shaderValue.value = updateButton(deviceId, inputId);
+            }
+          } else if (uniform.type === "axis") {
+            // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
+            // basically we almost want that to be the "shader value", maybe in the future we'll have it all
+            for (const deviceId in uniform.controlDefaults) {
+              const inputId = uniform.controlDefaults[deviceId];
+              const device = this.axisStates[deviceId] || {};
+              this.axisStates[deviceId] = device;
+
+              if (typeof inputId === "object") {
+                let axis = inputId.default || 0;
+                for (const key in inputId) {
+                  if (key !== "default") {
+                    const valueIfPressed = Number(key);
+
+                  }
+                }
+                axis = clamp(axis, -1, 1);
+                //TODO
+                //uniform.shaderValue.value = axis;
+              } else {
+                const axis = device[inputId];
+                if (axis) {
+                  uniform.shaderValue.value = axis;
+                } else {
+                  const state = onSampleAxis(deviceId, inputId);
+                  uniform.shaderValue.value = state;
+                  device[inputId] = state;
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    walk(compiledLayerGroup);
+  }
 
   public render(
     compiledLayerGroup: CompiledLayerGroup,
