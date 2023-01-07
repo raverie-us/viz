@@ -1718,6 +1718,8 @@ export class RaverieVisualizer {
       if (processedLayer.type === "shader") {
         const blendMode = processedLayer.layer.blendMode;
         processedLayer.layer.blendMode = "normal";
+        const opacity = processedLayer.layer.opacity;
+        processedLayer.layer.opacity = 1.0;
         this.renderLayerShaderInternal(
           processedLayer,
           1.0,
@@ -1728,6 +1730,7 @@ export class RaverieVisualizer {
           timeSeconds,
           onRender);
         processedLayer.layer.blendMode = blendMode;
+        processedLayer.layer.opacity = opacity;
       }
     }
     return results;
