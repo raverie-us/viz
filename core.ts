@@ -639,7 +639,7 @@ interface EnumDescription {
 }
 
 const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
-  if (typeof enumDefinition !== "object") {
+  if (typeof enumDefinition !== "object" || enumDefinition === null) {
     return null;
   }
 
@@ -686,10 +686,6 @@ const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
 };
 
 const validateGLSLEnum = (glslType: EnumType, value: any, validatedDefault: number, enumDescription: EnumDescription): number => {
-  if (value === undefined || value === null) {
-    return validatedDefault;
-  }
-
   if (typeof value === "number") {
     // As long as it's a valid enum value
     if (enumDescription.intToString[value]) {
@@ -706,11 +702,11 @@ const validateGLSLEnum = (glslType: EnumType, value: any, validatedDefault: numb
 }
 
 const validateGLSLSampler2D = (glslType: Sampler2DType, value: any, validatedDefault: ShaderTexture = { url: "" }): ShaderTexture => {
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     return validatedDefault;
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (typeof value === "object") {
     if (typeof value.url === "string") {
       return value;
     }
@@ -721,11 +717,11 @@ const validateGLSLSampler2D = (glslType: Sampler2DType, value: any, validatedDef
 }
 
 const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefault: ShaderGradient = defaultGradient()): ShaderGradient => {
-  if (value === undefined) {
+  if (value === undefined || value !== null) {
     return validatedDefault;
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (typeof value === "object") {
     if (Array.isArray(value.stops)) {
       return value;
     }
