@@ -1086,7 +1086,7 @@ export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdenti
 };
 
 export class RaverieVisualizer {
-  private readonly gl: WebGL2RenderingContext;
+  public readonly gl: WebGL2RenderingContext;
   private readonly loadTexture: LoadTextureFunction;
 
   private textureCache: Record<string, WebGLTexture | undefined> = {};
@@ -1106,6 +1106,9 @@ export class RaverieVisualizer {
   private lastTimeStampMs: number = -1;
 
   public onBeforeRender: RenderCallback | null = null;
+
+  public onSampleButton: SampleButtonCallback | null = null;
+  public onSampleAxis: SampleAxisCallback | null = null;
 
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction) {
     this.gl = gl;
@@ -1571,6 +1574,7 @@ export class RaverieVisualizer {
 
           return pass<ProcessedUniformButton>({
             type,
+            location: true,
             name,
             parent: processedLayerShader,
             parsedComment,
@@ -1594,6 +1598,7 @@ export class RaverieVisualizer {
 
           return pass<ProcessedUniformAxis>({
             type,
+            location: true,
             name,
             parent: processedLayerShader,
             parsedComment,
@@ -1951,21 +1956,23 @@ export class RaverieVisualizer {
     return results;
   };
 
-  public updateControls(
-    compiledLayerGroup: CompiledLayerGroup,
-    onSampleButton: SampleButtonCallback,
-    onSampleAxis: SampleAxisCallback) {
+  private updateControls(compiledLayerGroup: CompiledLayerGroup) {
+    if (!this.onSampleButton || !this.onSampleAxis) {
+      return
+    }
+    const onSampleButton = this.onSampleButton;
+    const onSampleAxis = this.onSampleAxis;
 
     const prevButtonStates = this.buttonStates;
     this.buttonStates = {};
     const prevAxisStates = this.axisStates;
     this.axisStates = {};
 
-    const updateButton = (deviceId: DeviceIdentifier, inputId: InputIdentifier): ShaderButton => {
+    const updateButton = (deviceId: DeviceIdentifier, buttonInputId: InputIdentifier): ShaderButton => {
       const device = this.buttonStates[deviceId] || {};
       this.buttonStates[deviceId] = device;
 
-      const button = device[inputId];
+      const button = device[buttonInputId];
       if (button) {
         return button;
       } else {
@@ -1974,14 +1981,14 @@ export class RaverieVisualizer {
 
         const prevDevice = prevButtonStates[deviceId];
         if (prevDevice) {
-          const prevState = prevDevice[inputId];
+          const prevState = prevDevice[buttonInputId];
           if (prevState) {
             prevButtonHeld = prevState.buttonHeld;
             prevTouchHeld = prevState.touchHeld;
           }
         }
 
-        const state = onSampleButton(deviceId, inputId);
+        const state = onSampleButton(deviceId, buttonInputId);
         const newButton: ShaderButton = {
           buttonHeld: state.buttonHeld,
           buttonTriggered: state.buttonHeld && !prevButtonHeld,
@@ -1991,7 +1998,7 @@ export class RaverieVisualizer {
           touchReleased: !state.touchHeld && prevTouchHeld,
           value: state.value
         };
-        device[inputId] = newButton;
+        device[buttonInputId] = newButton;
         return newButton;
       }
     };
@@ -2014,29 +2021,33 @@ export class RaverieVisualizer {
             // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
             // basically we almost want that to be the "shader value", maybe in the future we'll have it all
             for (const deviceId in uniform.controlDefaults) {
-              const inputId = uniform.controlDefaults[deviceId];
+              const axisInputId = uniform.controlDefaults[deviceId];
               const device = this.axisStates[deviceId] || {};
               this.axisStates[deviceId] = device;
 
-              if (typeof inputId === "object") {
-                let axis = inputId.default || 0;
-                for (const key in inputId) {
+              if (typeof axisInputId === "object") {
+                const axisFromButtons = axisInputId;
+                let axis = axisFromButtons.default || 0;
+                for (const key in axisFromButtons) {
+                  const buttonInputId = axisFromButtons[key];
                   if (key !== "default") {
                     const valueIfPressed = Number(key);
-
+                    const state = onSampleButton(deviceId, buttonInputId);
+                    if (state.buttonHeld) {
+                      axis += valueIfPressed;
+                    }
                   }
                 }
                 axis = clamp(axis, -1, 1);
-                //TODO
-                //uniform.shaderValue.value = axis;
+                uniform.shaderValue.value.value = axis;
               } else {
-                const axis = device[inputId];
+                const axis = device[axisInputId];
                 if (axis) {
                   uniform.shaderValue.value = axis;
                 } else {
-                  const state = onSampleAxis(deviceId, inputId);
+                  const state = onSampleAxis(deviceId, axisInputId);
                   uniform.shaderValue.value = state;
-                  device[inputId] = state;
+                  device[axisInputId] = state;
                 }
               }
             }
@@ -2062,6 +2073,8 @@ export class RaverieVisualizer {
     if (this.onBeforeRender) {
       this.onBeforeRender(frameTimeSeconds);
     }
+
+    this.updateControls(compiledLayerGroup);
 
     const gl = this.gl;
     const targetsInternal = renderTargets as any as RenderTargetsInternal;

@@ -15,6 +15,37 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
     };
     img.src = url;
   }
- 
-  return new RaverieVisualizer(gl, loadTexture);
+
+  const visualizer = new RaverieVisualizer(gl, loadTexture);
+
+  const keyStates: Record<string | number, boolean> = {};
+
+  // Allow the canvas to take focus
+  canvas.tabIndex = 1;
+  canvas.addEventListener("pointerdown", () => {
+    canvas.focus();
+  });
+
+  canvas.addEventListener("keydown", (e) => {
+    keyStates[e.key] = true;
+    keyStates[e.which] = true;
+  });
+  canvas.addEventListener("keyup", (e) => {
+    keyStates[e.key] = false;
+    keyStates[e.which] = false;
+  });
+
+  visualizer.onSampleButton = (device, inputId) => {
+    if (device === "keyboard") {
+      const state = Boolean(keyStates[inputId]);
+      return { value: Number(state), buttonHeld: state, touchHeld: state };
+    }
+    return { value: 0, buttonHeld: false, touchHeld: false };
+  };
+
+  visualizer.onSampleAxis = (device, inputId) => {
+    return { value: 0, buttonHeld: false, touchHeld: false };
+  };
+
+  return visualizer;
 };
