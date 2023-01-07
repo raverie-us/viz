@@ -896,6 +896,8 @@ void main() {
   gFragColor = gApplyBlendMode(gBlendMode, gOpacity, source, dest);
 }`;
 
+const blendModeEnumDescription = parseEnumDescription(blendModeList);
+
 export type RenderCallback = (frameTimeSeconds: number) => void;
 
 export const defaultFrameTime = 1 / 60;
@@ -1265,7 +1267,10 @@ export class RaverieVisualizer {
         case "int":
         case "float": {
           if (type === "int") {
-            const enumDescription = parseEnumDescription(parsedComment.enum);
+            const enumDescription = parsedComment.enum === "blendMode"
+              ? blendModeEnumDescription
+              : parseEnumDescription(parsedComment.enum);
+              
             if (enumDescription) {
               const defaultValue = validateGLSLEnum("enum", parsedComment.default, 0, enumDescription);
               return pass<ProcessedUniformEnum>({
