@@ -127,6 +127,8 @@ export type BoolVectorType = "bvec2" | "bvec3" | "bvec4";
 export type EnumType = "enum";
 export type Sampler2DType = "sampler2D";
 export type GradientType = "gradient";
+export type ButtonType = "button";
+export type AxisType = "axis";
 
 export interface ShaderValueBase {
   name: string;
@@ -202,6 +204,30 @@ export interface ShaderValueGradient extends ShaderValueBase {
   value: ShaderGradient;
 }
 
+export interface ShaderButton {
+  buttonHeld: boolean;
+  buttonTriggered: boolean;
+  buttonReleased: boolean;
+  touchHeld: boolean;
+  touchTriggered: boolean;
+  touchReleased: boolean;
+  value: number;
+}
+
+export interface ShaderValueButton extends ShaderValueBase {
+  type: ButtonType;
+  value: ShaderButton;
+}
+
+export interface ShaderAxis {
+  value: number;
+}
+
+export interface ShaderValueAxis extends ShaderValueBase {
+  type: AxisType;
+  value: ShaderAxis;
+}
+
 // tags: <types>
 export type ShaderValue =
   ShaderValueNumber |
@@ -210,7 +236,9 @@ export type ShaderValue =
   ShaderValueBoolVector |
   ShaderValueEnum |
   ShaderValueSampler2D |
-  ShaderValueGradient;
+  ShaderValueGradient |
+  ShaderValueButton |
+  ShaderValueAxis;
 
 export type ShaderType = number | number[] | ShaderTexture;
 
@@ -278,6 +306,29 @@ export interface CompiledUniformGradient extends CompiledUniformBase {
   defaultValue: ShaderGradient;
 }
 
+export type DeviceIdentifier = string;
+export type InputIdentifier = string | number;
+
+export type ButtonControlDefaults = Record<DeviceIdentifier, InputIdentifier>;
+
+export interface CompiledUniformButton extends CompiledUniformBase {
+  type: ButtonType;
+  shaderValue: ShaderValueButton;
+  controlDefaults: ButtonControlDefaults;
+}
+
+export type AxisFromButtons = Record<number, InputIdentifier> & {
+  default: number;
+}
+
+export type AxisControlDefaults = Record<DeviceIdentifier, InputIdentifier | AxisFromButtons>;
+
+export interface CompiledUniformAxis extends CompiledUniformBase {
+  type: AxisType;
+  shaderValue: ShaderValueAxis;
+  controlDefaults: AxisControlDefaults;
+}
+
 // tags: <types>
 export type CompiledUniform =
   CompiledUniformNumber |
@@ -286,7 +337,9 @@ export type CompiledUniform =
   CompiledUniformBoolVector |
   CompiledUniformEnum |
   CompiledUniformSampler2D |
-  CompiledUniformGradient;
+  CompiledUniformGradient |
+  CompiledUniformButton |
+  CompiledUniformAxis;
 
 export interface CompiledError {
   line: number;
@@ -359,6 +412,20 @@ export const defaultGradient = (): ShaderGradient => ({
       color: [1, 1, 1, 1]
     },
   ]
+});
+
+export const defaultButton = (): ShaderButton => ({
+  buttonHeld: false,
+  buttonTriggered: false,
+  buttonReleased: false,
+  touchHeld: false,
+  touchTriggered: false,
+  touchReleased: false,
+  value: 0
+});
+
+export const defaultAxis = (): ShaderAxis => ({
+  value: 0
 });
 
 export const sortGradientStops = (gradient: ShaderGradient): ShaderGradientStop[] => {
@@ -438,10 +505,13 @@ type GLSLType =
   BoolVectorType |
   EnumType |
   Sampler2DType |
-  GradientType;
+  GradientType |
+  ButtonType |
+  AxisType;
 
 interface ProcessedUniformBase extends CompiledUniformBase {
   parent: ProcessedLayerShader;
+  location?: any;
 }
 
 interface ProcessedUniformBaseSingleLocation extends ProcessedUniformBase {
@@ -482,6 +552,22 @@ interface ProcessedUniformGradient extends ProcessedUniformBase, CompiledUniform
   location: ProcessedGradientLocation[] | null;
 }
 
+interface ProcessedUniformButton extends ProcessedUniformBase, CompiledUniformButton {
+  parent: ProcessedLayerShader;
+  locationButtonHeld: WebGLUniformLocation | null;
+  locationButtonTriggered: WebGLUniformLocation | null;
+  locationButtonReleased: WebGLUniformLocation | null;
+  locationTouchHeld: WebGLUniformLocation | null;
+  locationTouchTriggered: WebGLUniformLocation | null;
+  locationTouchReleased: WebGLUniformLocation | null;
+  locationValue: WebGLUniformLocation | null;
+}
+
+interface ProcessedUniformAxis extends ProcessedUniformBase, CompiledUniformAxis {
+  parent: ProcessedLayerShader;
+  locationValue: WebGLUniformLocation | null;
+}
+
 // tags: <types>
 type ProcessedUniform =
   ProcessedUniformNumber |
@@ -490,7 +576,9 @@ type ProcessedUniform =
   ProcessedUniformBoolVector |
   ProcessedUniformEnum |
   ProcessedUniformSampler2D |
-  ProcessedUniformGradient;
+  ProcessedUniformGradient |
+  ProcessedUniformButton |
+  ProcessedUniformAxis;
 
 interface NewUniform {
   type: GLSLType;
@@ -527,6 +615,7 @@ interface ProcessedComment {
   max?: any;
   step?: any;
   enum?: any;
+  controls?: any;
 }
 
 interface ProcessedShaderSuccess {
@@ -747,6 +836,40 @@ const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefau
   return validatedDefault;
 }
 
+const validateGLSLButton = (glslType: ButtonType, value: any, validatedDefault: ShaderButton = defaultButton()): ShaderButton => {
+  if (typeof value !== "object" || value === null) {
+    return validatedDefault;
+  }
+
+  const isValid =
+    typeof value.buttonHeld === "boolean" &&
+    typeof value.buttonTriggered === "boolean" &&
+    typeof value.buttonReleased === "boolean" &&
+    typeof value.touchHeld === "boolean" &&
+    typeof value.touchTriggered === "boolean" &&
+    typeof value.touchReleased === "boolean" &&
+    typeof value.value === "number";
+
+  if (isValid) {
+    return value;
+  }
+  return validatedDefault;
+}
+
+const validateGLSLAxis = (glslType: AxisType, value: any, validatedDefault: ShaderAxis = defaultAxis()): ShaderAxis => {
+  if (typeof value !== "object" || value === null) {
+    return validatedDefault;
+  }
+
+  const isValid =
+    typeof value.value === "number";
+
+  if (isValid) {
+    return value;
+  }
+  return validatedDefault;
+}
+
 // tags: <types>
 // validateGLSLFloat
 // validateGLSLInt
@@ -757,6 +880,8 @@ const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefau
 // validateGLSLEnum
 // validateGLSLSampler2D
 // validateGLSLGradient
+// validateGLSLButton
+// validateGLSLAxis
 
 export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => void;
 
@@ -816,6 +941,22 @@ vec4 gSampleGradient(gradient stops, float t) {
   }
   return prevStop.color;
 }
+
+struct gButton {
+  bool buttonHeld;
+  bool buttonTriggered;
+  bool buttonReleased;
+  bool touchHeld;
+  bool touchTriggered;
+  bool touchReleased;
+  float value;
+}
+#define button gButton
+
+struct gAxis {
+  float value;
+}
+#define axis gAxis
 
 ${blendModeList.map((blendMode, index) =>
   `const int gBlendMode${blendMode[0].toUpperCase()}${blendMode.substring(1)} = ${index};`).join("\n")}
@@ -1143,7 +1284,7 @@ export class RaverieVisualizer {
 
     // tags: <types>
     const uniformRegex =
-      /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|bool|bvec2|bvec3|bvec4|sampler2D|gradient)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
+      /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|bool|bvec2|bvec3|bvec4|sampler2D|gradient|button|axis)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
 
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
@@ -1404,6 +1545,52 @@ export class RaverieVisualizer {
             defaultValue,
           });
         }
+        case "button": {
+          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`)
+          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`)
+          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`)
+          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`)
+          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`)
+          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`)
+          const locationValue = getUniformLocation(`${name}.value`)
+
+          return pass<ProcessedUniformButton>({
+            type,
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            locationButtonHeld,
+            locationButtonTriggered,
+            locationButtonReleased,
+            locationTouchHeld,
+            locationTouchTriggered,
+            locationTouchReleased,
+            locationValue,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLButton(type, foundShaderValue?.value)
+            },
+            controlDefaults: parsedComment.controls
+          });
+        }
+        case "axis": {
+          const locationValue = getUniformLocation(`${name}.value`)
+
+          return pass<ProcessedUniformAxis>({
+            type,
+            name,
+            parent: processedLayerShader,
+            parsedComment,
+            locationValue,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLAxis(type, foundShaderValue?.value)
+            },
+            controlDefaults: parsedComment.controls
+          });
+        }
         default: throw new Error(`Unexpected GLSL type '${type}'`)
       }
     });
@@ -1656,6 +1843,23 @@ export class RaverieVisualizer {
             }
             break;
           }
+          case "button": {
+            const validatedValue = validateGLSLButton(processedUniform.type, value);
+            gl.uniform1i(processedUniform.locationButtonHeld, Number(validatedValue.buttonHeld));
+            gl.uniform1i(processedUniform.locationButtonTriggered, Number(validatedValue.buttonTriggered));
+            gl.uniform1i(processedUniform.locationButtonReleased, Number(validatedValue.buttonReleased));
+            gl.uniform1i(processedUniform.locationTouchHeld, Number(validatedValue.touchHeld));
+            gl.uniform1i(processedUniform.locationTouchTriggered, Number(validatedValue.touchTriggered));
+            gl.uniform1i(processedUniform.locationTouchReleased, Number(validatedValue.touchReleased));
+            gl.uniform1f(processedUniform.locationValue, validatedValue.value);
+            break;
+          }
+          case "axis": {
+            const validatedValue = validateGLSLAxis(processedUniform.type, value);
+            gl.uniform1f(processedUniform.locationValue, validatedValue.value);
+            break;
+          }
+
           default: throw new Error(`Unexpected GLSL type '${(processedUniform as any).type}'`)
         }
       }
