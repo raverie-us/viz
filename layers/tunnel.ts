@@ -22,6 +22,7 @@ uniform float rotateSpeed; // default: 0.1, min: -1, max: 1
 uniform int rotateRepeat; // default: 2, min: 1, max: 10
 uniform float zoom; // default: 0.5, min: 0, max: 1
 uniform gradient depthGradient; // default: {0:[1,1,1,1], 1:[0,0,0,1]}
+uniform int depthBlendMode; // enum: "blendMode", default: "multiply"
 
 vec2 mirror(vec2 value) {
   vec2 modded = mod(abs(value), vec2(2));
@@ -43,8 +44,9 @@ vec4 render() {
 
   vec4 color =  texture(gPreviousLayer, mirror(uv * float(rotateRepeat)));
 
-  color *= gSampleGradient(depthGradient, 1.0 - min(r, 1.0));
-  return color;
+  vec4 grad = gSampleGradient(depthGradient, 1.0 - min(r, 1.0));
+
+  return gApplyBlendMode(depthBlendMode, 1.0, color, grad);
 }`,
   blendMode: "normal",
   opacity: 1,
