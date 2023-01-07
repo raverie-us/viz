@@ -15,6 +15,6 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
     };
     img.src = url;
   }
-
-  return new RaverieVisualizer(gl, loadTexture, canvas.width, canvas.height);
+ 
+  return new RaverieVisualizer(gl, loadTexture);
 };
