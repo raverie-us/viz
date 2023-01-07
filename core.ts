@@ -1270,9 +1270,9 @@ export class RaverieVisualizer {
             const enumDescription = parsedComment.enum === "blendMode"
               ? blendModeEnumDescription
               : parseEnumDescription(parsedComment.enum);
-              
+
             if (enumDescription) {
-              const defaultValue = validateGLSLEnum("enum", parsedComment.default, 0, enumDescription);
+              const defaultValue = validateGLSLEnum("enum", parsedComment.default, enumDescription.defaultValue, enumDescription);
               return pass<ProcessedUniformEnum>({
                 type: "enum",
                 location,
