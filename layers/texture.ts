@@ -8,11 +8,11 @@ export const textureLayer: LayerShader = {
   code: `
 uniform sampler2D textureInput;
 
-// TODO(trevor): Support bool values, or mark that these are extra modes for textureInput wrap
+// TODO(trevor): Mark that these are extra modes for textureInput wrap
 // This is sort of a neat idea, we can basically extend enums and other uniforms
-uniform int horizontalBackground; // default: 1, min: 0, max: 1
-uniform int verticalBackground; // default: 1, min: 0, max: 1
-uniform vec4 background; // type: "color"
+uniform bool horizontalBackground; // default: true
+uniform bool verticalBackground; // default: true
+uniform vec4 backgroundColor; // type: "color"
 
 uniform vec2 position; // type: "position"
 uniform vec2 scale; // default: [1,1]
@@ -49,11 +49,11 @@ vec4 render() {
     uv = pos * 0.5 + 0.5;
   }
 
-  if (horizontalBackground == 1 && (uv.x < 0.0 || uv.x > 1.0)) {
-    return background;
+  if (horizontalBackground && (uv.x < 0.0 || uv.x > 1.0)) {
+    return backgroundColor;
   }
-  if (verticalBackground == 1 && (uv.y < 0.0 || uv.y > 1.0)) {
-    return background;
+  if (verticalBackground && (uv.y < 0.0 || uv.y > 1.0)) {
+    return backgroundColor;
   }
   
   return texture(textureInput, uv);
