@@ -794,20 +794,20 @@ mat2 gRotateMatrix2D(float radians) {
   return mat2(c, s, -s, c);
 }
 
-struct GradientStop {
+struct gGradientStop {
   float t;
   vec4 color;
 };
 const int gMaxGradientStops = ${maxGradientStops};
-#define gradient GradientStop[gMaxGradientStops]
+#define gradient gGradientStop[gMaxGradientStops]
 
 vec4 gSampleGradient(gradient stops, float t) {
   // Since the array is always a fixed size, the last entries are duplicated to fill the array
   t = t == 1.0 ? 1.0 : fract(t);
-  GradientStop prevStop = stops[0];
+  gGradientStop prevStop = stops[0];
   prevStop.t = 0.0;
   for (int i = 0; i < gMaxGradientStops; ++i) {
-    GradientStop stop = stops[i];
+    gGradientStop stop = stops[i];
     if (t < stop.t) {
       float interpolant = (t - prevStop.t) / (stop.t - prevStop.t);
       return mix(prevStop.color, stop.color, interpolant);
