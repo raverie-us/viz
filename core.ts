@@ -638,8 +638,8 @@ interface EnumDescription {
   defaultValue: number;
 }
 
-const parseEnumDescription = (enumDefinition: string[] | Record<string, number> | undefined): EnumDescription | null => {
-  if (enumDefinition === undefined) {
+const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
+  if (typeof enumDefinition !== "object") {
     return null;
   }
 
@@ -655,8 +655,13 @@ const parseEnumDescription = (enumDefinition: string[] | Record<string, number> 
     }
 
     for (let i = 0; i < enumDefinition.length; ++i) {
-      result.intToString[i] = enumDefinition[i];
-      result.stringToInt[enumDefinition[i]] = i;
+      const key = enumDefinition[i];
+      if (typeof key !== "string") {
+        return null;
+      }
+
+      result.intToString[i] = key;
+      result.stringToInt[key] = i;
     }
   } else {
     const keys = Object.keys(enumDefinition);
@@ -668,6 +673,10 @@ const parseEnumDescription = (enumDefinition: string[] | Record<string, number> 
 
     for (const key of keys) {
       const enumValue = enumDefinition[key];
+      if (typeof enumValue !== "number") {
+        return null;
+      }
+
       result.intToString[enumValue] = key;
       result.stringToInt[key] = enumValue;
     }
