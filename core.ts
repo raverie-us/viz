@@ -1236,7 +1236,7 @@ export class RaverieVisualizer {
     return { shader };
   }
 
-  private createProgram(fragmentShader: string, blendMode: LayerShaderBlendMode): ProcessedProgram {
+  private createProgram(fragmentShader: string): ProcessedProgram {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
@@ -1284,7 +1284,7 @@ export class RaverieVisualizer {
 
   private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
     const gl = this.gl;
-    const processedProgram = this.createProgram(layerShader.code, layerShader.blendMode);
+    const processedProgram = this.createProgram(layerShader.code);
 
     if (processedProgram.error) {
       if (throwOnError) {
