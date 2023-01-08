@@ -1,4 +1,11 @@
-import { CompactUniforms, CompiledLayerJavaScript, LayerJavaScript, RaverieVisualizer } from "./core";
+import {
+  CompactUniforms,
+  CompiledLayerJavaScript,
+  DeviceIdentifier,
+  InputIdentifier,
+  LayerJavaScript,
+  RaverieVisualizer
+} from "./core";
 
 interface RenderMessage {
   type: "render";
@@ -31,6 +38,49 @@ window.addEventListener("message", async (e) => {
     }, "*");
   }
 });`;
+
+export const deviceKeyboard = "keyboard";
+export const devicePointer = "pointer";
+export const deviceGamepad = "gamepad";
+
+export type InputTriggeredCallback = (type: "axis" | "button", deviceId: DeviceIdentifier, inputId: InputIdentifier) => void;
+
+export const listenForInput = (element: HTMLElement, onInputTriggered: InputTriggeredCallback) => {
+  element.tabIndex = 1;
+  element.focus();
+
+  const onPointerDown = (e: PointerEvent) => {
+    onInputTriggered("button", devicePointer, e.button);
+  }
+  element.addEventListener("pointerdown", onPointerDown);
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    onInputTriggered("button", deviceKeyboard, e.key);
+  }
+  element.addEventListener("keydown", onKeyDown);
+
+  let prevGamepad: Gamepad | null = null;
+  const gamepadInterval = setInterval(() => {
+    const gamepad = navigator.getGamepads()[0];
+    
+    if (prevGamepad && gamepad && prevGamepad.buttons.length === gamepad.buttons.length) {
+      for (let i = 0; i < gamepad.buttons.length; ++i) {
+        // If we triggered the gamepad button
+        if (!prevGamepad.buttons[i].pressed && gamepad.buttons[i].pressed) {
+          onInputTriggered("button", deviceGamepad, i);
+        }
+      }
+    }
+
+    prevGamepad = gamepad;
+  }, 0);
+
+  return () => {
+    element.removeEventListener("pointerdown", onPointerDown);
+    element.removeEventListener("keydown", onKeyDown);
+    clearInterval(gamepadInterval);
+  };
+};
 
 export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): RaverieVisualizer => {
   const gl = canvas.getContext("webgl2");
@@ -164,17 +214,17 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   };
 
   visualizer.onSampleButton = (device, inputId) => {
-    if (device === "keyboard") {
+    if (device === deviceKeyboard) {
       const state = Boolean(keyStates[inputId]);
       return { value: Number(state), buttonHeld: state, touchHeld: state };
     }
 
-    if (device === "pointer" && pointerIsOverCanvas) {
+    if (device === devicePointer && pointerIsOverCanvas) {
       const state = Boolean(pointerStates[inputId]);
       return { value: Number(state), buttonHeld: state, touchHeld: state };
     }
 
-    if (device === "gamepad") {
+    if (device === deviceGamepad) {
       if (gamepad && typeof inputId === "number") {
         const button = gamepad.buttons[inputId];
         if (button !== undefined) {
@@ -186,7 +236,7 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   };
 
   visualizer.onSampleAxis = (device, inputId) => {
-    if (device === "pointer" && pointerIsOverCanvas) {
+    if (device === devicePointer && pointerIsOverCanvas) {
       if (inputId === 0 || inputId === "x") {
         return { value: pointerX };
       }
@@ -195,7 +245,7 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
       }
     }
 
-    if (device === "gamepad") {
+    if (device === deviceGamepad) {
       if (gamepad && typeof inputId === "number") {
         const axis = gamepad.axes[inputId];
         if (axis !== undefined) {
