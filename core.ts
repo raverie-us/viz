@@ -1735,8 +1735,30 @@ export class RaverieVisualizer {
       gBlendMode: getUniformLocation("gBlendMode"),
     };
 
-    processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);;
+    processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);
     return processedLayerShader;
+  }
+
+  private compileLayerJavaScript(layerJavaScript: LayerJavaScript, parent: ProcessedLayerGroup | null): ProcessedLayerJavaScript {
+    const processedLayerJavaScript: ProcessedLayerJavaScript = {
+      type: "js",
+      layer: layerJavaScript,
+      handle: null,
+      uniforms: [],
+      parent,
+      errors: [],
+      texture: this.createBlankTexture(),
+      completedRequestId: -1,
+      lastRequestId: -1,
+    };
+
+    if (this.onCompileJavaScriptLayer) {
+      const result = this.onCompileJavaScriptLayer(layerJavaScript);
+      processedLayerJavaScript.handle = result.handle;
+      processedLayerJavaScript.uniforms = this.parseUniforms(layerJavaScript, processedLayerJavaScript, () => null);
+    }
+
+    return processedLayerJavaScript;
   }
 
   private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null): ProcessedLayerGroup {
@@ -1763,22 +1785,9 @@ export class RaverieVisualizer {
         processedLayerGroup.layers.push(processedLayerShader);
         mapLayerById(processedLayerShader);
       } else if (layer.type === "js") {
-        if (this.onCompileJavaScriptLayer) {
-          const result = this.onCompileJavaScriptLayer(layer);
-          const processedLayerJavaScript: ProcessedLayerJavaScript = {
-            type: "js",
-            layer,
-            handle: result.handle,
-            uniforms: [],
-            parent: processedLayerGroup,
-            errors: [],
-            texture: this.createBlankTexture(),
-            completedRequestId: -1,
-            lastRequestId: -1,
-          };
-          processedLayerGroup.layers.push(processedLayerJavaScript);
-          mapLayerById(processedLayerJavaScript);
-        }
+        const processedLayerJavaScript = this.compileLayerJavaScript(layer, processedLayerGroup);
+        processedLayerGroup.layers.push(processedLayerJavaScript);
+        mapLayerById(processedLayerJavaScript);
       } else {
         // Recursively compile the child group
         const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup);
