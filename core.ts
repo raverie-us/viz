@@ -1152,11 +1152,18 @@ export interface JavaScriptGlobals {
   gBlendMode: number
 }
 
+export type CompactUniforms = Record<string, ShaderValue["value"]>;
+
 export type RenderLayerCodeCallback = (compiledLayer: CompiledLayerCode, gl: WebGL2RenderingContext) => void;
 export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledButton | null;
 export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledAxis | null;
 export type CompileJavaScriptCallback = (layer: LayerJavaScript) => CompiledJavaScript;
-export type RenderJavaScriptCallback = (requestId: number, layer: CompiledLayerJavaScript, globals: JavaScriptGlobals) => void;
+export type RenderJavaScriptCallback = (
+  requestId: number,
+  layer: CompiledLayerJavaScript,
+  globals: JavaScriptGlobals,
+  uniforms: CompactUniforms,
+) => void;
 
 const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: ProcessedLayerShader, uniformName: string): T => {
   const uniform = processedLayerShader.uniforms.find((uniform) => uniform.name === uniformName);
@@ -2319,8 +2326,13 @@ export class RaverieVisualizer {
                   gFrame: this.frame
                 };
 
+                const uniforms: CompactUniforms = {};
+                for (const shaderValue of layer.layer.values) {
+                  uniforms[shaderValue.name] = shaderValue.value;
+                }
+
                 ++layer.lastRequestId;
-                this.onRenderJavaScriptLayer(layer.lastRequestId, layer, globals);
+                this.onRenderJavaScriptLayer(layer.lastRequestId, layer, globals, uniforms);
               }
 
               this.customTexture = layer.texture;

@@ -1,4 +1,4 @@
-import { CompiledLayerJavaScript, LayerJavaScript, RaverieVisualizer } from "./core";
+import { CompactUniforms, CompiledLayerJavaScript, LayerJavaScript, RaverieVisualizer } from "./core";
 
 interface RenderMessage {
   type: "render";
@@ -10,7 +10,8 @@ interface RenderMessage {
     gTime: number,
     gPreviousLayer: null,
     gBlendMode: number
-  }
+  },
+  uniforms: CompactUniforms
 }
 
 interface RenderMessageResult {
@@ -68,7 +69,7 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
 
   const requestIdToCompiledJsLayer: Record<number, CompiledLayerJavaScript> = {};
 
-  visualizer.onRenderJavaScriptLayer = (requestId, compiledLayer, globals): void => {
+  visualizer.onRenderJavaScriptLayer = (requestId, compiledLayer, globals, uniforms): void => {
     const iframe = compiledLayer.handle as HTMLIFrameElement;
     if (iframe.dataset.loaded && iframe.contentWindow) {
       requestIdToCompiledJsLayer[requestId] = compiledLayer;
@@ -77,7 +78,8 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
         type: "render",
         layer: compiledLayer.layer,
         requestId,
-        globals
+        globals,
+        uniforms
       };
       iframe.contentWindow.postMessage(toSend, "*");
     } else {
