@@ -607,6 +607,7 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gOpacity: WebGLUniformLocation | null;
   gResolution: WebGLUniformLocation | null;
   gTime: WebGLUniformLocation | null;
+  gFrame: WebGLUniformLocation | null;
   gPreviousLayer: WebGLUniformLocation | null;
   gBlendMode: WebGLUniformLocation | null;
 }
@@ -911,6 +912,7 @@ uniform sampler2D gPreviousLayer;
 uniform float gOpacity;
 uniform vec2 gResolution;
 uniform float gTime;
+uniform int gFrame;
 uniform int gBlendMode;
 
 float gLuminance(vec3 rgb) {
@@ -1124,6 +1126,7 @@ export class RaverieVisualizer {
   private readonly copyShader: ProcessedLayerShader;
 
   private lastTimeStampMs: number = -1;
+  private frame: number = -1;
   private isRenderingInternal = false;
 
   public onBeforeRender: RenderCallback | null = null;
@@ -1395,6 +1398,7 @@ export class RaverieVisualizer {
       gOpacity: getUniformLocation("gOpacity"),
       gResolution: getUniformLocation("gResolution"),
       gTime: getUniformLocation("gTime"),
+      gFrame: getUniformLocation("gFrame"),
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
       gBlendMode: getUniformLocation("gBlendMode"),
     };
@@ -1728,6 +1732,7 @@ export class RaverieVisualizer {
       gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
       gl.uniform2f(processedLayerShader.gResolution, width, height);
       gl.uniform1f(processedLayerShader.gTime, timeSeconds);
+      gl.uniform1f(processedLayerShader.gFrame, this.frame);
 
       const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
       gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
@@ -2086,6 +2091,7 @@ export class RaverieVisualizer {
 
     try {
       this.isRenderingInternal = true;
+      ++this.frame;
 
     if (this.onBeforeRender) {
       this.onBeforeRender(frameTimeSeconds);
