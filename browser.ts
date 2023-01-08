@@ -54,6 +54,19 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
   }
   element.addEventListener("pointerdown", onPointerDown);
 
+  const POINTER_MOVEMENT_MIN = 5;
+  element.addEventListener("pointermove", (e) => {
+    if (e.movementX > e.movementY) {
+      if (Math.abs(e.movementX) > POINTER_MOVEMENT_MIN) {
+        onInputTriggered("axis", devicePointer, "x");
+      }
+    } else if (e.movementY > e.movementX) {
+      if (Math.abs(e.movementY) > POINTER_MOVEMENT_MIN) {
+        onInputTriggered("axis", devicePointer, "y");
+      }
+    }
+  });
+
   const onKeyDown = (e: KeyboardEvent) => {
     onInputTriggered("button", deviceKeyboard, e.key);
   }
@@ -62,8 +75,22 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
   let prevGamepad: Gamepad | null = null;
   const gamepadInterval = setInterval(() => {
     const gamepad = navigator.getGamepads()[0];
-    
-    if (prevGamepad && gamepad && prevGamepad.buttons.length === gamepad.buttons.length) {
+
+    if (prevGamepad && gamepad && prevGamepad.buttons.length === gamepad.buttons.length && prevGamepad.axes.length === gamepad.axes.length) {
+      let axisMostMovement = -1;
+      let axisMovementAmount = 0.15;
+      for (let i = 0; i < gamepad.axes.length; ++i) {
+        const movement = Math.abs(prevGamepad.axes[i] - gamepad.axes[i]);
+        if (movement > axisMovementAmount) {
+          axisMostMovement = i;
+          axisMovementAmount = movement;
+        }
+      }
+
+      if (axisMostMovement !== -1) {
+        onInputTriggered("axis", deviceGamepad, axisMostMovement);
+      }
+
       for (let i = 0; i < gamepad.buttons.length; ++i) {
         // If we triggered the gamepad button
         if (!prevGamepad.buttons[i].pressed && gamepad.buttons[i].pressed) {
