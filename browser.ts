@@ -50,12 +50,20 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
   element.focus();
 
   const onPointerDown = (e: PointerEvent) => {
+    e.preventDefault();
+    element.focus();
     onInputTriggered("button", devicePointer, e.button);
   }
   element.addEventListener("pointerdown", onPointerDown);
 
+  const onContextMenu = (e: MouseEvent) => {
+    e.preventDefault();
+  };
+  element.addEventListener("contextmenu", onContextMenu);
+
   const POINTER_MOVEMENT_MIN = 5;
-  element.addEventListener("pointermove", (e) => {
+  const onPointerMove = (e: PointerEvent) => {
+    e.preventDefault();
     if (e.movementX > e.movementY) {
       if (Math.abs(e.movementX) > POINTER_MOVEMENT_MIN) {
         onInputTriggered("axis", devicePointer, "x");
@@ -65,9 +73,11 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
         onInputTriggered("axis", devicePointer, "y");
       }
     }
-  });
+  }
+  element.addEventListener("pointermove", onPointerMove);
 
   const onKeyDown = (e: KeyboardEvent) => {
+    e.preventDefault();
     onInputTriggered("button", deviceKeyboard, e.key);
   }
   element.addEventListener("keydown", onKeyDown);
@@ -104,6 +114,8 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
 
   return () => {
     element.removeEventListener("pointerdown", onPointerDown);
+    element.removeEventListener("contextmenu", onContextMenu);
+    element.removeEventListener("pointermove", onPointerMove);
     element.removeEventListener("keydown", onKeyDown);
     clearInterval(gamepadInterval);
   };
