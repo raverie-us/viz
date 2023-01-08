@@ -1,4 +1,35 @@
-import { RaverieVisualizer } from "./core";
+import { CompiledLayerJavaScript, LayerJavaScript, RaverieVisualizer } from "./core";
+
+interface RenderMessage {
+  type: "render";
+  layer: LayerJavaScript;
+  requestId: number;
+  globals: {
+    gOpacity: number,
+    gResolution: [number, number],
+    gTime: number,
+    gPreviousLayer: null,
+    gBlendMode: number
+  }
+}
+
+interface RenderMessageResult {
+  type: "renderResult";
+  image: ImageBitmap | null;
+  requestId: number;
+}
+
+const iframePreCode = `
+window.addEventListener("message", async (e) => {
+  if (e.data.type === "render") {
+    const image = await window.render(e.data.layer, e.data.globals);
+    parent.postMessage({
+      type: "renderResult",
+      image,
+      requestId: e.data.requestId
+    }, "*");
+  }
+});`;
 
 export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): RaverieVisualizer => {
   const gl = canvas.getContext("webgl2");
@@ -17,6 +48,63 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   }
 
   const visualizer = new RaverieVisualizer(gl, loadTexture);
+
+  visualizer.onCompileJavaScriptLayer = (layer) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-scripts");
+    const src = `<script>${iframePreCode}</script><script>${layer.code}</script>`;
+    iframe.onload = () => {
+      iframe.dataset.loaded = "1";
+    };
+    iframe.style.display = "none";
+    iframe.src = `data:text/html;base64,${btoa(src)}`;
+    document.body.append(iframe);
+
+    return {
+      handle: iframe,
+      errors: []
+    };
+  };
+
+  const requestIdToCompiledJsLayer: Record<number, CompiledLayerJavaScript> = {};
+
+  visualizer.onRenderJavaScriptLayer = (requestId, compiledLayer, globals): void => {
+    const iframe = compiledLayer.handle as HTMLIFrameElement;
+    if (iframe.dataset.loaded && iframe.contentWindow) {
+      requestIdToCompiledJsLayer[requestId] = compiledLayer;
+
+      const toSend: RenderMessage = {
+        type: "render",
+        layer: compiledLayer.layer,
+        requestId,
+        globals
+      };
+      iframe.contentWindow.postMessage(toSend, "*");
+    } else {
+      visualizer.renderCompletedForJavaScriptLayer(requestId, compiledLayer, null);
+    }
+  };
+
+  window.addEventListener("message", (e: MessageEvent) => {
+    const message = e.data as RenderMessageResult;
+    const isValidMessage =
+      typeof message === "object" &&
+      message &&
+      message.type === "renderResult" &&
+      typeof message.requestId === "number" &&
+      (message.image === null || message.image instanceof ImageBitmap);
+
+    if (isValidMessage) {
+      const compiledLayer = requestIdToCompiledJsLayer[message.requestId];
+      delete requestIdToCompiledJsLayer[message.requestId];
+
+      if (compiledLayer) {
+        visualizer.renderCompletedForJavaScriptLayer(message.requestId, compiledLayer, message.image);
+      } else {
+        console.warn(`Got render message for requestId ${message.requestId} that does not exist or was already handled`);
+      }
+    }
+  });
 
   // Allow the canvas to take focus
   canvas.tabIndex = 1;

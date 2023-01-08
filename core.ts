@@ -9,7 +9,8 @@ export interface LayerBase {
   authorUrl?: string;
 }
 
-export type Layer = LayerShader | LayerGroup;
+export type LayerCode = LayerShader | LayerJavaScript;
+export type Layer = LayerCode | LayerGroup;
 
 export interface LayerGroup extends LayerBase {
   type: "group";
@@ -243,17 +244,24 @@ export type ShaderValue =
 
 export type ShaderType = number | number[] | ShaderTexture;
 
-export interface LayerShader extends LayerBase {
-  type: "shader";
+export interface LayerCodeBase extends LayerBase {
   code: string;
   values: ShaderValue[];
   timeScale: number;
   timeMode: LayerShaderTimeMode;
 }
 
+export interface LayerShader extends LayerCodeBase {
+  type: "shader";
+}
+
+export interface LayerJavaScript extends LayerCodeBase {
+  type: "js";
+}
+
 export interface CompiledUniformBase {
   name: string;
-  parent: CompiledLayerShader;
+  parent: CompiledLayerCode;
   parsedComment: Record<string, any>;
 }
 
@@ -350,14 +358,24 @@ export interface CompiledLayerBase {
   parent: CompiledLayerGroup | null;
 }
 
-export interface CompiledLayerShader extends CompiledLayerBase {
-  type: "shader";
-  layer: LayerShader;
+export interface CompiledLayerCodeBase extends CompiledLayerBase {
   uniforms: CompiledUniform[];
   errors: CompiledError[];
 }
 
-export type CompiledLayer = CompiledLayerShader | CompiledLayerGroup;
+export interface CompiledLayerShader extends CompiledLayerCodeBase {
+  type: "shader";
+  layer: LayerShader;
+}
+
+export interface CompiledLayerJavaScript extends CompiledLayerCodeBase {
+  type: "js";
+  layer: LayerJavaScript;
+  handle: any;
+}
+
+export type CompiledLayerCode = CompiledLayerShader | CompiledLayerJavaScript;
+export type CompiledLayer = CompiledLayerCode | CompiledLayerGroup;
 
 export interface CompiledLayerGroup extends CompiledLayerBase {
   type: "group";
@@ -400,6 +418,19 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
 vec4 render() {
   return texture(gPreviousLayer, gUV);
 }`.trim(),
+  values: []
+});
+
+export const defaultEmptyLayerJavaScript = (): LayerJavaScript => ({
+  type: "js",
+  id: "",
+  name: "",
+  visible: true,
+  opacity: 1.0,
+  blendMode: "normal",
+  timeMode: "normal",
+  timeScale: 1.0,
+  code: "",
   values: []
 });
 
@@ -612,7 +643,15 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gBlendMode: WebGLUniformLocation | null;
 }
 
-type ProcessedLayer = ProcessedLayerShader | ProcessedLayerGroup;
+interface ProcessedLayerJavaScript extends CompiledLayerJavaScript {
+  parent: ProcessedLayerGroup | null;
+  uniforms: ProcessedUniform[];
+  texture: WebGLTexture;
+  completedRequestId: number;
+  lastRequestId: number;
+}
+
+type ProcessedLayer = ProcessedLayerShader | ProcessedLayerJavaScript | ProcessedLayerGroup;
 
 interface ProcessedLayerGroup extends CompiledLayerGroup {
   parent: ProcessedLayerGroup | null;
@@ -1053,6 +1092,7 @@ export type RenderCallback = (frameTimeSeconds: number) => void;
 export type ControlsUpdateCallback = () => void;
 
 export const defaultFrameTime = 1 / 60;
+export const defaultFramesAheadForAsyncLayers = 2;
 
 export interface RenderOptions {
   /**
@@ -1098,9 +1138,24 @@ export interface SampledAxis {
   value: number;
 }
 
-export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
+export interface CompiledJavaScript {
+  handle: any;
+};
+
+export interface JavaScriptGlobals {
+  gOpacity: number,
+  gResolution: [number, number],
+  gTime: number,
+  gFrame: number,
+  gPreviousLayer: null,
+  gBlendMode: number
+}
+
+export type RenderLayerCodeCallback = (compiledLayer: CompiledLayerCode, gl: WebGL2RenderingContext) => void;
 export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledButton | null;
 export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledAxis | null;
+export type CompileJavaScriptCallback = (layer: LayerJavaScript) => CompiledJavaScript;
+export type RenderJavaScriptCallback = (requestId: number, layer: CompiledLayerJavaScript, globals: JavaScriptGlobals) => void;
 
 const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: ProcessedLayerShader, uniformName: string): T => {
   const uniform = processedLayerShader.uniforms.find((uniform) => uniform.name === uniformName);
@@ -1140,6 +1195,8 @@ export class RaverieVisualizer {
   public onSampleButton: SampleButtonCallback | null = null;
   public onSampleAxis: SampleAxisCallback | null = null;
 
+  public onCompileJavaScriptLayer: CompileJavaScriptCallback | null = null;
+  public onRenderJavaScriptLayer: RenderJavaScriptCallback | null = null;
 
   public get isRendering() {
     return this.isRenderingInternal;
@@ -1700,6 +1757,23 @@ export class RaverieVisualizer {
         const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup);
         processedLayerGroup.layers.push(processedLayerShader);
         mapLayerById(processedLayerShader);
+      } else if (layer.type === "js") {
+        if (this.onCompileJavaScriptLayer) {
+          const result = this.onCompileJavaScriptLayer(layer);
+          const processedLayerJavaScript: ProcessedLayerJavaScript = {
+            type: "js",
+            layer,
+            handle: result.handle,
+            uniforms: [],
+            parent: processedLayerGroup,
+            errors: [],
+            texture: this.createBlankTexture(),
+            completedRequestId: -1,
+            lastRequestId: -1,
+          };
+          processedLayerGroup.layers.push(processedLayerJavaScript);
+          mapLayerById(processedLayerJavaScript);
+        }
       } else {
         // Recursively compile the child group
         const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup);
@@ -1733,7 +1807,7 @@ export class RaverieVisualizer {
     width: number,
     height: number,
     timeSeconds: number,
-    onRender?: RenderLayerShaderCallback) {
+    onRender?: RenderLayerCodeCallback) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
@@ -1973,7 +2047,7 @@ export class RaverieVisualizer {
     compiledLayerGroup: CompiledLayerGroup,
     timeStampMs: number,
     renderTargets: RenderTargets,
-    onRender: RenderLayerShaderCallback,
+    onRender: RenderLayerCodeCallback,
     checkerSize: number = DEFAULT_CHECKER_SIZE) {
     if (this.isRenderingInternal) {
       throw new Error("A frame is currently being rendered, wait for the promise returned by 'render()' or check 'isRendering'");
@@ -1981,21 +2055,59 @@ export class RaverieVisualizer {
 
     try {
       this.isRenderingInternal = true;
+      const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
 
-    const targetsInternal = renderTargets as any as RenderTargetsInternal;
-    this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
+      const targetsInternal = renderTargets as any as RenderTargetsInternal;
+      this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    this.clearRenderTargetInternal(
-      targetsInternal.targets[0],
-      targetsInternal.widthInternal,
-      targetsInternal.heightInternal,
-      checkerSize);
+      this.clearRenderTargetInternal(
+        targetsInternal.targets[0],
+        targetsInternal.widthInternal,
+        targetsInternal.heightInternal,
+        checkerSize);
 
-    const frameBuffer = targetsInternal.targets[1].buffer;
-    const checkerTexture = targetsInternal.targets[0].texture;
+      const frameBuffer = targetsInternal.targets[1].buffer;
+      const checkerTexture = targetsInternal.targets[0].texture;
 
-    const timeSeconds = timeStampMs / 1000;
+      const timeSeconds = timeStampMs / 1000;
 
+      // We render each layer as if it is a standalone with only the checkerboard behind it
+      const results: Record<string, Uint8Array> = {};
+      for (const processedLayer of Object.values(processedLayerGroup.idToLayer)) {
+        if (processedLayer.type === "shader") {
+          const blendMode = processedLayer.layer.blendMode;
+          processedLayer.layer.blendMode = "normal";
+          const opacity = processedLayer.layer.opacity;
+          processedLayer.layer.opacity = 1.0;
+          this.renderLayerShaderInternal(
+            processedLayer,
+            1,
+            frameBuffer,
+            checkerTexture,
+            targetsInternal.widthInternal,
+            targetsInternal.heightInternal,
+            timeSeconds,
+            onRender);
+          processedLayer.layer.blendMode = blendMode;
+          processedLayer.layer.opacity = opacity;
+        } else if (processedLayer.type === "js") {
+          this.customTexture = processedLayer.texture;
+          this.customTextureShader.layer.blendMode = "normal";
+          this.customTextureShader.layer.opacity = 1;
+          this.customTextureShader.layer.id = processedLayer.layer.id;
+          this.renderLayerShaderInternal(
+            this.customTextureShader,
+            1,
+            frameBuffer,
+            checkerTexture,
+            targetsInternal.widthInternal,
+            targetsInternal.heightInternal,
+            timeSeconds,
+            onRender);
+          this.customTextureShader.layer.id = "";
+        }
+      }
+      return results;
     } finally {
       this.isRenderingInternal = false;
     }
@@ -2108,6 +2220,23 @@ export class RaverieVisualizer {
     walk(compiledLayerGroup);
   }
 
+  public renderCompletedForJavaScriptLayer(requestId: number, compiledLayer: CompiledLayerJavaScript, image: ImageBitmap | null) {
+    const processedLayer = compiledLayer as ProcessedLayerJavaScript;
+    if (requestId > processedLayer.completedRequestId) {
+      processedLayer.completedRequestId = requestId;
+
+      if (image) {
+        const gl = this.gl;
+
+        // Get the bound texture so we can revert back to it after this change (don't change GL state)
+        const boundTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        gl.bindTexture(gl.TEXTURE_2D, processedLayer.texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, image.width, image.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.bindTexture(gl.TEXTURE_2D, boundTexture);
+      }
+    }
+  }
+
   public render(
     compiledLayerGroup: CompiledLayerGroup,
     timeStampMs: number,
@@ -2119,60 +2248,108 @@ export class RaverieVisualizer {
 
     try {
       this.isRenderingInternal = true;
+      const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
+      const frameTimeSeconds = this.lastTimeStampMs === -1
+        ? defaultFrameTime
+        : (timeStampMs - this.lastTimeStampMs) / 1000;
+      this.lastTimeStampMs = timeStampMs;
       ++this.frame;
 
-    if (this.onBeforeRender) {
-      this.onBeforeRender(frameTimeSeconds);
-    }
+      if (this.onBeforeRender) {
+        this.onBeforeRender(frameTimeSeconds);
+      }
 
-    this.updateControls(compiledLayerGroup);
+      this.updateControls(compiledLayerGroup);
 
-    const gl = this.gl;
-    const targetsInternal = renderTargets as any as RenderTargetsInternal;
-    gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
+      const gl = this.gl;
+      const targetsInternal = renderTargets as any as RenderTargetsInternal;
+      gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    const timeSeconds = timeStampMs / 1000;
+      const timeSeconds = timeStampMs / 1000;
 
-    let renderTargetIndex = 0;
-    const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
-      const groupOpacity = processedLayerGroup.layer.opacity * parentOpacity;
-      for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
-        const layer = processedLayerGroup.layers[i];
-        // Skip invisible layers
-        if (!layer.layer.visible) {
-          continue;
-        }
-
-        if (layer.type === "shader") {
-          // We only render the layer if it has a valid program (also don't swap buffers)
-          // Treat this like it's an invisible layer
-          if (layer.program) {
-            renderTargetIndex = Number(!renderTargetIndex);
-
-            this.renderLayerShaderInternal(
-              layer,
-              groupOpacity,
-              targetsInternal.targets[renderTargetIndex].buffer,
-              targetsInternal.targets[Number(!renderTargetIndex)].texture,
-              targetsInternal.widthInternal,
-              targetsInternal.heightInternal,
-              timeSeconds);
+      let renderTargetIndex = 0;
+      const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
+        const groupOpacity = processedLayerGroup.layer.opacity * parentOpacity;
+        for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
+          const layer = processedLayerGroup.layers[i];
+          // Skip invisible layers
+          if (!layer.layer.visible) {
+            continue;
           }
-        } else {
-          renderRecursive(layer, groupOpacity);
+
+          if (layer.type === "shader") {
+            // We only render the layer if it has a valid program (also don't swap buffers)
+            // Treat this like it's an invisible layer
+            if (layer.program) {
+              renderTargetIndex = Number(!renderTargetIndex);
+
+              this.renderLayerShaderInternal(
+                layer,
+                groupOpacity,
+                targetsInternal.targets[renderTargetIndex].buffer,
+                targetsInternal.targets[Number(!renderTargetIndex)].texture,
+                targetsInternal.widthInternal,
+                targetsInternal.heightInternal,
+                timeSeconds);
+            }
+          } else if (layer.type === "js") {
+            if (this.onRenderJavaScriptLayer) {
+              if (layer.lastRequestId - layer.completedRequestId < defaultFramesAheadForAsyncLayers) {
+                const blendModeIndex = blendModeToIndex[layer.layer.blendMode];
+                const globals: JavaScriptGlobals = {
+                  gBlendMode: blendModeIndex,
+                  gOpacity: layer.layer.opacity * parentOpacity,
+                  gResolution: [targetsInternal.widthInternal, targetsInternal.heightInternal],
+                  gPreviousLayer: null,
+                  gTime: timeSeconds,
+                  gFrame: this.frame
+                };
+
+                ++layer.lastRequestId;
+                this.onRenderJavaScriptLayer(layer.lastRequestId, layer, globals);
+              }
+
+              this.customTexture = layer.texture;
+              this.customTextureShader.layer.blendMode = layer.layer.blendMode;
+              this.customTextureShader.layer.opacity = layer.layer.opacity;
+              renderTargetIndex = Number(!renderTargetIndex);
+              this.renderLayerShaderInternal(
+                this.customTextureShader,
+                groupOpacity,
+                targetsInternal.targets[renderTargetIndex].buffer,
+                targetsInternal.targets[Number(!renderTargetIndex)].texture,
+                targetsInternal.widthInternal,
+                targetsInternal.heightInternal,
+                timeSeconds);
+              this.customTextureShader.layer.blendMode = "normal";
+              this.customTextureShader.layer.opacity = 1;
+            }
+          } else {
+            renderRecursive(layer, groupOpacity);
+          }
         }
       }
-    }
 
-    this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
-    this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
+      this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
+      this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-    renderRecursive(processedLayerGroup, 1.0);
+      renderRecursive(processedLayerGroup, 1.0);
 
-    const drawToBackBuffer = options?.drawToBackBuffer === undefined
-      ? true
-      : options?.drawToBackBuffer;
+      const drawToBackBuffer = options?.drawToBackBuffer === undefined
+        ? true
+        : options?.drawToBackBuffer;
 
+      if (drawToBackBuffer) {
+        this.renderLayerShaderInternal(
+          this.copyShader,
+          1.0,
+          null,
+          targetsInternal.targets[renderTargetIndex].texture,
+          targetsInternal.widthInternal,
+          targetsInternal.heightInternal,
+          timeSeconds);
+      }
+      return frameTimeSeconds;
     } finally {
       this.isRenderingInternal = false;
     }
