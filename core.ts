@@ -1114,12 +1114,18 @@ export class RaverieVisualizer {
   private readonly copyShader: ProcessedLayerShader;
 
   private lastTimeStampMs: number = -1;
+  private isRenderingInternal = false;
 
   public onBeforeRender: RenderCallback | null = null;
 
   public onBeforeControlsUpdate: ControlsUpdateCallback | null = null;
   public onSampleButton: SampleButtonCallback | null = null;
   public onSampleAxis: SampleAxisCallback | null = null;
+
+
+  public get isRendering() {
+    return this.isRenderingInternal;
+  }
 
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction) {
     this.gl = gl;
@@ -1926,7 +1932,12 @@ export class RaverieVisualizer {
     renderTargets: RenderTargets,
     onRender: RenderLayerShaderCallback,
     checkerSize: number = DEFAULT_CHECKER_SIZE) {
-    const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
+    if (this.isRenderingInternal) {
+      throw new Error("A frame is currently being rendered, wait for the promise returned by 'render()' or check 'isRendering'");
+    }
+
+    try {
+      this.isRenderingInternal = true;
 
     const targetsInternal = renderTargets as any as RenderTargetsInternal;
     this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
@@ -1942,28 +1953,9 @@ export class RaverieVisualizer {
 
     const timeSeconds = timeStampMs / 1000;
 
-    // We render each layer as if it is a standalone with only the checkerboard behind it
-    const results: Record<string, Uint8Array> = {};
-    for (const processedLayer of Object.values(processedLayerGroup.idToLayer)) {
-      if (processedLayer.type === "shader") {
-        const blendMode = processedLayer.layer.blendMode;
-        processedLayer.layer.blendMode = "normal";
-        const opacity = processedLayer.layer.opacity;
-        processedLayer.layer.opacity = 1.0;
-        this.renderLayerShaderInternal(
-          processedLayer,
-          1.0,
-          frameBuffer,
-          checkerTexture,
-          targetsInternal.widthInternal,
-          targetsInternal.heightInternal,
-          timeSeconds,
-          onRender);
-        processedLayer.layer.blendMode = blendMode;
-        processedLayer.layer.opacity = opacity;
-      }
+    } finally {
+      this.isRenderingInternal = false;
     }
-    return results;
   };
 
   private updateControls(compiledLayerGroup: CompiledLayerGroup) {
@@ -2078,11 +2070,12 @@ export class RaverieVisualizer {
     timeStampMs: number,
     renderTargets: RenderTargets,
     options?: RenderOptions): number {
-    const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
-    const frameTimeSeconds = this.lastTimeStampMs === -1
-      ? defaultFrameTime
-      : (timeStampMs - this.lastTimeStampMs) / 1000;
-    this.lastTimeStampMs = timeStampMs;
+    if (this.isRenderingInternal) {
+      throw new Error("A frame is currently being rendered, check 'isRendering'");
+    }
+
+    try {
+      this.isRenderingInternal = true;
 
     if (this.onBeforeRender) {
       this.onBeforeRender(frameTimeSeconds);
@@ -2136,16 +2129,8 @@ export class RaverieVisualizer {
       ? true
       : options?.drawToBackBuffer;
 
-    if (drawToBackBuffer) {
-      this.renderLayerShaderInternal(
-        this.copyShader,
-        1.0,
-        null,
-        targetsInternal.targets[renderTargetIndex].texture,
-        targetsInternal.widthInternal,
-        targetsInternal.heightInternal,
-        timeSeconds);
+    } finally {
+      this.isRenderingInternal = false;
     }
-    return frameTimeSeconds;
   }
 }
