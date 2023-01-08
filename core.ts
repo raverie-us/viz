@@ -1090,6 +1090,14 @@ export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShade
 export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledButton | null;
 export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledAxis | null;
 
+const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: ProcessedLayerShader, uniformName: string): T => {
+  const uniform = processedLayerShader.uniforms.find((uniform) => uniform.name === uniformName);
+  if (!uniform) {
+    throw new Error(`Unable to find uniform '${uniformName}'`);
+  }
+  return uniform as T;
+};
+
 export class RaverieVisualizer {
   public readonly gl: WebGL2RenderingContext;
   private readonly loadTexture: LoadTextureFunction;
@@ -1100,7 +1108,7 @@ export class RaverieVisualizer {
 
   // For rendering checker-board "transparent" background
   private readonly checkerboardShader: ProcessedLayerShader;
-  private readonly checkerboardSize: ShaderValueNumber;
+  private readonly checkerboardSize: ProcessedUniformNumber;
 
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
@@ -1156,12 +1164,7 @@ export class RaverieVisualizer {
         return vec4(vec3(max(checker, 0.8)), 1);
       }`
     }, null, true);
-    const checkerboardSize = this.checkerboardShader.layer.values.find(
-      (shaderValue) => shaderValue.name === "checkerPixelSize");
-    if (!checkerboardSize) {
-      throw new Error("Unable to find 'checkerboardSize' shader value");
-    }
-    this.checkerboardSize = checkerboardSize as ShaderValueNumber;
+    this.checkerboardSize = getRequiredUniform(this.checkerboardShader, "checkerPixelSize");
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
@@ -1906,7 +1909,7 @@ export class RaverieVisualizer {
     gl.clearColor(1, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    this.checkerboardSize.value = checkerSize;
+    this.checkerboardSize.shaderValue.value = checkerSize;
     this.renderLayerShaderInternal(
       this.checkerboardShader,
       1.0,
