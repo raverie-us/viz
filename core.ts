@@ -378,6 +378,15 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   layers: []
 });
 
+export const defaultEmptyCompiledLayerGroup = (): CompiledLayerGroup => pass<ProcessedLayerGroup>({
+  type: "group",
+  layer: defaultEmptyLayerGroup(),
+  idToLayer: {},
+  parent: null,
+  timeSeconds: 0,
+  layers: []
+});
+
 export const defaultEmptyLayerShader = (): LayerShader => ({
   type: "shader",
   id: "",
