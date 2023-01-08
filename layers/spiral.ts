@@ -7,7 +7,7 @@ export const spiralLayer: LayerShader = {
   visible: true,
   code: `
 uniform vec2 position; // type: "position"
-uniform gradient colors; // default: {0.49:[0,0,0,1], 0.51:[1,1,1,1]}
+uniform gradient colors; // default: {0.47:[0,0,0,1], 0.50:[1,1,1,1], 0.97:[1,1,1,1], 1.00:[0,0,0,1]}
 uniform int spirals; // default: 1, min: 0, max: 20
 uniform float warpExponent; // default: 0.4, min: -0.2, max: 2
 uniform float warpFactor; // default: 7.0, min: -10, max: 10
