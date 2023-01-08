@@ -35,15 +35,45 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
     keyStates[e.which] = false;
   });
 
+  let gamepad: Gamepad | null = null;
+
+  const updateGamepads = () => {
+    // TODO(trevor): For now we only grab the first gamepad until we get control indices working
+    gamepad = navigator.getGamepads()[0];
+  }
+
+  updateGamepads();
+
+  visualizer.onBeforeControlsUpdate = () => {
+    updateGamepads();
+  };
+
   visualizer.onSampleButton = (device, inputId) => {
     if (device === "keyboard") {
       const state = Boolean(keyStates[inputId]);
       return { value: Number(state), buttonHeld: state, touchHeld: state };
     }
+
+    if (device === "gamepad") {
+      if (gamepad && typeof inputId === "number") {
+        const button = gamepad.buttons[inputId];
+        if (button !== undefined) {
+          return {buttonHeld: button.pressed, touchHeld: button.touched, value: button.value};
+        }
+      }
+    }
     return null;
   };
 
   visualizer.onSampleAxis = (device, inputId) => {
+    if (device === "gamepad") {
+      if (gamepad && typeof inputId === "number") {
+        const axis = gamepad.axes[inputId];
+        if (axis !== undefined) {
+          return {value: axis};
+        }
+      }
+    }
     return null;
   };
 

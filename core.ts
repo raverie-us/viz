@@ -1038,6 +1038,7 @@ void main() {
 const blendModeEnumDescription = parseEnumDescription(blendModeList);
 
 export type RenderCallback = (frameTimeSeconds: number) => void;
+export type ControlsUpdateCallback = () => void;
 
 export const defaultFrameTime = 1 / 60;
 
@@ -1108,6 +1109,7 @@ export class RaverieVisualizer {
 
   public onBeforeRender: RenderCallback | null = null;
 
+  public onBeforeControlsUpdate: ControlsUpdateCallback | null = null;
   public onSampleButton: SampleButtonCallback | null = null;
   public onSampleAxis: SampleAxisCallback | null = null;
 
@@ -1963,6 +1965,10 @@ export class RaverieVisualizer {
     }
     const onSampleButton = this.onSampleButton;
     const onSampleAxis = this.onSampleAxis;
+
+    if (this.onBeforeControlsUpdate) {
+      this.onBeforeControlsUpdate();
+    }
 
     const walk = (compiledLayer: CompiledLayer) => {
       if (compiledLayer.type === "group") {
