@@ -21,7 +21,7 @@ interface RenderMessageResult {
 
 const iframePreCode = `
 window.addEventListener("message", async (e) => {
-  if (e.data.type === "render") {
+  if (e.data.type === "render" && window.render) {
     const image = await window.render(e.data.layer, e.data.globals);
     parent.postMessage({
       type: "renderResult",
