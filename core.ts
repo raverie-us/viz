@@ -1125,6 +1125,11 @@ export class RaverieVisualizer {
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
 
+  // For rendering externally provided images such as JavaScript layers
+  private readonly customTextureShader: ProcessedLayerShader;
+  private readonly customTextureUniform: ProcessedUniformSampler2D;
+  private customTexture: WebGLTexture | null = null;
+
   private lastTimeStampMs: number = -1;
   private frame: number = -1;
   private isRenderingInternal = false;
@@ -1193,6 +1198,16 @@ export class RaverieVisualizer {
         return texture(gPreviousLayer, gUV);
       }`
     }, null, true);
+
+    this.customTextureShader = this.compileLayerShader({
+      ...defaultEmptyLayerShader(),
+      code: `
+      uniform sampler2D textureInput;
+      vec4 render() {
+        return texture(textureInput, gUV);
+      }`
+    }, null, true);
+    this.customTextureUniform = getRequiredUniform(this.customTextureShader, "textureInput");
   }
 
   private createRenderTarget(width: number, height: number): RenderTarget {
@@ -1824,6 +1839,19 @@ export class RaverieVisualizer {
             break;
           }
           case "sampler2D": {
+            // Special case for customTextureUniform as we manually set this texture internally
+            if (processedUniform === this.customTextureUniform) {
+              gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
+              gl.bindTexture(gl.TEXTURE_2D, this.customTexture);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+              gl.uniform1i(processedUniform.location, textureSamplerIndex);
+              ++textureSamplerIndex;
+              break;
+            }
+
             const validatedValue = validateGLSLSampler2D(processedUniform.type, value,
               processedUniform.defaultValue);
             const texture = this.getOrCacheTexture(validatedValue.url);
