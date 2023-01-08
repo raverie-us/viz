@@ -1277,6 +1277,14 @@ export class RaverieVisualizer {
     return texture;
   }
 
+  private createBlankTexture(): WebGLTexture {
+    const texture = this.createTexture();
+    const gl = this.gl;
+    // By default unloaded textures are just 1x1 pixel black with no alpha (0,0,0,0)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    return texture;
+  }
+
   public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone"): CompiledLayerGroup {
     // Let the user pick if we make a copy, because we're going to potentially
     // modify the group such as if we find new uniforms within the shaders
@@ -1672,12 +1680,8 @@ export class RaverieVisualizer {
     if (texture) {
       return texture;
     }
-    const newTexture = this.createTexture();
 
-    const gl = this.gl;
-    // By default unloaded textures are just 1x1 pixel black with no alpha (0,0,0,0)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
+    const newTexture = this.createBlankTexture();
     this.textureCache[url] = newTexture;
     this.loadTexture(url, newTexture, this.gl);
     return newTexture;
