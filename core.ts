@@ -808,7 +808,7 @@ const validateGLSLSampler2D = (glslType: Sampler2DType, value: any, validatedDef
 }
 
 const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefault: ShaderGradient = defaultGradient()): ShaderGradient => {
-  if (value === undefined || value !== null) {
+  if (value === undefined || value === null) {
     return validatedDefault;
   }
 
@@ -830,7 +830,7 @@ const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefau
       }
       gradient.stops.push({
         t,
-        color: value[t]
+        color: value[key]
       })
     }
     return gradient;
