@@ -553,7 +553,7 @@ type GLSLType =
   AxisType;
 
 interface ProcessedUniformBase extends CompiledUniformBase {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
   location?: any;
 }
 
@@ -562,27 +562,27 @@ interface ProcessedUniformBaseSingleLocation extends ProcessedUniformBase {
 }
 
 interface ProcessedUniformNumber extends ProcessedUniformBaseSingleLocation, CompiledUniformNumber {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedUniformNumberVector extends ProcessedUniformBaseSingleLocation, CompiledUniformNumberVector {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedUniformBool extends ProcessedUniformBaseSingleLocation, CompiledUniformBool {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedUniformBoolVector extends ProcessedUniformBaseSingleLocation, CompiledUniformBoolVector {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedUniformEnum extends ProcessedUniformBaseSingleLocation, CompiledUniformEnum {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedUniformSampler2D extends ProcessedUniformBaseSingleLocation, CompiledUniformSampler2D {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
 }
 
 interface ProcessedGradientLocation {
@@ -591,12 +591,12 @@ interface ProcessedGradientLocation {
 }
 
 interface ProcessedUniformGradient extends ProcessedUniformBase, CompiledUniformGradient {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
   location: ProcessedGradientLocation[] | null;
 }
 
 interface ProcessedUniformButton extends ProcessedUniformBase, CompiledUniformButton {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
   locationButtonHeld: WebGLUniformLocation | null;
   locationButtonTriggered: WebGLUniformLocation | null;
   locationButtonReleased: WebGLUniformLocation | null;
@@ -607,7 +607,7 @@ interface ProcessedUniformButton extends ProcessedUniformBase, CompiledUniformBu
 }
 
 interface ProcessedUniformAxis extends ProcessedUniformBase, CompiledUniformAxis {
-  parent: ProcessedLayerShader;
+  parent: ProcessedLayerCode;
   locationValue: WebGLUniformLocation | null;
 }
 
@@ -651,7 +651,8 @@ interface ProcessedLayerJavaScript extends CompiledLayerJavaScript {
   lastRequestId: number;
 }
 
-type ProcessedLayer = ProcessedLayerShader | ProcessedLayerJavaScript | ProcessedLayerGroup;
+type ProcessedLayerCode = ProcessedLayerShader | ProcessedLayerJavaScript;
+type ProcessedLayer = ProcessedLayerCode | ProcessedLayerGroup;
 
 interface ProcessedLayerGroup extends CompiledLayerGroup {
   parent: ProcessedLayerGroup | null;
@@ -1387,24 +1388,7 @@ export class RaverieVisualizer {
       : layerGroup, null);
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
-    const gl = this.gl;
-    const processedProgram = this.createProgram(layerShader.code);
-
-    if (processedProgram.error) {
-      if (throwOnError) {
-        throw new Error(processedProgram.error);
-      }
-    }
-
-    // It's possible that there was a compile/linker error and we got no program back
-    const program = processedProgram.program;
-    if (program) {
-      const vertexPosAttrib = gl.getAttribLocation(program, '_gVertexPosition');
-      gl.enableVertexAttribArray(vertexPosAttrib);
-      gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
-    }
-
+  private parseUniforms(layerCode: LayerCode, parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
     // tags: <types>
     const uniformRegex =
       /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|bool|bvec2|bvec3|bvec4|sampler2D|gradient|button|axis)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
@@ -1412,7 +1396,7 @@ export class RaverieVisualizer {
     const newUniformNames: Record<string, true> = {};
     const newUniforms: NewUniform[] = [];
     for (; ;) {
-      const result = uniformRegex.exec(layerShader.code);
+      const result = uniformRegex.exec(layerCode.code);
       if (!result) {
         break;
       }
@@ -1431,7 +1415,283 @@ export class RaverieVisualizer {
     }
 
     // Make a copy of the old shader values that we pop from as we map old to new
-    const oldShaderValues = layerShader.values.slice(0);
+    const oldShaderValues = layerCode.values.slice(0);
+
+    const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
+      const { type, name, afterUniform } = unprocessedUniform;
+      const location = getUniformLocation(name);
+
+      let parsedComment: ProcessedComment = {};
+
+      const commentStart = afterUniform.indexOf("//");
+      if (commentStart !== -1) {
+        // Check if we can parse the comment as JSON (skip 2 characters for the //)
+        const commentText = afterUniform.substring(commentStart + 2);
+        const innerJson = commentText.replace(/[-a-zA-Z0-9_.]+\s*:/gum, (found) => {
+          const identifier = found.substring(0, found.indexOf(":")).trim();
+          return `"${identifier}":`;
+        });
+
+        const json = `{${innerJson}}`;
+        try {
+          parsedComment = JSON.parse(json);
+        } catch {
+          // Ignore the comment for now
+        }
+      }
+
+      // We always first look by name
+      let foundShaderValue: ShaderValue | null = null;
+      for (let i = 0; i < oldShaderValues.length; ++i) {
+        const oldShaderValue = oldShaderValues[i];
+        if (oldShaderValue.name === name) {
+          oldShaderValues.splice(i, 1);
+          foundShaderValue = oldShaderValue;
+          break;
+        }
+      }
+
+      // If we didn't find it by name, we'll detect a potential rename by checking if there
+      // is a uniform at the same previous index that is also of the same type and is *unused*
+      if (foundShaderValue === null) {
+        const oldShaderValueAtIndex = layerCode.values[uniformIndex] as ShaderValue | undefined;
+        const isRename =
+          oldShaderValueAtIndex &&
+          oldShaderValueAtIndex.type === type &&
+          !newUniformNames[oldShaderValueAtIndex.name];
+
+        if (isRename) {
+          foundShaderValue = oldShaderValueAtIndex;
+        }
+      }
+
+      // tags: <types>
+      switch (type) {
+        case "int":
+        case "float": {
+          if (type === "int") {
+            const enumDescription = parsedComment.enum === "blendMode"
+              ? blendModeEnumDescription
+              : parseEnumDescription(parsedComment.enum);
+
+            if (enumDescription) {
+              const defaultValue = validateGLSLEnum("enum", parsedComment.default, enumDescription.defaultValue, enumDescription);
+              return pass<ProcessedUniformEnum>({
+                type: "enum",
+                location,
+                name,
+                parent,
+                parsedComment,
+                shaderValue: {
+                  name,
+                  type: "enum",
+                  value: validateGLSLEnum("enum", foundShaderValue?.value, defaultValue, enumDescription)
+                },
+                defaultValue,
+                enumDescription
+              });
+            }
+          }
+
+          const defaultValue = validateGLSLNumber(type, parsedComment.default);
+          return pass<ProcessedUniformNumber>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+            minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
+            maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
+            stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
+          });
+        }
+        case "vec2":
+        case "vec3":
+        case "vec4":
+        case "ivec2":
+        case "ivec3":
+        case "ivec4": {
+          const defaultValue = validateGLSLNumberVector(type, parsedComment.default);
+          return pass<ProcessedUniformNumberVector>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLNumberVector(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+            minValue: validateGLSLNumberVector(type, parsedComment.min, vectorNumberScalarConstructor(type, Number.NEGATIVE_INFINITY)),
+            maxValue: validateGLSLNumberVector(type, parsedComment.max, vectorNumberScalarConstructor(type, Number.POSITIVE_INFINITY)),
+            stepValue: validateGLSLNumberVector(type, parsedComment.step, vectorNumberScalarConstructor(type, minimumStepValue(type))),
+          });
+        }
+        case "bool": {
+          const defaultValue = validateGLSLBool(type, parsedComment.default);
+          return pass<ProcessedUniformBool>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLBool(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue
+          });
+        }
+        case "bvec2":
+        case "bvec3":
+        case "bvec4": {
+          const defaultValue = validateGLSLBoolVector(type, parsedComment.default);
+          return pass<ProcessedUniformBoolVector>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLBoolVector(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue
+          });
+        }
+        case "sampler2D": {
+          const defaultValue = validateGLSLSampler2D(type, parsedComment.default);
+          return pass<ProcessedUniformSampler2D>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLSampler2D(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+          });
+        }
+        case "gradient": {
+          const defaultValue = validateGLSLGradient(type, parsedComment.default);
+          let location: ProcessedGradientLocation[] | null = [];
+          for (let i = 0; i < maxGradientStops; ++i) {
+            const t = getUniformLocation(`${name}[${i}].t`);
+            const color = getUniformLocation(`${name}[${i}].color`);
+            if (!t || !color) {
+              location = null;
+              break;
+            }
+            location.push({ t, color });
+          }
+          return pass<ProcessedUniformGradient>({
+            type,
+            location,
+            name,
+            parent,
+            parsedComment,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLGradient(type, foundShaderValue?.value, defaultValue)
+            },
+            defaultValue,
+          });
+        }
+        case "button": {
+          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`)
+          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`)
+          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`)
+          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`)
+          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`)
+          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`)
+          const locationValue = getUniformLocation(`${name}.value`)
+
+          return pass<ProcessedUniformButton>({
+            type,
+            location: true,
+            name,
+            parent,
+            parsedComment,
+            locationButtonHeld,
+            locationButtonTriggered,
+            locationButtonReleased,
+            locationTouchHeld,
+            locationTouchTriggered,
+            locationTouchReleased,
+            locationValue,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLButton(type, foundShaderValue?.value)
+            },
+            controlDefaults: parsedComment.controls
+          });
+        }
+        case "axis": {
+          const locationValue = getUniformLocation(`${name}.value`)
+
+          return pass<ProcessedUniformAxis>({
+            type,
+            location: true,
+            name,
+            parent,
+            parsedComment,
+            locationValue,
+            shaderValue: {
+              name,
+              type,
+              value: validateGLSLAxis(type, foundShaderValue?.value)
+            },
+            controlDefaults: parsedComment.controls
+          });
+        }
+        default: throw new Error(`Unexpected GLSL type '${type}'`)
+      }
+    });
+
+    // Now that we've processed all the new uniforms and either
+    // found their old shader values or made new ones, lets update the
+    // shader values on the LayerShader to match. Note that this will
+    // mutate the object, however it may be a copy of the user's LayerShader
+    // depending on which option they passed into `compile`
+    layerCode.values.length = 0;
+    layerCode.values.push(...processedUniforms.map((processedUniform) =>
+      processedUniform.shaderValue));
+
+    return processedUniforms;
+  }
+
+  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
+    const gl = this.gl;
+    const processedProgram = this.createProgram(layerShader.code);
+
+    if (processedProgram.error) {
+      if (throwOnError) {
+        throw new Error(processedProgram.error);
+      }
+    }
+
+    // It's possible that there was a compile/linker error and we got no program back
+    const program = processedProgram.program;
+    if (program) {
+      const vertexPosAttrib = gl.getAttribLocation(program, '_gVertexPosition');
+      gl.enableVertexAttribArray(vertexPosAttrib);
+      gl.vertexAttribPointer(vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+    }
 
     const errors: CompiledError[] = [];
     if (processedProgram.error) {
@@ -1475,262 +1735,7 @@ export class RaverieVisualizer {
       gBlendMode: getUniformLocation("gBlendMode"),
     };
 
-    const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
-      const { type, name, afterUniform } = unprocessedUniform;
-      const location = getUniformLocation(name);
-
-      let parsedComment: ProcessedComment = {};
-
-      const commentStart = afterUniform.indexOf("//");
-      if (commentStart !== -1) {
-        // Check if we can parse the comment as JSON (skip 2 characters for the //)
-        const commentText = afterUniform.substring(commentStart + 2);
-        const innerJson = commentText.replace(/[-a-zA-Z0-9_.]+\s*:/gum, (found) => {
-          const identifier = found.substring(0, found.indexOf(":")).trim();
-          return `"${identifier}":`;
-        });
-
-        const json = `{${innerJson}}`;
-        try {
-          parsedComment = JSON.parse(json);
-        } catch {
-          // Ignore the comment for now
-        }
-      }
-
-      // We always first look by name
-      let foundShaderValue: ShaderValue | null = null;
-      for (let i = 0; i < oldShaderValues.length; ++i) {
-        const oldShaderValue = oldShaderValues[i];
-        if (oldShaderValue.name === name) {
-          oldShaderValues.splice(i, 1);
-          foundShaderValue = oldShaderValue;
-          break;
-        }
-      }
-
-      // If we didn't find it by name, we'll detect a potential rename by checking if there
-      // is a uniform at the same previous index that is also of the same type and is *unused*
-      if (foundShaderValue === null) {
-        const oldShaderValueAtIndex = layerShader.values[uniformIndex] as ShaderValue | undefined;
-        const isRename =
-          oldShaderValueAtIndex &&
-          oldShaderValueAtIndex.type === type &&
-          !newUniformNames[oldShaderValueAtIndex.name];
-
-        if (isRename) {
-          foundShaderValue = oldShaderValueAtIndex;
-        }
-      }
-
-      // tags: <types>
-      switch (type) {
-        case "int":
-        case "float": {
-          if (type === "int") {
-            const enumDescription = parsedComment.enum === "blendMode"
-              ? blendModeEnumDescription
-              : parseEnumDescription(parsedComment.enum);
-
-            if (enumDescription) {
-              const defaultValue = validateGLSLEnum("enum", parsedComment.default, enumDescription.defaultValue, enumDescription);
-              return pass<ProcessedUniformEnum>({
-                type: "enum",
-                location,
-                name,
-                parent: processedLayerShader,
-                parsedComment,
-                shaderValue: {
-                  name,
-                  type: "enum",
-                  value: validateGLSLEnum("enum", foundShaderValue?.value, defaultValue, enumDescription)
-                },
-                defaultValue,
-                enumDescription
-              });
-            }
-          }
-
-          const defaultValue = validateGLSLNumber(type, parsedComment.default);
-          return pass<ProcessedUniformNumber>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue,
-            minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
-            maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
-            stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
-          });
-        }
-        case "vec2":
-        case "vec3":
-        case "vec4":
-        case "ivec2":
-        case "ivec3":
-        case "ivec4": {
-          const defaultValue = validateGLSLNumberVector(type, parsedComment.default);
-          return pass<ProcessedUniformNumberVector>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLNumberVector(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue,
-            minValue: validateGLSLNumberVector(type, parsedComment.min, vectorNumberScalarConstructor(type, Number.NEGATIVE_INFINITY)),
-            maxValue: validateGLSLNumberVector(type, parsedComment.max, vectorNumberScalarConstructor(type, Number.POSITIVE_INFINITY)),
-            stepValue: validateGLSLNumberVector(type, parsedComment.step, vectorNumberScalarConstructor(type, minimumStepValue(type))),
-          });
-        }
-        case "bool": {
-          const defaultValue = validateGLSLBool(type, parsedComment.default);
-          return pass<ProcessedUniformBool>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLBool(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue
-          });
-        }
-        case "bvec2":
-        case "bvec3":
-        case "bvec4": {
-          const defaultValue = validateGLSLBoolVector(type, parsedComment.default);
-          return pass<ProcessedUniformBoolVector>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLBoolVector(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue
-          });
-        }
-        case "sampler2D": {
-          const defaultValue = validateGLSLSampler2D(type, parsedComment.default);
-          return pass<ProcessedUniformSampler2D>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLSampler2D(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue,
-          });
-        }
-        case "gradient": {
-          const defaultValue = validateGLSLGradient(type, parsedComment.default);
-          let location: ProcessedGradientLocation[] | null = [];
-          for (let i = 0; i < maxGradientStops; ++i) {
-            const t = getUniformLocation(`${name}[${i}].t`);
-            const color = getUniformLocation(`${name}[${i}].color`);
-            if (!t || !color) {
-              location = null;
-              break;
-            }
-            location.push({ t, color });
-          }
-          return pass<ProcessedUniformGradient>({
-            type,
-            location,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLGradient(type, foundShaderValue?.value, defaultValue)
-            },
-            defaultValue,
-          });
-        }
-        case "button": {
-          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`)
-          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`)
-          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`)
-          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`)
-          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`)
-          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`)
-          const locationValue = getUniformLocation(`${name}.value`)
-
-          return pass<ProcessedUniformButton>({
-            type,
-            location: true,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            locationButtonHeld,
-            locationButtonTriggered,
-            locationButtonReleased,
-            locationTouchHeld,
-            locationTouchTriggered,
-            locationTouchReleased,
-            locationValue,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLButton(type, foundShaderValue?.value)
-            },
-            controlDefaults: parsedComment.controls
-          });
-        }
-        case "axis": {
-          const locationValue = getUniformLocation(`${name}.value`)
-
-          return pass<ProcessedUniformAxis>({
-            type,
-            location: true,
-            name,
-            parent: processedLayerShader,
-            parsedComment,
-            locationValue,
-            shaderValue: {
-              name,
-              type,
-              value: validateGLSLAxis(type, foundShaderValue?.value)
-            },
-            controlDefaults: parsedComment.controls
-          });
-        }
-        default: throw new Error(`Unexpected GLSL type '${type}'`)
-      }
-    });
-
-    // Now that we've processed all the new uniforms and either
-    // found their old shader values or made new ones, lets update the
-    // shader values on the LayerShader to match. Note that this will
-    // mutate the object, however it may be a copy of the user's LayerShader
-    // depending on which option they passed into `compile`
-    layerShader.values.length = 0;
-    layerShader.values.push(...processedUniforms.map((processedUniform) =>
-      processedUniform.shaderValue));
-
-    processedLayerShader.uniforms = processedUniforms;
+    processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);;
     return processedLayerShader;
   }
 
