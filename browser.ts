@@ -18,14 +18,13 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
 
   const visualizer = new RaverieVisualizer(gl, loadTexture);
 
-  const keyStates: Record<string | number, boolean> = {};
-
   // Allow the canvas to take focus
   canvas.tabIndex = 1;
   canvas.addEventListener("pointerdown", () => {
     canvas.focus();
   });
 
+  const keyStates: Record<string | number, boolean> = {};
   canvas.addEventListener("keydown", (e) => {
     keyStates[e.key] = true;
     keyStates[e.which] = true;
@@ -33,6 +32,32 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   canvas.addEventListener("keyup", (e) => {
     keyStates[e.key] = false;
     keyStates[e.which] = false;
+  });
+
+  let pointerStates: Record<string | number, boolean> = {};
+  let pointerX = 0;
+  let pointerY = 0;
+  let pointerIsOverCanvas = false;
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointerdown", (e) => {
+    pointerStates[e.button] = true;
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    pointerStates[e.button] = false;
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    pointerX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+  });
+  canvas.addEventListener("pointerenter", (e) => {
+    pointerIsOverCanvas = true;
+  });
+  canvas.addEventListener("pointerleave", (e) => {
+    pointerIsOverCanvas = false;
+    pointerStates = {};
   });
 
   let gamepad: Gamepad | null = null;
@@ -54,11 +79,16 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
       return { value: Number(state), buttonHeld: state, touchHeld: state };
     }
 
+    if (device === "pointer" && pointerIsOverCanvas) {
+      const state = Boolean(pointerStates[inputId]);
+      return { value: Number(state), buttonHeld: state, touchHeld: state };
+    }
+
     if (device === "gamepad") {
       if (gamepad && typeof inputId === "number") {
         const button = gamepad.buttons[inputId];
         if (button !== undefined) {
-          return {buttonHeld: button.pressed, touchHeld: button.touched, value: button.value};
+          return { buttonHeld: button.pressed, touchHeld: button.touched, value: button.value };
         }
       }
     }
@@ -66,11 +96,20 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   };
 
   visualizer.onSampleAxis = (device, inputId) => {
+    if (device === "pointer" && pointerIsOverCanvas) {
+      if (inputId === 0 || inputId === "x") {
+        return { value: pointerX };
+      }
+      if (inputId === 1 || inputId === "y") {
+        return { value: pointerY };
+      }
+    }
+
     if (device === "gamepad") {
       if (gamepad && typeof inputId === "number") {
         const axis = gamepad.axes[inputId];
         if (axis !== undefined) {
-          return {value: axis};
+          return { value: axis };
         }
       }
     }
