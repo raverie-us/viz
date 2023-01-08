@@ -3,6 +3,7 @@ export interface LayerBase {
   id: string;
   visible: boolean;
   opacity: number;
+  blendMode: LayerBlendMode;
   forkedFromId?: string;
   authorName?: string;
   authorUrl?: string;
@@ -15,7 +16,7 @@ export interface LayerGroup extends LayerBase {
   layers: Layer[];
 }
 
-export type LayerShaderBlendMode =
+export type LayerBlendMode =
   "overwrite" |
 
   "normal" |
@@ -46,7 +47,7 @@ export type LayerShaderBlendMode =
   "subtract" |
   "divide";
 
-export const blendModeList: LayerShaderBlendMode[] = [
+export const blendModeList: LayerBlendMode[] = [
   "overwrite",
 
   "normal",
@@ -86,7 +87,7 @@ export const blendModeToIndex = (() => {
   return results;
 })();
 
-export const blendModeDisplay: (LayerShaderBlendMode | null)[] = [
+export const blendModeDisplay: (LayerBlendMode | null)[] = [
   "normal",
   "dissolve",
   null,
@@ -246,7 +247,6 @@ export interface LayerShader extends LayerBase {
   type: "shader";
   code: string;
   values: ShaderValue[];
-  blendMode: LayerShaderBlendMode;
   timeScale: number;
   timeMode: LayerShaderTimeMode;
 }
@@ -374,6 +374,7 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   name: "",
   visible: true,
   opacity: 1.0,
+  blendMode: "normal",
   layers: []
 });
 
