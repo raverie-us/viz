@@ -206,7 +206,7 @@ export interface ShaderValueGradient extends ShaderValueBase {
   value: ShaderGradient;
 }
 
-export interface ShaderButton {
+interface ShaderButtonState {
   buttonHeld: boolean;
   buttonTriggered: boolean;
   buttonReleased: boolean;
@@ -216,18 +216,25 @@ export interface ShaderButton {
   value: number;
 }
 
+export type DeviceIdentifier = string;
+export type InputIdentifier = string | number;
+
+export type ShaderButtonBindings = Record<DeviceIdentifier, InputIdentifier>;
+
 export interface ShaderValueButton extends ShaderValueBase {
   type: ButtonType;
-  value: ShaderButton;
+  value: ShaderButtonBindings;
 }
 
-export interface ShaderAxis {
+interface ShaderAxisState {
   value: number;
 }
 
+export type ShaderAxisBindings = Record<DeviceIdentifier, InputIdentifier | AxisFromButtons>;
+
 export interface ShaderValueAxis extends ShaderValueBase {
   type: AxisType;
-  value: ShaderAxis;
+  value: ShaderAxisBindings;
 }
 
 // tags: <types>
@@ -314,27 +321,20 @@ export interface CompiledUniformGradient extends CompiledUniformBase {
   defaultValue: ShaderGradient;
 }
 
-export type DeviceIdentifier = string;
-export type InputIdentifier = string | number;
-
-export type ButtonControlDefaults = Record<DeviceIdentifier, InputIdentifier>;
-
 export interface CompiledUniformButton extends CompiledUniformBase {
   type: ButtonType;
   shaderValue: ShaderValueButton;
-  controlDefaults: ButtonControlDefaults;
+  defaultValue: ShaderButtonBindings;
 }
 
 export type AxisFromButtons = Record<number, InputIdentifier> & {
   default?: number;
 }
 
-export type AxisControlDefaults = Record<DeviceIdentifier, InputIdentifier | AxisFromButtons>;
-
 export interface CompiledUniformAxis extends CompiledUniformBase {
   type: AxisType;
   shaderValue: ShaderValueAxis;
-  controlDefaults: AxisControlDefaults;
+  defaultValue: ShaderAxisBindings;
 }
 
 // tags: <types>
@@ -455,7 +455,10 @@ export const defaultGradient = (): ShaderGradient => ({
   ]
 });
 
-export const defaultButton = (): ShaderButton => ({
+export const defaultButtonBindings = (): ShaderButtonBindings => ({});
+export const defaultAxisBindings = (): ShaderAxisBindings => ({});
+
+const defaultButtonState = (): ShaderButtonState => ({
   buttonHeld: false,
   buttonTriggered: false,
   buttonReleased: false,
@@ -465,7 +468,7 @@ export const defaultButton = (): ShaderButton => ({
   value: 0
 });
 
-export const defaultAxis = (): ShaderAxis => ({
+const defaultAxisState = (): ShaderAxisState => ({
   value: 0
 });
 
@@ -668,7 +671,6 @@ interface ProcessedComment {
   max?: any;
   step?: any;
   enum?: any;
-  controls?: any;
 }
 
 interface ProcessedShaderSuccess {
@@ -889,38 +891,20 @@ const validateGLSLGradient = (glslType: GradientType, value: any, validatedDefau
   return validatedDefault;
 }
 
-const validateGLSLButton = (glslType: ButtonType, value: any, validatedDefault: ShaderButton = defaultButton()): ShaderButton => {
+const validateGLSLButton = (glslType: ButtonType, value: any, validatedDefault: ShaderButtonBindings = defaultButtonBindings()): ShaderButtonBindings => {
   if (typeof value !== "object" || value === null) {
     return validatedDefault;
   }
-
-  const isValid =
-    typeof value.buttonHeld === "boolean" &&
-    typeof value.buttonTriggered === "boolean" &&
-    typeof value.buttonReleased === "boolean" &&
-    typeof value.touchHeld === "boolean" &&
-    typeof value.touchTriggered === "boolean" &&
-    typeof value.touchReleased === "boolean" &&
-    typeof value.value === "number";
-
-  if (isValid) {
-    return value;
-  }
-  return validatedDefault;
+  // TODO(trevor): Validate the types of all keys and values?
+  return value;
 }
 
-const validateGLSLAxis = (glslType: AxisType, value: any, validatedDefault: ShaderAxis = defaultAxis()): ShaderAxis => {
+const validateGLSLAxis = (glslType: AxisType, value: any, validatedDefault: ShaderAxisBindings = defaultAxisBindings()): ShaderAxisBindings => {
   if (typeof value !== "object" || value === null) {
     return validatedDefault;
   }
-
-  const isValid =
-    typeof value.value === "number";
-
-  if (isValid) {
-    return value;
-  }
-  return validatedDefault;
+  // TODO(trevor): Validate the types of all keys and values (including axis from buttons)?
+  return value;
 }
 
 // tags: <types>
@@ -1173,6 +1157,8 @@ const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: Pr
   return uniform as T;
 };
 
+const getUniformKey = (uniform: CompiledUniform): string => `${uniform.parent.layer.id}\0${uniform.name}`;
+
 export class RaverieVisualizer {
   public readonly gl: WebGL2RenderingContext;
   private readonly loadTexture: LoadTextureFunction;
@@ -1196,6 +1182,9 @@ export class RaverieVisualizer {
   private lastTimeStampMs: number = -1;
   private frame: number = -1;
   private isRenderingInternal = false;
+
+  private buttonStates: Record<string, ShaderButtonState | undefined> = {};
+  private axisStates: Record<string, ShaderAxisState | undefined> = {};
 
   public onBeforeRender: RenderCallback | null = null;
 
@@ -1619,13 +1608,14 @@ export class RaverieVisualizer {
           });
         }
         case "button": {
-          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`)
-          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`)
-          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`)
-          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`)
-          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`)
-          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`)
-          const locationValue = getUniformLocation(`${name}.value`)
+          const defaultValue = validateGLSLButton(type, parsedComment.default);
+          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`);
+          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`);
+          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`);
+          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`);
+          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`);
+          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`);
+          const locationValue = getUniformLocation(`${name}.value`);
 
           return pass<ProcessedUniformButton>({
             type,
@@ -1643,13 +1633,14 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLButton(type, foundShaderValue?.value)
+              value: validateGLSLButton(type, foundShaderValue?.value, defaultValue)
             },
-            controlDefaults: parsedComment.controls
+            defaultValue,
           });
         }
         case "axis": {
-          const locationValue = getUniformLocation(`${name}.value`)
+          const defaultValue = validateGLSLAxis(type, parsedComment.default);
+          const locationValue = getUniformLocation(`${name}.value`);
 
           return pass<ProcessedUniformAxis>({
             type,
@@ -1661,9 +1652,9 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLAxis(type, foundShaderValue?.value)
+              value: validateGLSLAxis(type, foundShaderValue?.value, defaultValue)
             },
-            controlDefaults: parsedComment.controls
+            defaultValue,
           });
         }
         default: throw new Error(`Unexpected GLSL type '${type}'`)
@@ -1860,6 +1851,7 @@ export class RaverieVisualizer {
           continue;
         }
 
+        const uniformKey = getUniformKey(processedUniform);
         const value = processedUniform.shaderValue.value;
         // tags: <types>
         switch (processedUniform.type) {
@@ -2018,19 +2010,19 @@ export class RaverieVisualizer {
             break;
           }
           case "button": {
-            const validatedValue = validateGLSLButton(processedUniform.type, value);
-            gl.uniform1i(processedUniform.locationButtonHeld, Number(validatedValue.buttonHeld));
-            gl.uniform1i(processedUniform.locationButtonTriggered, Number(validatedValue.buttonTriggered));
-            gl.uniform1i(processedUniform.locationButtonReleased, Number(validatedValue.buttonReleased));
-            gl.uniform1i(processedUniform.locationTouchHeld, Number(validatedValue.touchHeld));
-            gl.uniform1i(processedUniform.locationTouchTriggered, Number(validatedValue.touchTriggered));
-            gl.uniform1i(processedUniform.locationTouchReleased, Number(validatedValue.touchReleased));
-            gl.uniform1f(processedUniform.locationValue, validatedValue.value);
+            const state = this.buttonStates[uniformKey] || defaultButtonState();
+            gl.uniform1i(processedUniform.locationButtonHeld, Number(state.buttonHeld));
+            gl.uniform1i(processedUniform.locationButtonTriggered, Number(state.buttonTriggered));
+            gl.uniform1i(processedUniform.locationButtonReleased, Number(state.buttonReleased));
+            gl.uniform1i(processedUniform.locationTouchHeld, Number(state.touchHeld));
+            gl.uniform1i(processedUniform.locationTouchTriggered, Number(state.touchTriggered));
+            gl.uniform1i(processedUniform.locationTouchReleased, Number(state.touchReleased));
+            gl.uniform1f(processedUniform.locationValue, state.value);
             break;
           }
           case "axis": {
-            const validatedValue = validateGLSLAxis(processedUniform.type, value);
-            gl.uniform1f(processedUniform.locationValue, validatedValue.value);
+            const state = this.axisStates[uniformKey] || defaultAxisState();
+            gl.uniform1f(processedUniform.locationValue, state.value);
             break;
           }
 
@@ -2152,6 +2144,8 @@ export class RaverieVisualizer {
         }
       } else {
         for (const uniform of compiledLayer.uniforms) {
+          const uniformKey = getUniformKey(uniform);
+
           if (uniform.type === "button") {
             const cumulativeButton: SampledButton = {
               buttonHeld: false,
@@ -2161,8 +2155,8 @@ export class RaverieVisualizer {
 
             // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
             // basically we almost want that to be the "shader value", maybe in the future we'll have it all
-            for (const deviceId in uniform.controlDefaults) {
-              const buttonInputId = uniform.controlDefaults[deviceId];
+            for (const deviceId in uniform.shaderValue.value) {
+              const buttonInputId = uniform.shaderValue.value[deviceId];
               const sampledButton = onSampleButton(deviceId, buttonInputId);
               if (sampledButton) {
                 cumulativeButton.buttonHeld ||= sampledButton.buttonHeld;
@@ -2171,10 +2165,11 @@ export class RaverieVisualizer {
               }
             }
 
-            const prevButtonHeld = uniform.shaderValue.value.buttonHeld;
-            const prevTouchHeld = uniform.shaderValue.value.touchHeld;
+            const prevState = this.buttonStates[uniformKey];
+            const prevButtonHeld = prevState?.buttonHeld || false;
+            const prevTouchHeld = prevState?.touchHeld || false;
 
-            uniform.shaderValue.value = {
+            const nextState: ShaderButtonState = {
               buttonHeld: cumulativeButton.buttonHeld,
               buttonTriggered: cumulativeButton.buttonHeld && !prevButtonHeld,
               buttonReleased: !cumulativeButton.buttonHeld && prevButtonHeld,
@@ -2183,14 +2178,16 @@ export class RaverieVisualizer {
               touchReleased: !cumulativeButton.touchHeld && prevTouchHeld,
               value: cumulativeButton.value
             };
+
+            this.buttonStates[uniformKey] = nextState;
           } else if (uniform.type === "axis") {
             let cumulativeAxis = 0;
             let cumulativeAxisFromButtons = 0;
 
             // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
             // basically we almost want that to be the "shader value", maybe in the future we'll have it all
-            for (const deviceId in uniform.controlDefaults) {
-              const axisInputId = uniform.controlDefaults[deviceId];
+            for (const deviceId in uniform.shaderValue.value) {
+              const axisInputId = uniform.shaderValue.value[deviceId];
 
               if (typeof axisInputId === "object") {
                 const axisFromButtons = axisInputId;
@@ -2228,11 +2225,9 @@ export class RaverieVisualizer {
               }
             }
 
-            if (cumulativeAxis === 0) {
-              uniform.shaderValue.value.value = cumulativeAxisFromButtons;
-            } else {
-              uniform.shaderValue.value.value = cumulativeAxis;
-            }
+            this.axisStates[uniformKey] = {
+              value: cumulativeAxis === 0 ? cumulativeAxisFromButtons : cumulativeAxis
+            };
           }
         }
       }
