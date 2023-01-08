@@ -1,7 +1,7 @@
 import { defaultEmptyLayerShader, LayerShader } from "../core";
 
-export const emptyLayer: LayerShader = {
+export const emptyShaderLayer: LayerShader = {
   ...defaultEmptyLayerShader(),
-  id: "empty code",
-  name: "empty code"
+  id: "empty shader code",
+  name: "empty shader code"
 };

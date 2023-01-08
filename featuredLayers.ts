@@ -1,6 +1,6 @@
 import { LayerShader } from "./core";
 import { connnectedPointsLayer } from "./layers/connectedPoints";
-import { emptyLayer } from "./layers/empty";
+import { emptyShaderLayer } from "./layers/emptyShader";
 import { glitchLayer } from "./layers/glitch";
 import { godRaysLayer } from "./layers/godRays";
 import { gradientLayer } from "./layers/gradient";
@@ -22,7 +22,7 @@ const untrimmedLayers: LayerShader[] = [
   spiralLayer,
   tunnelLayer,
   textureLayer,
-  emptyLayer,
+  emptyShaderLayer,
 ]
 
 export const featuredLayers: LayerShader[] = untrimmedLayers.map((layer) => ({
