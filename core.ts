@@ -1073,17 +1073,21 @@ interface RenderTargetsInternal {
 
 const DEFAULT_CHECKER_SIZE = 8;
 
-export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
-export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => {
+export interface SampledButton {
   buttonHeld: boolean;
   touchHeld: boolean;
   // [0, 1]
   value: number;
-};
-export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => {
+}
+
+export interface SampledAxis {
   // [-1, 1]
   value: number;
-};
+}
+
+export type RenderLayerShaderCallback = (compiledLayerShader: CompiledLayerShader, gl: WebGL2RenderingContext) => void;
+export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledButton | null;
+export type SampleAxisCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledAxis | null;
 
 export class RaverieVisualizer {
   public readonly gl: WebGL2RenderingContext;
@@ -1099,9 +1103,6 @@ export class RaverieVisualizer {
 
   // For copying the final result to the back buffer
   private readonly copyShader: ProcessedLayerShader;
-
-  private buttonStates: Record<DeviceIdentifier, Record<InputIdentifier, ShaderButton | undefined> | undefined> = {};
-  private axisStates: Record<DeviceIdentifier, Record<InputIdentifier, ShaderAxis | undefined> | undefined> = {};
 
   private lastTimeStampMs: number = -1;
 
@@ -1963,46 +1964,6 @@ export class RaverieVisualizer {
     const onSampleButton = this.onSampleButton;
     const onSampleAxis = this.onSampleAxis;
 
-    const prevButtonStates = this.buttonStates;
-    this.buttonStates = {};
-    const prevAxisStates = this.axisStates;
-    this.axisStates = {};
-
-    const updateButton = (deviceId: DeviceIdentifier, buttonInputId: InputIdentifier): ShaderButton => {
-      const device = this.buttonStates[deviceId] || {};
-      this.buttonStates[deviceId] = device;
-
-      const button = device[buttonInputId];
-      if (button) {
-        return button;
-      } else {
-        let prevButtonHeld = false;
-        let prevTouchHeld = false;
-
-        const prevDevice = prevButtonStates[deviceId];
-        if (prevDevice) {
-          const prevState = prevDevice[buttonInputId];
-          if (prevState) {
-            prevButtonHeld = prevState.buttonHeld;
-            prevTouchHeld = prevState.touchHeld;
-          }
-        }
-
-        const state = onSampleButton(deviceId, buttonInputId);
-        const newButton: ShaderButton = {
-          buttonHeld: state.buttonHeld,
-          buttonTriggered: state.buttonHeld && !prevButtonHeld,
-          buttonReleased: !state.buttonHeld && prevButtonHeld,
-          touchHeld: state.touchHeld,
-          touchTriggered: state.touchHeld && !prevTouchHeld,
-          touchReleased: !state.touchHeld && prevTouchHeld,
-          value: state.value
-        };
-        device[buttonInputId] = newButton;
-        return newButton;
-      }
-    };
-
     const walk = (compiledLayer: CompiledLayer) => {
       if (compiledLayer.type === "group") {
         for (const childLayer of compiledLayer.layers) {
@@ -2011,45 +1972,85 @@ export class RaverieVisualizer {
       } else {
         for (const uniform of compiledLayer.uniforms) {
           if (uniform.type === "button") {
+            const cumulativeButton: SampledButton = {
+              buttonHeld: false,
+              touchHeld: false,
+              value: 0,
+            };
+
             // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
             // basically we almost want that to be the "shader value", maybe in the future we'll have it all
             for (const deviceId in uniform.controlDefaults) {
-              const inputId = uniform.controlDefaults[deviceId];
-              uniform.shaderValue.value = updateButton(deviceId, inputId);
+              const buttonInputId = uniform.controlDefaults[deviceId];
+              const sampledButton = onSampleButton(deviceId, buttonInputId);
+              if (sampledButton) {
+                cumulativeButton.buttonHeld ||= sampledButton.buttonHeld;
+                cumulativeButton.touchHeld ||= sampledButton.touchHeld;
+                cumulativeButton.value = Math.max(cumulativeButton.value, sampledButton.value);
+              }
             }
+
+            const prevButtonHeld = uniform.shaderValue.value.buttonHeld;
+            const prevTouchHeld = uniform.shaderValue.value.touchHeld;
+
+            uniform.shaderValue.value = {
+              buttonHeld: cumulativeButton.buttonHeld,
+              buttonTriggered: cumulativeButton.buttonHeld && !prevButtonHeld,
+              buttonReleased: !cumulativeButton.buttonHeld && prevButtonHeld,
+              touchHeld: cumulativeButton.touchHeld,
+              touchTriggered: cumulativeButton.touchHeld && !prevTouchHeld,
+              touchReleased: !cumulativeButton.touchHeld && prevTouchHeld,
+              value: cumulativeButton.value
+            };
           } else if (uniform.type === "axis") {
+            let cumulativeAxis = 0;
+            let cumulativeAxisFromButtons = 0;
+
             // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
             // basically we almost want that to be the "shader value", maybe in the future we'll have it all
             for (const deviceId in uniform.controlDefaults) {
               const axisInputId = uniform.controlDefaults[deviceId];
-              const device = this.axisStates[deviceId] || {};
-              this.axisStates[deviceId] = device;
 
               if (typeof axisInputId === "object") {
                 const axisFromButtons = axisInputId;
-                let axis = axisFromButtons.default || 0;
+                let pressedButtonCount = 0;
+                let axis = 0;
                 for (const key in axisFromButtons) {
                   const buttonInputId = axisFromButtons[key];
                   if (key !== "default") {
                     const valueIfPressed = Number(key);
-                    const state = onSampleButton(deviceId, buttonInputId);
-                    if (state.buttonHeld) {
-                      axis += valueIfPressed;
+                    const sampledButton = onSampleButton(deviceId, buttonInputId);
+                    if (sampledButton && sampledButton.buttonHeld) {
+                      axis = valueIfPressed;
+                      ++pressedButtonCount;
                     }
                   }
                 }
-                axis = clamp(axis, -1, 1);
-                uniform.shaderValue.value.value = axis;
+
+                // We only set the axis value if we press a single button
+                // this prevents having to choose a "winner" if multiple buttons are pressed
+                // Adding values together also does not work well, especially if you have
+                // an axis whose value defaults to any value other than 0, and pressing a
+                // button should make it go to 0
+                axis = pressedButtonCount === 1
+                  ? axis
+                  : axisFromButtons.default || 0;
+
+                if (Math.abs(axis) > Math.abs(cumulativeAxisFromButtons)) {
+                  cumulativeAxisFromButtons = clamp(axis, -1, 1);
+                }
               } else {
-                const axis = device[axisInputId];
-                if (axis) {
-                  uniform.shaderValue.value = axis;
-                } else {
-                  const state = onSampleAxis(deviceId, axisInputId);
-                  uniform.shaderValue.value = state;
-                  device[axisInputId] = state;
+                const sampledAxis = onSampleAxis(deviceId, axisInputId);
+                if (sampledAxis && Math.abs(sampledAxis.value) > Math.abs(cumulativeAxis)) {
+                  cumulativeAxis = sampledAxis.value;
                 }
               }
+            }
+
+            if (cumulativeAxis === 0) {
+              uniform.shaderValue.value.value = cumulativeAxisFromButtons;
+            } else {
+              uniform.shaderValue.value.value = cumulativeAxis;
             }
           }
         }

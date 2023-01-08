@@ -40,11 +40,11 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
       const state = Boolean(keyStates[inputId]);
       return { value: Number(state), buttonHeld: state, touchHeld: state };
     }
-    return { value: 0, buttonHeld: false, touchHeld: false };
+    return null;
   };
 
   visualizer.onSampleAxis = (device, inputId) => {
-    return { value: 0, buttonHeld: false, touchHeld: false };
+    return null;
   };
 
   return visualizer;
