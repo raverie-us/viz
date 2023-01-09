@@ -11,7 +11,9 @@ uniform float colorCycleRate; // default: 0.2, min: 0, max: 1
 vec4 render() {
   vec4 color = texture(gPreviousLayer, gUV);
   float t = gLuminance(color.rgb) + gTime * colorCycleRate;
-  return gSampleGradient(colors, t);
+  vec4 sampled = gSampleGradient(colors, t);
+  sampled.a *= color.a;
+  return sampled;
 }`,
   blendMode: "normal",
   opacity: 1,
