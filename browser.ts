@@ -9,8 +9,8 @@ import {
 
 interface RenderMessage {
   type: "render";
-  layer: LayerJavaScript;
   requestId: number;
+  layer: LayerJavaScript;
   globals: {
     gOpacity: number,
     gResolution: [number, number],
@@ -30,7 +30,7 @@ interface RenderMessageResult {
 const iframePreCode = `
 window.addEventListener("message", async (e) => {
   if (e.data.type === "render" && window.render) {
-    const image = await window.render(e.data.layer, e.data.globals);
+    const image = await window.render(e.data.layer, e.data.globals, e.data.uniforms);
     parent.postMessage({
       type: "renderResult",
       image,
