@@ -227,3 +227,15 @@ Ability to make a "time accumulator"
 
 Allow for simpler definition of gradient
  - array of arrays, where 5th element is t (or first?)
+
+Ability to bind:
+ - bools
+ - enums
+ - blend modes (custom blend mode)
+   - Use this in the tunnel shader
+ - custom texture wrap modes
+   - Maybe the custom texture wrap mode should just be something we expose
+   - Kinda gross, but rather than the user having to do everything, we can make a custom texture sample function
+   - that way this can be used in the texture shader, but also just in any other shader that wants to sample a texture
+   - would need to bind a background color and two bools
+   - maybe we can put it into a struct, and declare it next to the sampler
