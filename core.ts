@@ -1342,7 +1342,11 @@ export class RaverieVisualizer {
     return newTarget;
   }
 
-  private freeRenderTarget(target: RenderTarget) {
+  private releaseRenderTarget(target: RenderTarget) {
+    if (target.useCount <= 0) {
+      throw new Error("Attempt to release already freed RenderTarget");
+    }
+
     const targetsInternal = target.parent as any as RenderTargetsInternal;
     --target.useCount;
     if (target.useCount === 0) {
