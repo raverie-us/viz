@@ -27,15 +27,15 @@ interface RenderMessageResult {
   requestId: number;
 }
 
-const iframePreCode = `
+const iframePreCode = (origin: string) => `
 window.addEventListener("message", async (e) => {
-  if (e.data.type === "render" && window.render) {
+  if (e.origin === "${origin}" && e.data.type === "render" && window.render) {
     const image = await window.render(e.data.layer, e.data.globals, e.data.uniforms);
     parent.postMessage({
       type: "renderResult",
       image,
       requestId: e.data.requestId
-    }, "*");
+    }, "${origin}");
   }
 });`;
 
@@ -142,7 +142,7 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   visualizer.onCompileJavaScriptLayer = (layer) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
-    const src = `<script>${iframePreCode}</script><script>${layer.code}</script>`;
+    const src = `<script>${iframePreCode(location.origin)}</script><script>${layer.code}</script>`;
     iframe.onload = () => {
       iframe.dataset.loaded = "1";
     };
@@ -175,6 +175,8 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
         globals,
         uniforms
       };
+      // The iframe always has the origin of "null" since it's sandboxed and loaded from a data-url
+      // Unfortunately we cannot pass "null" here as it throws, so we must pass "*"
       iframe.contentWindow.postMessage(toSend, "*");
     } else {
       visualizer.renderCompletedForJavaScriptLayer(requestId, compiledLayer, null);
@@ -184,6 +186,7 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   window.addEventListener("message", (e: MessageEvent) => {
     const message = e.data as RenderMessageResult;
     const isValidMessage =
+      e.origin === "null" &&
       typeof message === "object" &&
       message &&
       message.type === "renderResult" &&
