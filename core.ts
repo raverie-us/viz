@@ -692,8 +692,10 @@ interface ProcessedProgram {
 }
 
 interface RenderTarget {
+  parent: RenderTargets;
   texture: WebGLTexture;
   buffer: WebGLFramebuffer;
+  useCount: number;
 }
 
 const pass = <T>(value: T): T => value;
@@ -1082,14 +1084,6 @@ export type ControlsUpdateCallback = () => void;
 export const defaultFrameTime = 1 / 60;
 export const defaultFramesAheadForAsyncLayers = 2;
 
-export interface RenderOptions {
-  /**
-   * Whether we draw the final result to the back buffer at the end of render all visible layers.
-   * @default true
-   */
-  drawToBackBuffer?: boolean;
-};
-
 export class RenderTargets {
   public get width() {
     return this.widthInternal;
@@ -1099,17 +1093,20 @@ export class RenderTargets {
     return this.heightInternal;
   }
 
+  private readonly unusedTargets: RenderTarget[] = [];
+  private readonly allTargets: RenderTarget[] = [];
+
   public constructor(
     private widthInternal: number,
-    private heightInternal: number,
-    private readonly targets: [RenderTarget, RenderTarget]) {
+    private heightInternal: number) {
   }
 }
 
 interface RenderTargetsInternal {
   widthInternal: number;
   heightInternal: number;
-  targets: [RenderTarget, RenderTarget];
+  unusedTargets: RenderTarget[];
+  allTargets: RenderTarget[];
 }
 
 const DEFAULT_CHECKER_SIZE = 8;
@@ -1275,19 +1272,28 @@ export class RaverieVisualizer {
     this.customTextureUniform = getRequiredUniform(this.customTextureShader, "textureInput");
   }
 
-  private createRenderTarget(width: number, height: number): RenderTarget {
+  private createRenderTarget(parent: RenderTargets): RenderTarget {
     const gl = this.gl;
     const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
     gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
     const texture = this.createTexture();
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, parent.width, parent.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return {
+
+    const newTarget: RenderTarget = {
+      parent,
       texture: texture,
-      buffer: buffer
+      buffer: buffer,
+      useCount: 0
     };
+
+    // We only push the new render target into allTargets and not unusedTargets because the
+    // only reason this function gets called is to allocate a target that is about to be used
+    const targetsInternal = parent as any as RenderTargetsInternal;
+    targetsInternal.allTargets.push(newTarget);
+    return newTarget;
   }
 
   private deleteRenderTarget(renderTarget: RenderTarget) {
@@ -1297,10 +1303,7 @@ export class RaverieVisualizer {
   }
 
   public createRenderTargets(width: number, height: number): RenderTargets {
-    return new RenderTargets(Math.max(width, 1), Math.max(height, 1), [
-      this.createRenderTarget(width, height),
-      this.createRenderTarget(width, height),
-    ]);
+    return new RenderTargets(Math.max(width, 1), Math.max(height, 1));
   }
 
   public resizeRenderTargets(targets: RenderTargets, width: number, height: number) {
@@ -1309,18 +1312,42 @@ export class RaverieVisualizer {
     targetsInternal.heightInternal = Math.max(height, 1);
 
     const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, targetsInternal.targets[0].texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.bindTexture(gl.TEXTURE_2D, targetsInternal.targets[1].texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    for (const target of targetsInternal.allTargets) {
+      gl.bindTexture(gl.TEXTURE_2D, target.texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   public deleteRenderTargets(targets: RenderTargets) {
     const targetsInternal = targets as any as RenderTargetsInternal;
-    this.deleteRenderTarget(targetsInternal.targets[0]);
-    this.deleteRenderTarget(targetsInternal.targets[1]);
-    const gl = this.gl;
+    if (targetsInternal.unusedTargets.length !== targetsInternal.allTargets.length) {
+      throw new Error("Cannot delete targets that are in use");
+    }
+
+    for (const target of targetsInternal.allTargets) {
+      this.deleteRenderTarget(target);
+    }
+    targetsInternal.allTargets.length = 0;
+    targetsInternal.unusedTargets.length = 0;
+  }
+
+  private requestRenderTarget(targets: RenderTargets): RenderTarget {
+    const targetsInternal = targets as any as RenderTargetsInternal;
+    const newTarget = targetsInternal.unusedTargets.length === 0
+      ? this.createRenderTarget(targets)
+      : targetsInternal.unusedTargets.pop() as RenderTarget;
+
+    ++newTarget.useCount;
+    return newTarget;
+  }
+
+  private freeRenderTarget(target: RenderTarget) {
+    const targetsInternal = target.parent as any as RenderTargetsInternal;
+    --target.useCount;
+    if (target.useCount === 0) {
+      targetsInternal.unusedTargets.push(target);
+    }
   }
 
   private createShader(str: string, type: GLenum): ProcessedShader {
@@ -2148,7 +2175,7 @@ export class RaverieVisualizer {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  private clearRenderTargetInternal(renderTarget: RenderTarget, width: number, height: number, checkerSize = DEFAULT_CHECKER_SIZE) {
+  private clearRenderTargetInternal(renderTarget: RenderTarget, checkerSize = DEFAULT_CHECKER_SIZE) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
     gl.clearColor(1, 0, 0, 1);
@@ -2160,8 +2187,8 @@ export class RaverieVisualizer {
       1.0,
       renderTarget.buffer,
       null,
-      width,
-      height,
+      renderTarget.parent.width,
+      renderTarget.parent.height,
       0);
   };
 
@@ -2182,14 +2209,10 @@ export class RaverieVisualizer {
       const targetsInternal = renderTargets as any as RenderTargetsInternal;
       this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
-      this.clearRenderTargetInternal(
-        targetsInternal.targets[0],
-        targetsInternal.widthInternal,
-        targetsInternal.heightInternal,
-        checkerSize);
+      const checkerTarget = this.requestRenderTarget(renderTargets);
+      this.clearRenderTargetInternal(checkerTarget, checkerSize);
 
-      const frameBuffer = targetsInternal.targets[1].buffer;
-      const checkerTexture = targetsInternal.targets[0].texture;
+      const renderTarget = this.requestRenderTarget(renderTargets);
 
       const timeSeconds = timeStampMs / 1000;
 
@@ -2204,8 +2227,8 @@ export class RaverieVisualizer {
           this.renderLayerShaderInternal(
             processedLayer,
             1,
-            frameBuffer,
-            checkerTexture,
+            renderTarget.buffer,
+            checkerTarget.texture,
             targetsInternal.widthInternal,
             targetsInternal.heightInternal,
             timeSeconds,
@@ -2220,8 +2243,8 @@ export class RaverieVisualizer {
           this.renderLayerShaderInternal(
             this.customTextureShader,
             1,
-            frameBuffer,
-            checkerTexture,
+            renderTarget.buffer,
+            checkerTarget.texture,
             targetsInternal.widthInternal,
             targetsInternal.heightInternal,
             timeSeconds,
@@ -2229,6 +2252,9 @@ export class RaverieVisualizer {
           this.customTextureShader.layer.id = "";
         }
       }
+
+      this.freeRenderTarget(checkerTarget);
+      this.freeRenderTarget(renderTarget);
       return results;
     } finally {
       this.isRenderingInternal = false;
@@ -2365,8 +2391,7 @@ export class RaverieVisualizer {
   public render(
     compiledLayerGroup: CompiledLayerGroup,
     timeStampMs: number,
-    renderTargets: RenderTargets,
-    options?: RenderOptions): number {
+    renderTargets: RenderTargets): number {
     if (this.isRenderingInternal) {
       throw new Error("A frame is currently being rendered, check 'isRendering'");
     }
@@ -2391,8 +2416,9 @@ export class RaverieVisualizer {
       gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
       const timeSeconds = timeStampMs / 1000;
+      let readTarget = this.requestRenderTarget(renderTargets);
+      this.clearRenderTargetInternal(readTarget);
 
-      let renderTargetIndex = 0;
       const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
         const groupOpacity = processedLayerGroup.layer.opacity * parentOpacity;
         for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
@@ -2406,16 +2432,19 @@ export class RaverieVisualizer {
             // We only render the layer if it has a valid program (also don't swap buffers)
             // Treat this like it's an invisible layer
             if (layer.program) {
-              renderTargetIndex = Number(!renderTargetIndex);
+              const writeTarget = this.requestRenderTarget(renderTargets);
 
               this.renderLayerShaderInternal(
                 layer,
                 groupOpacity,
-                targetsInternal.targets[renderTargetIndex].buffer,
-                targetsInternal.targets[Number(!renderTargetIndex)].texture,
+                writeTarget.buffer,
+                readTarget.texture,
                 targetsInternal.widthInternal,
                 targetsInternal.heightInternal,
                 timeSeconds);
+
+              this.freeRenderTarget(readTarget);
+              readTarget = writeTarget;
             }
           } else if (layer.type === "js") {
             if (this.onRenderJavaScriptLayer) {
@@ -2450,17 +2479,22 @@ export class RaverieVisualizer {
               this.customTexture = layer.texture;
               this.customTextureShader.layer.blendMode = layer.layer.blendMode;
               this.customTextureShader.layer.opacity = layer.layer.opacity;
-              renderTargetIndex = Number(!renderTargetIndex);
+
+              const writeTarget = this.requestRenderTarget(renderTargets);
+
               this.renderLayerShaderInternal(
                 this.customTextureShader,
                 groupOpacity,
-                targetsInternal.targets[renderTargetIndex].buffer,
-                targetsInternal.targets[Number(!renderTargetIndex)].texture,
+                writeTarget.buffer,
+                readTarget.texture,
                 targetsInternal.widthInternal,
                 targetsInternal.heightInternal,
                 timeSeconds);
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.opacity = 1;
+
+              this.freeRenderTarget(readTarget);
+              readTarget = writeTarget;
             }
           } else {
             renderRecursive(layer, groupOpacity);
@@ -2468,25 +2502,19 @@ export class RaverieVisualizer {
         }
       }
 
-      this.clearRenderTargetInternal(targetsInternal.targets[0], targetsInternal.widthInternal, targetsInternal.heightInternal);
-      this.clearRenderTargetInternal(targetsInternal.targets[1], targetsInternal.widthInternal, targetsInternal.heightInternal);
-
       renderRecursive(processedLayerGroup, 1.0);
 
-      const drawToBackBuffer = options?.drawToBackBuffer === undefined
-        ? true
-        : options?.drawToBackBuffer;
+      this.renderLayerShaderInternal(
+        this.copyShader,
+        1.0,
+        null,
+        readTarget.texture,
+        targetsInternal.widthInternal,
+        targetsInternal.heightInternal,
+        timeSeconds);
 
-      if (drawToBackBuffer) {
-        this.renderLayerShaderInternal(
-          this.copyShader,
-          1.0,
-          null,
-          targetsInternal.targets[renderTargetIndex].texture,
-          targetsInternal.widthInternal,
-          targetsInternal.heightInternal,
-          timeSeconds);
-      }
+      this.freeRenderTarget(readTarget);
+
       return frameTimeSeconds;
     } finally {
       this.isRenderingInternal = false;
