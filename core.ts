@@ -2179,21 +2179,23 @@ export class RaverieVisualizer {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  private clearRenderTargetInternal(renderTarget: RenderTarget, checkerSize = DEFAULT_CHECKER_SIZE) {
+  private clearRenderTargetInternal(renderTarget: RenderTarget, checkerSize: number | false = DEFAULT_CHECKER_SIZE) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderTarget.buffer);
-    gl.clearColor(1, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    this.checkerboardSize.shaderValue.value = checkerSize;
-    this.renderLayerShaderInternal(
-      this.checkerboardShader,
-      1.0,
-      renderTarget.buffer,
-      null,
-      renderTarget.parent.width,
-      renderTarget.parent.height,
-      0);
+    if (checkerSize !== false) {
+      this.checkerboardSize.shaderValue.value = checkerSize;
+      this.renderLayerShaderInternal(
+        this.checkerboardShader,
+        1.0,
+        renderTarget.buffer,
+        null,
+        renderTarget.parent.width,
+        renderTarget.parent.height,
+        0);
+    }
   };
 
   public renderLayerShaderPreviews(
@@ -2257,8 +2259,8 @@ export class RaverieVisualizer {
         }
       }
 
-      this.freeRenderTarget(checkerTarget);
-      this.freeRenderTarget(renderTarget);
+      this.releaseRenderTarget(checkerTarget);
+      this.releaseRenderTarget(renderTarget);
       return results;
     } finally {
       this.isRenderingInternal = false;
@@ -2420,10 +2422,8 @@ export class RaverieVisualizer {
       gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
 
       const timeSeconds = timeStampMs / 1000;
-      let readTarget = this.requestRenderTarget(renderTargets);
-      this.clearRenderTargetInternal(readTarget);
 
-      const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number) => {
+      const renderRecursive = (processedLayerGroup: ProcessedLayerGroup, parentOpacity: number, readTarget: RenderTarget): RenderTarget => {
         const groupOpacity = processedLayerGroup.layer.opacity * parentOpacity;
         for (let i = processedLayerGroup.layers.length - 1; i >= 0; --i) {
           const layer = processedLayerGroup.layers[i];
@@ -2447,7 +2447,7 @@ export class RaverieVisualizer {
                 targetsInternal.heightInternal,
                 timeSeconds);
 
-              this.freeRenderTarget(readTarget);
+              this.releaseRenderTarget(readTarget);
               readTarget = writeTarget;
             }
           } else if (layer.type === "js") {
@@ -2497,27 +2497,60 @@ export class RaverieVisualizer {
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.opacity = 1;
 
-              this.freeRenderTarget(readTarget);
+              this.releaseRenderTarget(readTarget);
               readTarget = writeTarget;
             }
           } else {
-            renderRecursive(layer, groupOpacity);
+            // TODO(trevor): Add pass through mode instead of using normal
+            if (layer.layer.blendMode.startsWith("")) {
+              readTarget = renderRecursive(layer, groupOpacity, readTarget);
+            } else {
+              const requestedTarget = this.requestRenderTarget(renderTargets);
+              this.clearRenderTargetInternal(requestedTarget, false);
+              const resultTarget = renderRecursive(layer, groupOpacity, requestedTarget);
+
+              const writeTarget = this.requestRenderTarget(renderTargets);
+
+              // Now blend the requested target back into the read target
+              this.customTexture = resultTarget.texture;
+              this.customTextureShader.layer.blendMode = "normal";
+              this.customTextureShader.layer.opacity = 1;
+              this.customTextureShader.layer.id = layer.layer.id;
+              this.renderLayerShaderInternal(
+                this.customTextureShader,
+                1,
+                writeTarget.buffer,
+                readTarget.texture,
+                targetsInternal.widthInternal,
+                targetsInternal.heightInternal,
+                timeSeconds);
+              this.customTextureShader.layer.id = "";
+
+              this.releaseRenderTarget(resultTarget);
+              this.releaseRenderTarget(readTarget);
+              readTarget = writeTarget;
+            }
           }
         }
+
+        return readTarget;
       }
 
-      renderRecursive(processedLayerGroup, 1.0);
+      const initialTarget = this.requestRenderTarget(renderTargets);
+      this.clearRenderTargetInternal(initialTarget);
+      const finalTarget = renderRecursive(processedLayerGroup, 1.0, initialTarget);
 
+      // Render to the back buffer (we pass null for the render buffer)
       this.renderLayerShaderInternal(
         this.copyShader,
         1.0,
         null,
-        readTarget.texture,
+        finalTarget.texture,
         targetsInternal.widthInternal,
         targetsInternal.heightInternal,
         timeSeconds);
 
-      this.freeRenderTarget(readTarget);
+      this.releaseRenderTarget(finalTarget);
 
       return frameTimeSeconds;
     } finally {
