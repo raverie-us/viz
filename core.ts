@@ -22,6 +22,7 @@ export type LayerBlendMode =
 
   "normal" |
   "dissolve" |
+  "overwrite" |
 
   "darken" |
   "multiply" |
@@ -53,6 +54,7 @@ export const blendModeList: LayerBlendMode[] = [
 
   "normal",
   "dissolve",
+  "overwrite",
 
   "darken",
   "multiply",
@@ -91,6 +93,7 @@ export const blendModeToIndex = (() => {
 export const blendModeDisplay: (LayerBlendMode | null)[] = [
   "normal",
   "dissolve",
+  "overwrite",
   null,
   "darken",
   "multiply",
@@ -1013,7 +1016,7 @@ ${blendModeList.map((blendMode, index) =>
 vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
   // Pass through is a special case we use internally when we want to render without a previous layer
   // It also has a dual purpose for folders/groups to pass through the background when rendering
-  if (blendMode == gBlendModePassThrough) {
+  if (blendMode == gBlendModePassThrough || blendMode == gBlendModeOverwrite) {
     return source.rgba;
   }
 
@@ -1252,7 +1255,7 @@ export class RaverieVisualizer {
 
     this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
-      blendMode: "passThrough",
+      blendMode: "overwrite",
       code: `
       uniform float checkerPixelSize; // default: ${DEFAULT_CHECKER_SIZE}
       vec4 render() {
@@ -1266,7 +1269,7 @@ export class RaverieVisualizer {
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
-      blendMode: "passThrough",
+      blendMode: "overwrite",
       code: `
       vec4 render() {
         return texture(gPreviousLayer, gUV);
