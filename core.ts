@@ -18,7 +18,7 @@ export interface LayerGroup extends LayerBase {
 }
 
 export type LayerBlendMode =
-  "overwrite" |
+  "passThrough" |
 
   "normal" |
   "dissolve" |
@@ -49,7 +49,7 @@ export type LayerBlendMode =
   "divide";
 
 export const blendModeList: LayerBlendMode[] = [
-  "overwrite",
+  "passThrough",
 
   "normal",
   "dissolve",
@@ -116,6 +116,12 @@ export const blendModeDisplay: (LayerBlendMode | null)[] = [
   "exclusion",
   "subtract",
   "divide"
+];
+
+export const blendModeDisplayGroup: (LayerBlendMode | null)[] = [
+  "passThrough",
+  null,
+  ...blendModeDisplay
 ];
 
 export type LayerShaderTimeMode =
@@ -393,7 +399,7 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   name: "",
   visible: true,
   opacity: 1.0,
-  blendMode: "normal",
+  blendMode: "passThrough",
   layers: []
 });
 
@@ -1005,28 +1011,30 @@ ${blendModeList.map((blendMode, index) =>
   `const int gBlendMode${blendMode[0].toUpperCase()}${blendMode.substring(1)} = ${index};`).join("\n")}
 
 vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
-  // Overwrite is a special case we use internally when we want to render without a previous layer
-  if (blendMode == gBlendModeOverwrite) {
-    return vec4(source.rgb, 1);
+  // Pass through is a special case we use internally when we want to render without a previous layer
+  // It also has a dual purpose for folders/groups to pass through the background when rendering
+  if (blendMode == gBlendModePassThrough) {
+    return source.rgba;
   }
+
+  float srcAlpha = source.a * opacity;
 
   // We also handle dissolve as a special case since it never blends (always opaque)
   if (blendMode == gBlendModeDissolve) {
-    source.a *= opacity;
     float noise = gNoise2D(gUV);
+    source.a = 1.0;
     vec4 color;
-    if (source.a == 1.0) {
+    if (srcAlpha == 1.0) {
       color = source;
-    } else if (source.a == 0.0) {
+    } else if (srcAlpha == 0.0) {
       color = dest;
     } else {
-      color = source.a < noise ? dest : source;
+      color = srcAlpha < noise ? dest : source;
     }
-    return vec4(color.rgb, 1);
+    return color;
   }
   
   vec3 src = source.rgb;
-  float srcAlpha = source.a * opacity;
   vec3 dst = dest.rgb;
   vec3 hlf = vec3(0.5);
   vec3 one = vec3(1.0);
@@ -1063,7 +1071,9 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
     case gBlendModeDivide: blended = dst / max(src, epsilon); break;
   }
 
-  return vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, 1.0);
+  vec4 alphaBlended = srcAlpha * source + (1.0 - srcAlpha) * dest;
+  vec4 blendModeBlended = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, min(srcAlpha + dest.a, 1.0));
+  return mix(alphaBlended, blendModeBlended, dest.a);
 }
 `;
 
@@ -1212,6 +1222,8 @@ export class RaverieVisualizer {
     this.loadTexture = loadTexture;
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    // TODO(trevor): Premultiplied alpha
+    //gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 
     const vertexPosBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
@@ -1240,7 +1252,7 @@ export class RaverieVisualizer {
 
     this.checkerboardShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
-      blendMode: "overwrite",
+      blendMode: "passThrough",
       code: `
       uniform float checkerPixelSize; // default: ${DEFAULT_CHECKER_SIZE}
       vec4 render() {
@@ -1254,7 +1266,7 @@ export class RaverieVisualizer {
 
     this.copyShader = this.compileLayerShader({
       ...defaultEmptyLayerShader(),
-      blendMode: "overwrite",
+      blendMode: "passThrough",
       code: `
       vec4 render() {
         return texture(gPreviousLayer, gUV);
@@ -1963,10 +1975,10 @@ export class RaverieVisualizer {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
 
-    gl.clearColor(1, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
     if (processedLayerShader.program) {
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
       gl.useProgram(processedLayerShader.program);
 
       // Apply global uniforms
@@ -2070,10 +2082,6 @@ export class RaverieVisualizer {
             if (processedUniform === this.customTextureUniform) {
               gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
               gl.bindTexture(gl.TEXTURE_2D, this.customTexture);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-              gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
               gl.uniform1i(processedUniform.location, textureSamplerIndex);
               ++textureSamplerIndex;
               break;
@@ -2170,6 +2178,10 @@ export class RaverieVisualizer {
         }
       }
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    } else {
+      // Clear to red to indicate an error
+      gl.clearColor(1, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
     }
 
     if (onRender) {
@@ -2389,6 +2401,10 @@ export class RaverieVisualizer {
         const boundTexture = gl.getParameter(gl.TEXTURE_BINDING_2D);
         gl.bindTexture(gl.TEXTURE_2D, processedLayer.texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, image.width, image.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.bindTexture(gl.TEXTURE_2D, boundTexture);
       }
     }
@@ -2501,19 +2517,18 @@ export class RaverieVisualizer {
               readTarget = writeTarget;
             }
           } else {
-            // TODO(trevor): Add pass through mode instead of using normal
-            if (layer.layer.blendMode.startsWith("")) {
+            if (layer.layer.blendMode === "passThrough") {
               readTarget = renderRecursive(layer, groupOpacity, readTarget);
             } else {
               const requestedTarget = this.requestRenderTarget(renderTargets);
               this.clearRenderTargetInternal(requestedTarget, false);
-              const resultTarget = renderRecursive(layer, groupOpacity, requestedTarget);
+              const resultTarget = renderRecursive(layer, 1.0, requestedTarget);
 
               const writeTarget = this.requestRenderTarget(renderTargets);
 
               // Now blend the requested target back into the read target
               this.customTexture = resultTarget.texture;
-              this.customTextureShader.layer.blendMode = "normal";
+              this.customTextureShader.layer.blendMode = layer.layer.blendMode;
               this.customTextureShader.layer.opacity = 1;
               this.customTextureShader.layer.id = layer.layer.id;
               this.renderLayerShaderInternal(
@@ -2524,6 +2539,7 @@ export class RaverieVisualizer {
                 targetsInternal.widthInternal,
                 targetsInternal.heightInternal,
                 timeSeconds);
+              this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.id = "";
 
               this.releaseRenderTarget(resultTarget);

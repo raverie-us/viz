@@ -122,7 +122,15 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
 };
 
 export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): RaverieVisualizer => {
-  const gl = canvas.getContext("webgl2");
+  const gl = canvas.getContext("webgl2", {
+    antialias: false,
+    alpha: true,
+    depth: false,
+    stencil: false,
+    // TODO(trevor): Premultiplied alpha
+    premultipliedAlpha: false,
+    powerPreference: "high-performance"
+  });
   if (!gl) {
     throw new Error("Unable to initialze WebGl");
   }
