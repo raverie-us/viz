@@ -46,7 +46,7 @@ vec4 render() {
 
   vec4 grad = gSampleGradient(depthGradient, 1.0 - min(r, 1.0));
 
-  return gApplyBlendMode(depthBlendMode, 1.0, color, grad);
+  return gApplyBlendMode(depthBlendMode, 1.0, grad, color);
 }`,
   blendMode: "normal",
   opacity: 1,
