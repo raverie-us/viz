@@ -23,6 +23,7 @@ export type LayerBlendMode =
   "normal" |
   "dissolve" |
   "overwrite" |
+  "none" |
 
   "darken" |
   "multiply" |
@@ -55,6 +56,7 @@ export const blendModeList: LayerBlendMode[] = [
   "normal",
   "dissolve",
   "overwrite",
+  "none",
 
   "darken",
   "multiply",
@@ -94,6 +96,7 @@ export const blendModeDisplay: (LayerBlendMode | null)[] = [
   "normal",
   "dissolve",
   "overwrite",
+  "none",
   null,
   "darken",
   "multiply",
@@ -1017,7 +1020,11 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
   // Pass through is a special case we use internally when we want to render without a previous layer
   // It also has a dual purpose for folders/groups to pass through the background when rendering
   if (blendMode == gBlendModePassThrough || blendMode == gBlendModeOverwrite) {
-    return source.rgba;
+    return source;
+  }
+
+  if (blendMode == gBlendModeNone) {
+    return dest;
   }
 
   float srcAlpha = source.a * opacity;
