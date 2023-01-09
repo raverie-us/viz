@@ -156,6 +156,11 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
     };
   };
 
+  visualizer.onDeleteJavaScriptLayer = (layer) => {
+    const iframe = layer.handle as HTMLIFrameElement;
+    iframe.remove();
+  };
+
   const requestIdToCompiledJsLayer: Record<number, CompiledLayerJavaScript> = {};
 
   visualizer.onRenderJavaScriptLayer = (requestId, compiledLayer, globals, uniforms): void => {

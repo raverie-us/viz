@@ -1148,6 +1148,7 @@ export type RenderJavaScriptCallback = (
   globals: JavaScriptGlobals,
   uniforms: CompactUniforms,
 ) => void;
+export type DeleteJavaScriptCallback = (layer: CompiledLayerJavaScript) => void;
 
 const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: ProcessedLayerShader, uniformName: string): T => {
   const uniform = processedLayerShader.uniforms.find((uniform) => uniform.name === uniformName);
@@ -1158,6 +1159,12 @@ const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: Pr
 };
 
 const getUniformKey = (uniform: CompiledUniform): string => `${uniform.parent.layer.id}\0${uniform.name}`;
+
+const clearObject = (obj: any) => {
+  for (const prop in obj) {
+    delete obj[prop];
+  }
+}
 
 export class RaverieVisualizer {
   public readonly gl: WebGL2RenderingContext;
@@ -1194,6 +1201,7 @@ export class RaverieVisualizer {
 
   public onCompileJavaScriptLayer: CompileJavaScriptCallback | null = null;
   public onRenderJavaScriptLayer: RenderJavaScriptCallback | null = null;
+  public onDeleteJavaScriptLayer: DeleteJavaScriptCallback | null = null;
 
   public get isRendering() {
     return this.isRenderingInternal;
@@ -1797,6 +1805,58 @@ export class RaverieVisualizer {
       }
     }
     return processedLayerGroup;
+  }
+
+  public deleteLayer(compiledLayer: CompiledLayer) {
+    switch (compiledLayer.type) {
+      case "group":
+        this.deleteCompiledLayerGroup(compiledLayer);
+        break;
+      case "js":
+        this.deleteCompiledLayerJavaScript(compiledLayer);
+        break;
+      case "shader":
+        this.deleteCompiledLayerShader(compiledLayer);
+        break;
+    }
+  }
+
+  private deleteCompiledLayerCode(compiledLayer: CompiledLayerCode) {
+    for (const uniform of compiledLayer.uniforms) {
+      clearObject(uniform);
+    }
+  }
+
+  private deleteCompiledLayerShader(compiledLayer: CompiledLayerShader) {
+    const processedLayer = compiledLayer as ProcessedLayerShader;
+    this.gl.deleteProgram(processedLayer.program);
+
+    this.deleteCompiledLayerCode(compiledLayer);
+    clearObject(processedLayer);
+  }
+
+  private deleteCompiledLayerJavaScript(compiledLayer: CompiledLayerJavaScript) {
+    const processedLayer = compiledLayer as ProcessedLayerJavaScript;
+
+    if (this.onDeleteJavaScriptLayer) {
+      this.onDeleteJavaScriptLayer(processedLayer);
+    }
+    this.gl.deleteTexture(processedLayer.texture);
+
+    this.deleteCompiledLayerCode(compiledLayer);
+    clearObject(processedLayer);
+  }
+
+  private deleteCompiledLayerGroup(compiledLayer: CompiledLayerGroup) {
+    const processedLayer = compiledLayer as ProcessedLayerGroup;
+
+    for (const id in processedLayer.idToLayer) {
+      const childLayer = processedLayer.idToLayer[id];
+      this.deleteLayer(childLayer);
+      delete processedLayer.idToLayer[id];
+    }
+
+    clearObject(processedLayer);
   }
 
   public getOrCacheTexture(url: string): WebGLTexture {
