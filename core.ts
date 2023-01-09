@@ -359,6 +359,7 @@ export interface CompiledLayerBase {
 }
 
 export interface CompiledLayerCodeBase extends CompiledLayerBase {
+  code: string;
   uniforms: CompiledUniform[];
   errors: CompiledError[];
 }
@@ -657,10 +658,12 @@ interface ProcessedLayerJavaScript extends CompiledLayerJavaScript {
 type ProcessedLayerCode = ProcessedLayerShader | ProcessedLayerJavaScript;
 type ProcessedLayer = ProcessedLayerCode | ProcessedLayerGroup;
 
+type IdToLayer = Record<string, ProcessedLayer>;
+
 interface ProcessedLayerGroup extends CompiledLayerGroup {
   parent: ProcessedLayerGroup | null;
   layers: ProcessedLayer[];
-  idToLayer: Record<string, ProcessedLayer>;
+  idToLayer: IdToLayer;
   timeSeconds: number;
 }
 
@@ -1384,12 +1387,23 @@ export class RaverieVisualizer {
     return texture;
   }
 
-  public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone"): CompiledLayerGroup {
+  public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone", previous?: CompiledLayerGroup): CompiledLayerGroup {
     // Let the user pick if we make a copy, because we're going to potentially
     // modify the group such as if we find new uniforms within the shaders
-    return this.compileLayerGroup(mode === "clone"
+    const previousProcessedGroup = previous as ProcessedLayerGroup | undefined;
+    const previousIdToLayer: IdToLayer | undefined = previousProcessedGroup
+      ? { ...previousProcessedGroup.idToLayer }
+      : undefined;
+    const processedLayerGroup = this.compileLayerGroup(mode === "clone"
       ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
-      : layerGroup, null);
+      : layerGroup, null, previousIdToLayer);
+
+    // The remaining layers inside previousIdToLayer must be deleted
+    for (const id in previousIdToLayer) {
+      this.deleteLayer(previousIdToLayer[id], false);
+    }
+
+    return processedLayerGroup;
   }
 
   private parseUniforms(layerCode: LayerCode, parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
@@ -1669,19 +1683,46 @@ export class RaverieVisualizer {
       }
     });
 
+    this.copyProcessedUniformToShaderValues(layerCode, processedUniforms);
+    return processedUniforms;
+  }
+
+  private copyProcessedUniformToShaderValues(copyToLayerCodeShaderValues: LayerCode, processedUniforms: ProcessedUniform[]) {
     // Now that we've processed all the new uniforms and either
     // found their old shader values or made new ones, lets update the
     // shader values on the LayerShader to match. Note that this will
     // mutate the object, however it may be a copy of the user's LayerShader
     // depending on which option they passed into `compile`
-    layerCode.values.length = 0;
-    layerCode.values.push(...processedUniforms.map((processedUniform) =>
+    copyToLayerCodeShaderValues.values.length = 0;
+    copyToLayerCodeShaderValues.values.push(...processedUniforms.map((processedUniform) =>
       processedUniform.shaderValue));
-
-    return processedUniforms;
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError = false): ProcessedLayerShader {
+  private rebuildFromPrevious<T extends ProcessedLayerCode>(layer: T["layer"], parent: ProcessedLayerGroup | null, previousIdToLayer: IdToLayer | undefined): T | null {
+    // If the previous layer type and code are the same, then steal it
+    const previous = previousIdToLayer && previousIdToLayer[layer.id];
+    if (previous && previous.type === layer.type && previous.code === layer.code) {
+      const previousLayer = previous as T;
+      previousLayer.parent = parent;
+      previousLayer.layer = layer;
+
+      this.copyProcessedUniformToShaderValues(layer, previousLayer.uniforms);
+
+      // We remove the layer from previousIdToLayer so that we know which ones were used and which to delete
+      delete previousIdToLayer[layer.id];
+
+      return previousLayer;
+    }
+
+    return null;
+  }
+
+  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError: boolean, previousIdToLayer?: IdToLayer): ProcessedLayerShader {
+    const previousRebuild = this.rebuildFromPrevious<ProcessedLayerShader>(layerShader, parent, previousIdToLayer);
+    if (previousRebuild) {
+      return previousRebuild;
+    }
+
     const gl = this.gl;
     const processedProgram = this.createProgram(layerShader.code);
 
@@ -1730,6 +1771,7 @@ export class RaverieVisualizer {
       type: "shader",
       parent,
       layer: layerShader,
+      code: layerShader.code,
       uniforms: [],
       errors,
       program,
@@ -1745,10 +1787,16 @@ export class RaverieVisualizer {
     return processedLayerShader;
   }
 
-  private compileLayerJavaScript(layerJavaScript: LayerJavaScript, parent: ProcessedLayerGroup | null): ProcessedLayerJavaScript {
+  private compileLayerJavaScript(layerJavaScript: LayerJavaScript, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerJavaScript {
+    const previousRebuild = this.rebuildFromPrevious<ProcessedLayerJavaScript>(layerJavaScript, parent, previousIdToLayer);
+    if (previousRebuild) {
+      return previousRebuild;
+    }
+
     const processedLayerJavaScript: ProcessedLayerJavaScript = {
       type: "js",
       layer: layerJavaScript,
+      code: layerJavaScript.code,
       handle: null,
       uniforms: [],
       parent,
@@ -1767,7 +1815,7 @@ export class RaverieVisualizer {
     return processedLayerJavaScript;
   }
 
-  private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null): ProcessedLayerGroup {
+  private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerGroup {
     const processedLayerGroup: ProcessedLayerGroup = {
       type: "group",
       parent,
@@ -1787,16 +1835,16 @@ export class RaverieVisualizer {
 
     for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
-        const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup);
+        const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup, false, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerShader);
         mapLayerById(processedLayerShader);
       } else if (layer.type === "js") {
-        const processedLayerJavaScript = this.compileLayerJavaScript(layer, processedLayerGroup);
+        const processedLayerJavaScript = this.compileLayerJavaScript(layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerJavaScript);
         mapLayerById(processedLayerJavaScript);
       } else {
         // Recursively compile the child group
-        const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup);
+        const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedChildGroup);
         mapLayerById(processedChildGroup);
         for (const nestedCompiledLayer of Object.values(processedChildGroup.idToLayer)) {
@@ -1807,10 +1855,10 @@ export class RaverieVisualizer {
     return processedLayerGroup;
   }
 
-  public deleteLayer(compiledLayer: CompiledLayer) {
+  public deleteLayer(compiledLayer: CompiledLayer, deleteChildLayers = true) {
     switch (compiledLayer.type) {
       case "group":
-        this.deleteCompiledLayerGroup(compiledLayer);
+        this.deleteCompiledLayerGroup(compiledLayer, deleteChildLayers);
         break;
       case "js":
         this.deleteCompiledLayerJavaScript(compiledLayer);
@@ -1838,7 +1886,7 @@ export class RaverieVisualizer {
   private deleteCompiledLayerJavaScript(compiledLayer: CompiledLayerJavaScript) {
     const processedLayer = compiledLayer as ProcessedLayerJavaScript;
 
-    if (this.onDeleteJavaScriptLayer) {
+    if (processedLayer.handle && this.onDeleteJavaScriptLayer) {
       this.onDeleteJavaScriptLayer(processedLayer);
     }
     this.gl.deleteTexture(processedLayer.texture);
@@ -1847,15 +1895,16 @@ export class RaverieVisualizer {
     clearObject(processedLayer);
   }
 
-  private deleteCompiledLayerGroup(compiledLayer: CompiledLayerGroup) {
+  private deleteCompiledLayerGroup(compiledLayer: CompiledLayerGroup, deleteChildLayers = true) {
     const processedLayer = compiledLayer as ProcessedLayerGroup;
 
-    for (const id in processedLayer.idToLayer) {
-      const childLayer = processedLayer.idToLayer[id];
-      this.deleteLayer(childLayer);
-      delete processedLayer.idToLayer[id];
+    if (deleteChildLayers) {
+      for (const childLayer of processedLayer.layers) {
+        this.deleteLayer(childLayer);
+      }
     }
 
+    clearObject(processedLayer.idToLayer);
     clearObject(processedLayer);
   }
 
