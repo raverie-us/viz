@@ -1136,7 +1136,7 @@ export interface JavaScriptGlobals {
   gBlendMode: number
 }
 
-export type CompactUniforms = Record<string, ShaderValue["value"]>;
+export type CompactUniforms = Record<string, ShaderValue["value"] | ShaderButtonState | ShaderAxisState>;
 
 export type RenderLayerCodeCallback = (compiledLayer: CompiledLayerCode, gl: WebGL2RenderingContext) => void;
 export type SampleButtonCallback = (device: DeviceIdentifier, inputId: InputIdentifier) => SampledButton | null;
@@ -2322,8 +2322,16 @@ export class RaverieVisualizer {
                 };
 
                 const uniforms: CompactUniforms = {};
-                for (const shaderValue of layer.layer.values) {
-                  uniforms[shaderValue.name] = shaderValue.value;
+                for (const uniform of layer.uniforms) {
+                  const uniformKey = getUniformKey(uniform);
+                  const name = uniform.shaderValue.name;
+                  if (uniform.type === "button") {
+                    uniforms[name] = this.buttonStates[uniformKey] || defaultButtonState();
+                  } else if (uniform.type === "axis") {
+                    uniforms[name] = this.axisStates[uniformKey] || defaultAxisState();
+                  } else {
+                    uniforms[name] = uniform.shaderValue.value;
+                  }
                 }
 
                 ++layer.lastRequestId;
