@@ -3,6 +3,7 @@ import {
   CompiledLayerJavaScript,
   DeviceIdentifier,
   InputIdentifier,
+  JavaScriptGlobals,
   LayerJavaScript,
   RaverieVisualizer
 } from "./core";
@@ -11,13 +12,7 @@ interface RenderMessage {
   type: "render";
   requestId: number;
   layer: LayerJavaScript;
-  globals: {
-    gOpacity: number,
-    gResolution: [number, number],
-    gTime: number,
-    gPreviousLayer: null,
-    gBlendMode: number
-  },
+  globals: JavaScriptGlobals,
   uniforms: CompactUniforms
 }
 
