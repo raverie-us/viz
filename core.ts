@@ -657,6 +657,14 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gFrame: WebGLUniformLocation | null;
   gPreviousLayer: WebGLUniformLocation | null;
   gBlendMode: WebGLUniformLocation | null;
+
+  gAudioFrequencies: WebGLUniformLocation | null;
+  gAudioSamples: WebGLUniformLocation | null;
+  gAudioVolume: WebGLUniformLocation | null;
+  gAudioVolumeAverage: WebGLUniformLocation | null;
+  gAudioVolumePeak: WebGLUniformLocation | null;
+  gAudioVolumeTrough: WebGLUniformLocation | null;
+  gAudioReactiveScalar: WebGLUniformLocation | null;
 }
 
 interface ProcessedLayerJavaScript extends CompiledLayerJavaScript {
@@ -956,6 +964,14 @@ uniform float gTime;
 uniform int gFrame;
 uniform int gBlendMode;
 
+uniform sampler2D gAudioFrequencies;
+uniform sampler2D gAudioSamples;
+uniform float gAudioVolume;
+uniform float gAudioVolumeAverage;
+uniform float gAudioVolumePeak;
+uniform float gAudioVolumeTrough;
+uniform float gAudioReactiveScalar;
+
 float gLuminance(vec3 rgb) {
   return (0.2126 * rgb.r) + (0.7152 * rgb.g) + (0.0722 * rgb.b);
 }
@@ -1103,6 +1119,23 @@ export type ControlsUpdateCallback = () => void;
 
 export const defaultFrameTime = 1 / 60;
 export const defaultFramesAheadForAsyncLayers = 2;
+export const defaultAudioSampleCount = 512;
+export const defaultVolumeAverageCount = 180;
+export const defaultMinDecibels = -100;
+export const defaultMaxDecibels = -30;
+
+const average = (array: Float32Array) => {
+  let sum = 0;
+  for (let i = 0; i < array.length; ++i) {
+    sum += array[i];
+  }
+  return sum / array.length;
+};
+
+const rollingAverage = (newValue: number, oldAverage: number, n: number) => {
+  return oldAverage * (n - 1) / n + newValue / n;
+};
+
 
 export class RenderTargets {
   public get width() {
@@ -1153,7 +1186,14 @@ export interface JavaScriptGlobals {
   gTime: number,
   gFrame: number,
   gPreviousLayer: null,
-  gBlendMode: number
+  gBlendMode: number,
+  gAudioFrequencies: Float32Array,
+  gAudioSamples: Float32Array,
+  gAudioVolume: number,
+  gAudioVolumeAverage: number,
+  gAudioVolumePeak: number,
+  gAudioVolumeTrough: number,
+  gAudioReactiveScalar: number,
 }
 
 export type CompactUniforms = Record<string, ShaderValue["value"] | ShaderButtonState | ShaderAxisState>;
@@ -1223,8 +1263,74 @@ export class RaverieVisualizer {
   public onRenderJavaScriptLayer: RenderJavaScriptCallback | null = null;
   public onDeleteJavaScriptLayer: DeleteJavaScriptCallback | null = null;
 
+  private audioFrequencies: Float32Array = new Float32Array(defaultAudioSampleCount);
+  private audioFrequenciesTexture: WebGLTexture;
+  private audioSamples: Float32Array = new Float32Array(defaultAudioSampleCount);
+  private audioSamplesTexture: WebGLTexture;
+
+  private audioVolume: number = 0;
+  private audioVolumeAverage: number = 0;
+  private audioVolumePeak: number = 0;
+  private audioVolumeTrough: number = 0;
+  private audioRollingVolumes: number[] = [];
+
+  // This is a number between [0, 1] that can be used for things like reactive lighting.
+  //   0 represents the current volume is at or below the rolling average volume
+  //   1 represents the current volume is at peak volume
+  private audioReactiveScalar: number = 0;
+
   public get isRendering() {
     return this.isRenderingInternal;
+  }
+
+  public updateAudioSamples(frequencies: Float32Array, samples: Float32Array) {
+    if (frequencies.length !== defaultAudioSampleCount) {
+      throw new Error(`The number of audio frequencies should be ${defaultAudioSampleCount}`);
+    }
+    if (samples.length !== defaultAudioSampleCount) {
+      throw new Error(`The number of audio samples should be ${defaultAudioSampleCount}`);
+    }
+
+    for (let i = 0; i < defaultAudioSampleCount; ++i) {
+      const frequencyDecibelsClamped = clamp(frequencies[i], defaultMinDecibels, defaultMaxDecibels);
+      const frequencyNormalized = (frequencyDecibelsClamped - defaultMinDecibels) / (defaultMaxDecibels - defaultMinDecibels);
+
+      this.audioFrequencies[i] = frequencyNormalized;
+
+      const sampleClamped = clamp(samples[i], -1, 1);
+      this.audioSamples[i] = sampleClamped * 0.5 + 0.5;
+    }
+
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.audioFrequenciesTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioFrequencies);
+    gl.bindTexture(gl.TEXTURE_2D, this.audioSamplesTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioSamples);
+
+    // https://physics.stackexchange.com/questions/46228/averaging-decibels
+    this.audioVolume = average(this.audioFrequencies);
+    this.audioVolumeAverage = rollingAverage(
+      this.audioVolume, this.audioVolumeAverage, defaultVolumeAverageCount);
+
+    this.audioRollingVolumes.push(this.audioVolume);
+    if (this.audioRollingVolumes.length > defaultVolumeAverageCount) {
+      this.audioRollingVolumes.shift();
+    }
+
+    this.audioVolumePeak = 0;
+    this.audioVolumeTrough = 1;
+    for (const lastVolume of this.audioRollingVolumes) {
+      this.audioVolumePeak = Math.max(this.audioVolumePeak, lastVolume);
+      this.audioVolumeTrough = Math.min(this.audioVolumeTrough, lastVolume);
+    }
+    this.audioVolumePeak = Math.max(this.audioVolumePeak, this.audioVolumeAverage);
+    this.audioVolumeTrough = Math.min(this.audioVolumeTrough, this.audioVolumeAverage);
+
+    // Note this may be Infinity if audioVolumePeak === audioVolumeTrough, but this
+    // is OK because we clamp it which properly handles Infinity
+    const unclampedAudioReactiveScalar =
+      (this.audioVolume - this.audioVolumeTrough) / (this.audioVolumePeak - this.audioVolumeTrough);
+    this.audioReactiveScalar = clamp(unclampedAudioReactiveScalar, 0, 1);
   }
 
   public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction) {
@@ -1234,6 +1340,11 @@ export class RaverieVisualizer {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     // TODO(trevor): Premultiplied alpha
     //gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+
+    this.audioFrequenciesTexture = this.createTexture(gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
+    this.audioSamplesTexture = this.createTexture(gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
 
     const vertexPosBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
@@ -1421,14 +1532,15 @@ export class RaverieVisualizer {
     return { program };
   }
 
-  private createTexture(): WebGLTexture {
+  private createTexture(optionalFilterMode?: number): WebGLTexture {
     const gl = this.gl;
+    const filterMode = optionalFilterMode === undefined ? gl.LINEAR : optionalFilterMode;
     const texture = expect(gl.createTexture(), "WebGLTexture");
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filterMode);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filterMode);
     return texture;
   }
 
@@ -1834,6 +1946,13 @@ export class RaverieVisualizer {
       gFrame: getUniformLocation("gFrame"),
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
       gBlendMode: getUniformLocation("gBlendMode"),
+      gAudioFrequencies: getUniformLocation("gAudioFrequencies"),
+      gAudioSamples: getUniformLocation("gAudioSamples"),
+      gAudioVolume: getUniformLocation("gAudioVolume"),
+      gAudioVolumeAverage: getUniformLocation("gAudioVolumeAverage"),
+      gAudioVolumePeak: getUniformLocation("gAudioVolumePeak"),
+      gAudioVolumeTrough: getUniformLocation("gAudioVolumeTrough"),
+      gAudioReactiveScalar: getUniformLocation("gAudioReactiveScalar"),
     };
 
     processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);
@@ -2004,8 +2123,23 @@ export class RaverieVisualizer {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, previousLayerTexture);
 
-      // Apply layer uniforms
-      let textureSamplerIndex = 1;
+      gl.uniform1f(processedLayerShader.gAudioVolume, this.audioVolume);
+      gl.uniform1f(processedLayerShader.gAudioVolumeAverage, this.audioVolumeAverage);
+      gl.uniform1f(processedLayerShader.gAudioVolumePeak, this.audioVolumePeak);
+      gl.uniform1f(processedLayerShader.gAudioVolumeTrough, this.audioVolumeTrough);
+      gl.uniform1f(processedLayerShader.gAudioReactiveScalar, this.audioReactiveScalar);
+
+      gl.uniform1i(processedLayerShader.gAudioFrequencies, 1);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.audioFrequenciesTexture);
+
+      gl.uniform1i(processedLayerShader.gAudioSamples, 2);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.audioSamplesTexture);
+
+      // When applying layer uniforms we need to set each sampler uniform to an index
+      // We start this at 3 to account for built in textures (gPreviousLayer, gAudioFrequencies, gAudioSamples)
+      let textureSamplerIndex = 3;
       for (const processedUniform of processedLayerShader.uniforms) {
         // Don't set uniforms that don't have locations. These can occur if we
         // found the uniform via a regex, but it was optimized out by the compiler
@@ -2486,7 +2620,14 @@ export class RaverieVisualizer {
                   gResolution: [targetsInternal.widthInternal, targetsInternal.heightInternal],
                   gPreviousLayer: null,
                   gTime: timeSeconds,
-                  gFrame: this.frame
+                  gFrame: this.frame,
+                  gAudioFrequencies: this.audioFrequencies,
+                  gAudioSamples: this.audioSamples,
+                  gAudioVolume: this.audioVolume,
+                  gAudioVolumeAverage: this.audioVolumeAverage,
+                  gAudioVolumePeak: this.audioVolumePeak,
+                  gAudioVolumeTrough: this.audioVolumeTrough,
+                  gAudioReactiveScalar: this.audioReactiveScalar,
                 };
 
                 const uniforms: CompactUniforms = {};
