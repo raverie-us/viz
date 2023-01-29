@@ -11,6 +11,7 @@ import { liquidLayer } from "./layers/liquid";
 import { spiralLayer } from "./layers/spiral";
 import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
+import { audioLayer } from "./layers/audio";
 
 const untrimmedLayers: LayerCode[] = [
   connnectedPointsLayer,
@@ -22,6 +23,7 @@ const untrimmedLayers: LayerCode[] = [
   liquidLayer,
   spiralLayer,
   tunnelLayer,
+  audioLayer,
   textureLayer,
   emptyJavaScriptLayer,
   emptyShaderLayer,
