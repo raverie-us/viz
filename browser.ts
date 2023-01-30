@@ -1,6 +1,8 @@
 import {
   CompactUniforms,
   CompiledLayerJavaScript,
+  defaultAudioSampleCount,
+  defaultMinDecibels,
   DeviceIdentifier,
   InputIdentifier,
   JavaScriptGlobals,
@@ -116,7 +118,7 @@ export const listenForInput = (element: HTMLElement, onInputTriggered: InputTrig
   };
 };
 
-export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): RaverieVisualizer => {
+const glFromCanvas = (canvas: HTMLCanvasElement) => {
   const gl = canvas.getContext("webgl2", {
     antialias: false,
     alpha: true,
@@ -129,182 +131,274 @@ export const makeRaverieVisualizerForCanvas = (canvas: HTMLCanvasElement): Raver
   if (!gl) {
     throw new Error("Unable to initialze WebGl");
   }
-
-  const loadTexture = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => {
-    const img = document.createElement("img");
-    img.onload = () => {
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-    };
-    img.src = url;
-  }
-
-  const visualizer = new RaverieVisualizer(gl, loadTexture);
-
-  visualizer.onCompileJavaScriptLayer = (layer) => {
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-scripts");
-    const src = `<script>${iframePreCode(location.origin)}</script><script>${layer.code}</script>`;
-    iframe.onload = () => {
-      iframe.dataset.loaded = "1";
-    };
-    iframe.style.display = "none";
-    iframe.src = `data:text/html;base64,${btoa(src)}`;
-    document.body.append(iframe);
-
-    return {
-      handle: iframe,
-      errors: []
-    };
-  };
-
-  visualizer.onDeleteJavaScriptLayer = (layer) => {
-    const iframe = layer.handle as HTMLIFrameElement;
-    iframe.remove();
-  };
-
-  const requestIdToCompiledJsLayer: Record<number, CompiledLayerJavaScript> = {};
-
-  visualizer.onRenderJavaScriptLayer = (requestId, compiledLayer, globals, uniforms): void => {
-    const iframe = compiledLayer.handle as HTMLIFrameElement;
-    if (iframe.dataset.loaded && iframe.contentWindow) {
-      requestIdToCompiledJsLayer[requestId] = compiledLayer;
-
-      const toSend: RenderMessage = {
-        type: "render",
-        layer: compiledLayer.layer,
-        requestId,
-        globals,
-        uniforms
-      };
-      // The iframe always has the origin of "null" since it's sandboxed and loaded from a data-url
-      // Unfortunately we cannot pass "null" here as it throws, so we must pass "*"
-      iframe.contentWindow.postMessage(toSend, "*");
-    } else {
-      visualizer.renderCompletedForJavaScriptLayer(requestId, compiledLayer, null);
-    }
-  };
-
-  window.addEventListener("message", (e: MessageEvent) => {
-    const message = e.data as RenderMessageResult;
-    const isValidMessage =
-      e.origin === "null" &&
-      typeof message === "object" &&
-      message &&
-      message.type === "renderResult" &&
-      typeof message.requestId === "number" &&
-      (message.image === null || message.image instanceof ImageBitmap);
-
-    if (isValidMessage) {
-      const compiledLayer = requestIdToCompiledJsLayer[message.requestId];
-      delete requestIdToCompiledJsLayer[message.requestId];
-
-      if (compiledLayer) {
-        visualizer.renderCompletedForJavaScriptLayer(message.requestId, compiledLayer, message.image);
-      } else {
-        console.warn(`Got render message for requestId ${message.requestId} that does not exist or was already handled`);
-      }
-    }
-  });
-
-  // Allow the canvas to take focus
-  canvas.tabIndex = 1;
-  canvas.addEventListener("pointerdown", () => {
-    canvas.focus();
-  });
-
-  const keyStates: Record<string | number, boolean> = {};
-  canvas.addEventListener("keydown", (e) => {
-    keyStates[e.key] = true;
-    keyStates[e.which] = true;
-  });
-  canvas.addEventListener("keyup", (e) => {
-    keyStates[e.key] = false;
-    keyStates[e.which] = false;
-  });
-
-  let pointerStates: Record<string | number, boolean> = {};
-  let pointerX = 0;
-  let pointerY = 0;
-  let pointerIsOverCanvas = false;
-  canvas.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-  });
-  canvas.addEventListener("pointerdown", (e) => {
-    pointerStates[e.button] = true;
-  });
-  canvas.addEventListener("pointerup", (e) => {
-    pointerStates[e.button] = false;
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    pointerX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    pointerY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
-  });
-  canvas.addEventListener("pointerenter", (e) => {
-    pointerIsOverCanvas = true;
-  });
-  canvas.addEventListener("pointerleave", (e) => {
-    pointerIsOverCanvas = false;
-    pointerStates = {};
-  });
-
-  let gamepad: Gamepad | null = null;
-
-  const updateGamepads = () => {
-    // TODO(trevor): For now we only grab the first gamepad until we get control indices working
-    gamepad = navigator.getGamepads()[0];
-  }
-
-  updateGamepads();
-
-  visualizer.onBeforeControlsUpdate = () => {
-    updateGamepads();
-  };
-
-  visualizer.onSampleButton = (device, inputId) => {
-    if (device === deviceKeyboard) {
-      const state = Boolean(keyStates[inputId]);
-      return { value: Number(state), buttonHeld: state, touchHeld: state };
-    }
-
-    if (device === devicePointer && pointerIsOverCanvas) {
-      const state = Boolean(pointerStates[inputId]);
-      return { value: Number(state), buttonHeld: state, touchHeld: state };
-    }
-
-    if (device === deviceGamepad) {
-      if (gamepad && typeof inputId === "number") {
-        const button = gamepad.buttons[inputId];
-        if (button !== undefined) {
-          return { buttonHeld: button.pressed, touchHeld: button.touched, value: button.value };
-        }
-      }
-    }
-    return null;
-  };
-
-  visualizer.onSampleAxis = (device, inputId) => {
-    if (device === devicePointer && pointerIsOverCanvas) {
-      if (inputId === 0 || inputId === "x") {
-        return { value: pointerX };
-      }
-      if (inputId === 1 || inputId === "y") {
-        return { value: pointerY };
-      }
-    }
-
-    if (device === deviceGamepad) {
-      if (gamepad && typeof inputId === "number") {
-        const axis = gamepad.axes[inputId];
-        if (axis !== undefined) {
-          return { value: axis };
-        }
-      }
-    }
-    return null;
-  };
-
-  return visualizer;
+  return gl;
 };
+
+const loadTexture = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => {
+  const img = document.createElement("img");
+  img.onload = () => {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  };
+  img.src = url;
+}
+
+// We separate this out because browsers often do not allow creation of AudioContexts
+// until the user has interacted with the page (or dependent upon security settings)
+class AudioAnalyser {
+  public audioContext: AudioContext;
+
+  public frequencyAnalyser: AnalyserNode;
+  public samplesAnalyser: AnalyserNode;
+
+  public inputNode: AudioNode | null = null;
+
+  public constructor() {
+    // We intentionally use 40kHz and cut in in half for human audible range, see below
+    const SAMPLE_RATE = 40000;
+    this.audioContext = new AudioContext({
+      latencyHint: "interactive",
+      sampleRate: SAMPLE_RATE
+    });
+
+    this.frequencyAnalyser = this.audioContext.createAnalyser();
+    // Normally the fftSize should be double of whatever we want for the frequencyBinCount.
+    // The human audible range is from 20hz to 20kHz. We intentially set SAMPLE_RATE to 40kHz
+    // and then cut the output frequency buffer in half to remove non-human audible frequencies.
+    // Hence, the fftSize is x2 for frequencyBinCount and x2 again for human audible cut (x4)
+    this.frequencyAnalyser.fftSize = defaultAudioSampleCount * 4;
+    this.frequencyAnalyser.smoothingTimeConstant = 0.8;
+
+    // We don't want to cut the samples in half like the above frequency
+    // buffer, so we create a separate AnalyserNode just for samples
+    this.samplesAnalyser = this.audioContext.createAnalyser();
+    this.samplesAnalyser.fftSize = defaultAudioSampleCount * 2;
+    this.samplesAnalyser.smoothingTimeConstant = 0.8;
+
+    if (this.frequencyAnalyser.frequencyBinCount !== defaultAudioSampleCount * 2) {
+      throw new Error(`Mismatched frequencyBinCount, got ${this.frequencyAnalyser.frequencyBinCount}, expected ${defaultAudioSampleCount * 2}`);
+    }
+    if (this.samplesAnalyser.frequencyBinCount !== defaultAudioSampleCount) {
+      throw new Error(`Mismatched frequencyBinCount, got ${this.frequencyAnalyser.frequencyBinCount}, expected ${defaultAudioSampleCount}`);
+    }
+  }
+
+  public connectAudioSource(input: AudioNode | MediaStream | null) {
+    if (this.inputNode) {
+      this.inputNode.disconnect(this.frequencyAnalyser);
+      this.inputNode.disconnect(this.samplesAnalyser);
+      this.inputNode = null;
+    }
+
+    if (input) {
+      this.inputNode = input instanceof MediaStream
+        ? this.audioContext.createMediaStreamSource(input)
+        : input;
+
+      this.inputNode.connect(this.frequencyAnalyser);
+      this.inputNode.connect(this.samplesAnalyser);
+    }
+  }
+};
+
+export class RaverieVisualizerBrowser extends RaverieVisualizer {
+  private audioAnalyser: AudioAnalyser | null = null;
+
+  private frequencies = new Float32Array(defaultAudioSampleCount);
+  private samples = new Float32Array(defaultAudioSampleCount);
+
+  public get hasAudioSource() {
+    return Boolean(this.audioAnalyser?.inputNode);
+  }
+
+  public get audioContext(): AudioContext | null {
+    return this.audioAnalyser?.audioContext || null;
+  }
+
+  public constructor(canvas: HTMLCanvasElement) {
+    super(glFromCanvas(canvas), loadTexture);
+
+    this.onCompileJavaScriptLayer = (layer) => {
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("sandbox", "allow-scripts");
+      const src = `<script>${iframePreCode(location.origin)}</script><script>${layer.code}</script>`;
+      iframe.onload = () => {
+        iframe.dataset.loaded = "1";
+      };
+      iframe.style.display = "none";
+      iframe.src = `data:text/html;base64,${btoa(src)}`;
+      document.body.append(iframe);
+
+      return {
+        handle: iframe,
+        errors: []
+      };
+    };
+
+    this.onDeleteJavaScriptLayer = (layer) => {
+      const iframe = layer.handle as HTMLIFrameElement;
+      iframe.remove();
+    };
+
+    const requestIdToCompiledJsLayer: Record<number, CompiledLayerJavaScript> = {};
+
+    this.onRenderJavaScriptLayer = (requestId, compiledLayer, globals, uniforms): void => {
+      const iframe = compiledLayer.handle as HTMLIFrameElement;
+      if (iframe.dataset.loaded && iframe.contentWindow) {
+        requestIdToCompiledJsLayer[requestId] = compiledLayer;
+
+        const toSend: RenderMessage = {
+          type: "render",
+          layer: compiledLayer.layer,
+          requestId,
+          globals,
+          uniforms
+        };
+        // The iframe always has the origin of "null" since it's sandboxed and loaded from a data-url
+        // Unfortunately we cannot pass "null" here as it throws, so we must pass "*"
+        iframe.contentWindow.postMessage(toSend, "*");
+      } else {
+        this.renderCompletedForJavaScriptLayer(requestId, compiledLayer, null);
+      }
+    };
+
+    window.addEventListener("message", (e: MessageEvent) => {
+      const message = e.data as RenderMessageResult;
+      const isValidMessage =
+        e.origin === "null" &&
+        typeof message === "object" &&
+        message &&
+        message.type === "renderResult" &&
+        typeof message.requestId === "number" &&
+        (message.image === null || message.image instanceof ImageBitmap);
+
+      if (isValidMessage) {
+        const compiledLayer = requestIdToCompiledJsLayer[message.requestId];
+        delete requestIdToCompiledJsLayer[message.requestId];
+
+        if (compiledLayer) {
+          this.renderCompletedForJavaScriptLayer(message.requestId, compiledLayer, message.image);
+        } else {
+          console.warn(`Got render message for requestId ${message.requestId} that does not exist or was already handled`);
+        }
+      }
+    });
+
+    // Allow the canvas to take focus
+    canvas.tabIndex = 1;
+    canvas.addEventListener("pointerdown", () => {
+      canvas.focus();
+    });
+
+    const keyStates: Record<string | number, boolean> = {};
+    canvas.addEventListener("keydown", (e) => {
+      keyStates[e.key] = true;
+      keyStates[e.which] = true;
+    });
+    canvas.addEventListener("keyup", (e) => {
+      keyStates[e.key] = false;
+      keyStates[e.which] = false;
+    });
+
+    let pointerStates: Record<string | number, boolean> = {};
+    let pointerX = 0;
+    let pointerY = 0;
+    let pointerIsOverCanvas = false;
+    canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+    });
+    canvas.addEventListener("pointerdown", (e) => {
+      pointerStates[e.button] = true;
+    });
+    canvas.addEventListener("pointerup", (e) => {
+      pointerStates[e.button] = false;
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      pointerX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointerY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+    });
+    canvas.addEventListener("pointerenter", (e) => {
+      pointerIsOverCanvas = true;
+    });
+    canvas.addEventListener("pointerleave", (e) => {
+      pointerIsOverCanvas = false;
+      pointerStates = {};
+    });
+
+    let gamepad: Gamepad | null = null;
+
+    const updateGamepads = () => {
+      // TODO(trevor): For now we only grab the first gamepad until we get control indices working
+      gamepad = navigator.getGamepads()[0];
+    }
+
+    updateGamepads();
+
+    this.onBeforeControlsUpdate = () => {
+      updateGamepads();
+    };
+
+    this.onSampleButton = (device, inputId) => {
+      if (device === deviceKeyboard) {
+        const state = Boolean(keyStates[inputId]);
+        return { value: Number(state), buttonHeld: state, touchHeld: state };
+      }
+
+      if (device === devicePointer && pointerIsOverCanvas) {
+        const state = Boolean(pointerStates[inputId]);
+        return { value: Number(state), buttonHeld: state, touchHeld: state };
+      }
+
+      if (device === deviceGamepad) {
+        if (gamepad && typeof inputId === "number") {
+          const button = gamepad.buttons[inputId];
+          if (button !== undefined) {
+            return { buttonHeld: button.pressed, touchHeld: button.touched, value: button.value };
+          }
+        }
+      }
+      return null;
+    };
+
+    this.onSampleAxis = (device, inputId) => {
+      if (device === devicePointer && pointerIsOverCanvas) {
+        if (inputId === 0 || inputId === "x") {
+          return { value: pointerX };
+        }
+        if (inputId === 1 || inputId === "y") {
+          return { value: pointerY };
+        }
+      }
+
+      if (device === deviceGamepad) {
+        if (gamepad && typeof inputId === "number") {
+          const axis = gamepad.axes[inputId];
+          if (axis !== undefined) {
+            return { value: axis };
+          }
+        }
+      }
+      return null;
+    };
+  }
+
+  public connectAudioSource(input: AudioNode | MediaStream | null) {
+    if (!this.audioAnalyser) {
+      this.audioAnalyser = new AudioAnalyser();
+    }
+    this.audioAnalyser.connectAudioSource(input);
+  }
+
+  public updateAudio() {
+    if (this.audioAnalyser) {
+      this.audioAnalyser.frequencyAnalyser.getFloatFrequencyData(this.frequencies);
+      this.audioAnalyser.samplesAnalyser.getFloatTimeDomainData(this.samples);
+    } else {
+      this.frequencies.fill(defaultMinDecibels);
+      this.samples.fill(0);
+    }
+    super.updateAudioSamples(this.frequencies, this.samples);
+  }
+}
