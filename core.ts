@@ -368,6 +368,7 @@ export interface CompiledError {
 
 export interface CompiledLayerBase {
   parent: CompiledLayerGroup | null;
+  usesAudioInput: boolean;
 }
 
 export interface CompiledLayerCodeBase extends CompiledLayerBase {
@@ -415,7 +416,8 @@ export const defaultEmptyCompiledLayerGroup = (): CompiledLayerGroup => pass<Pro
   idToLayer: {},
   parent: null,
   timeSeconds: 0,
-  layers: []
+  layers: [],
+  usesAudioInput: false
 });
 
 export const defaultEmptyLayerShader = (): LayerShader => ({
@@ -1953,7 +1955,18 @@ export class RaverieVisualizer {
       gAudioVolumePeak: getUniformLocation("gAudioVolumePeak"),
       gAudioVolumeTrough: getUniformLocation("gAudioVolumeTrough"),
       gAudioReactiveScalar: getUniformLocation("gAudioReactiveScalar"),
+      usesAudioInput: false,
     };
+
+    // Detect if the optimized shader used any of these inputs
+    processedLayerShader.usesAudioInput =
+      Boolean(processedLayerShader.gAudioFrequencies) ||
+      Boolean(processedLayerShader.gAudioSamples) ||
+      Boolean(processedLayerShader.gAudioVolume) ||
+      Boolean(processedLayerShader.gAudioVolumeAverage) ||
+      Boolean(processedLayerShader.gAudioVolumePeak) ||
+      Boolean(processedLayerShader.gAudioVolumeTrough) ||
+      Boolean(processedLayerShader.gAudioReactiveScalar);
 
     processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);
     return processedLayerShader;
@@ -1964,6 +1977,10 @@ export class RaverieVisualizer {
     if (previousRebuild) {
       return previousRebuild;
     }
+
+    // This is a crude way of determining if the JS layer uses audio input, but for now
+    // it's only a suggestion and isn't used for anything other that informing the editor
+    const usesAudioInput = /gAudio/gum.test(layerJavaScript.code);
 
     const processedLayerJavaScript: ProcessedLayerJavaScript = {
       type: "js",
@@ -1976,6 +1993,7 @@ export class RaverieVisualizer {
       texture: this.createBlankTexture(),
       completedRequestId: -1,
       lastRequestId: -1,
+      usesAudioInput
     };
 
     if (this.onCompileJavaScriptLayer) {
@@ -1994,7 +2012,8 @@ export class RaverieVisualizer {
       layer: layerGroup,
       layers: [],
       idToLayer: {},
-      timeSeconds: 0
+      timeSeconds: 0,
+      usesAudioInput: false,
     };
 
     const mapLayerById = (processedLayer: ProcessedLayer) => {
@@ -2009,15 +2028,18 @@ export class RaverieVisualizer {
       if (layer.type === "shader") {
         const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup, false, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerShader);
+        processedLayerGroup.usesAudioInput ||= processedLayerShader.usesAudioInput;
         mapLayerById(processedLayerShader);
       } else if (layer.type === "js") {
         const processedLayerJavaScript = this.compileLayerJavaScript(layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerJavaScript);
+        processedLayerGroup.usesAudioInput ||= processedLayerJavaScript.usesAudioInput;
         mapLayerById(processedLayerJavaScript);
       } else {
         // Recursively compile the child group
         const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedChildGroup);
+        processedLayerGroup.usesAudioInput ||= processedChildGroup.usesAudioInput;
         mapLayerById(processedChildGroup);
         for (const nestedCompiledLayer of Object.values(processedChildGroup.idToLayer)) {
           mapLayerById(nestedCompiledLayer);
