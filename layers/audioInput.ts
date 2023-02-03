@@ -1,9 +1,9 @@
 import { LayerShader } from "../core";
 
-export const audioLayer: LayerShader = {
+export const audioInputLayer: LayerShader = {
   type: "shader",
-  name: "audio",
-  id: "audio",
+  name: "audio input",
+  id: "audio input",
   visible: true,
   code: `
 vec4 render() {
