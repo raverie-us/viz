@@ -174,7 +174,7 @@ class AudioAnalyser {
     // buffer, so we create a separate AnalyserNode just for samples
     this.samplesAnalyser = this.audioContext.createAnalyser();
     this.samplesAnalyser.fftSize = defaultAudioSampleCount * 2;
-    this.samplesAnalyser.smoothingTimeConstant = 0.8;
+    this.samplesAnalyser.smoothingTimeConstant = 1.0;
 
     if (this.frequencyAnalyser.frequencyBinCount !== defaultAudioSampleCount * 2) {
       throw new Error(`Mismatched frequencyBinCount, got ${this.frequencyAnalyser.frequencyBinCount}, expected ${defaultAudioSampleCount * 2}`);

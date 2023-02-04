@@ -488,6 +488,7 @@ const defaultAxisState = (): ShaderAxisState => ({
 });
 
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export const sortGradientStops = (gradient: ShaderGradient): ShaderGradientStop[] => {
   const stops = [...gradient.stops];
@@ -1293,21 +1294,33 @@ export class RaverieVisualizer {
       throw new Error(`The number of audio samples should be ${defaultAudioSampleCount}`);
     }
 
+    const SMOOTH_SAMPLE_RADIUS = 2;
+    const SMOOTH_SAMPLE_TOTAL = SMOOTH_SAMPLE_RADIUS * 2 + 1;
+
     for (let i = 0; i < defaultAudioSampleCount; ++i) {
       const frequencyDecibelsClamped = clamp(frequencies[i], defaultMinDecibels, defaultMaxDecibels);
       const frequencyNormalized = (frequencyDecibelsClamped - defaultMinDecibels) / (defaultMaxDecibels - defaultMinDecibels);
 
       this.audioFrequencies[i] = frequencyNormalized;
 
-      const sampleClamped = clamp(samples[i], -1, 1);
-      this.audioSamples[i] = sampleClamped * 0.5 + 0.5;
+      // Apply smoothing between samples
+      let sample = 0.0;
+      for (let x = -SMOOTH_SAMPLE_RADIUS; x <= SMOOTH_SAMPLE_RADIUS; ++x) {
+        const index = clamp(i + x, 0, defaultAudioSampleCount - 1);
+        sample += samples[index];
+      }
+      sample /= SMOOTH_SAMPLE_TOTAL;
+      sample = clamp(sample, -1, 1);
+
+      // Audio samples are jumpy so we apply temporal smoothing too
+      this.audioSamples[i] = lerp(this.audioSamples[i], sample * 0.5 + 0.5, 0.1);
     }
 
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.audioFrequenciesTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioFrequencies);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioFrequencies);
     gl.bindTexture(gl.TEXTURE_2D, this.audioSamplesTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioSamples);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioSamples);
 
     // https://physics.stackexchange.com/questions/46228/averaging-decibels
     this.audioVolume = average(this.audioFrequencies);
@@ -1343,10 +1356,10 @@ export class RaverieVisualizer {
     // TODO(trevor): Premultiplied alpha
     //gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 
-    this.audioFrequenciesTexture = this.createTexture(gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
-    this.audioSamplesTexture = this.createTexture(gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
+    this.audioFrequenciesTexture = this.createTexture(gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
+    this.audioSamplesTexture = this.createTexture(gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, null);
 
     const vertexPosBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
