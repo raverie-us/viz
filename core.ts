@@ -948,7 +948,15 @@ const validateGLSLAxis = (glslType: AxisType, value: any, validatedDefault: Shad
 // validateGLSLButton
 // validateGLSLAxis
 
-export type LoadTextureFunction = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => void;
+export interface UserTexture {
+  url: string;
+  texture: WebGLTexture;
+  gl: WebGL2RenderingContext;
+  handle: any;
+}
+
+export type LoadTextureFunction = (userTexture: UserTexture) => void;
+export type UpdateTextureFunction = (userTexture: UserTexture) => void;
 
 export const maxGradientStops = 16;
 
@@ -1230,10 +1238,7 @@ const clearObject = (obj: any) => {
 }
 
 export class RaverieVisualizer {
-  public readonly gl: WebGL2RenderingContext;
-  private readonly loadTexture: LoadTextureFunction;
-
-  private textureCache: Record<string, WebGLTexture | undefined> = {};
+  private textureCache: Record<string, UserTexture | undefined> = {};
 
   private readonly vertexShader: WebGLShader;
 
@@ -1348,9 +1353,10 @@ export class RaverieVisualizer {
     this.audioReactiveScalar = clamp(unclampedAudioReactiveScalar, 0, 1);
   }
 
-  public constructor(gl: WebGL2RenderingContext, loadTexture: LoadTextureFunction) {
-    this.gl = gl;
-    this.loadTexture = loadTexture;
+  public constructor(
+    public readonly gl: WebGL2RenderingContext,
+    private readonly loadTexture: LoadTextureFunction,
+    private readonly updateTexture: UpdateTextureFunction) {
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     // TODO(trevor): Premultiplied alpha
@@ -2115,16 +2121,22 @@ export class RaverieVisualizer {
     clearObject(processedLayer);
   }
 
-  public getOrCacheTexture(url: string): WebGLTexture {
+  public getOrCacheTexture(url: string): UserTexture {
     const texture = this.textureCache[url];
     if (texture) {
       return texture;
     }
 
-    const newTexture = this.createBlankTexture();
-    this.textureCache[url] = newTexture;
-    this.loadTexture(url, newTexture, this.gl);
-    return newTexture;
+    const userTexture: UserTexture = {
+      gl: this.gl,
+      texture: this.createBlankTexture(),
+      url,
+      handle: null
+    };
+    this.loadTexture(userTexture);
+
+    this.textureCache[url] = userTexture;
+    return userTexture;
   }
 
   private renderLayerShaderInternal(
@@ -2268,9 +2280,10 @@ export class RaverieVisualizer {
 
             const validatedValue = validateGLSLSampler2D(processedUniform.type, value,
               processedUniform.defaultValue);
-            const texture = this.getOrCacheTexture(validatedValue.url);
+            const loadedTexture = this.getOrCacheTexture(validatedValue.url);
+            this.updateTexture(loadedTexture);
             gl.activeTexture(gl.TEXTURE0 + textureSamplerIndex);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.bindTexture(gl.TEXTURE_2D, loadedTexture.texture);
 
             const choose = <T>(first: T | undefined, second: T | undefined, fallback: T): T => {
               if (typeof first !== "undefined") {

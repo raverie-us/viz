@@ -7,7 +7,10 @@ import {
   InputIdentifier,
   JavaScriptGlobals,
   LayerJavaScript,
-  RaverieVisualizer
+  LoadTextureFunction,
+  UserTexture,
+  RaverieVisualizer,
+  UpdateTextureFunction
 } from "./core";
 
 interface RenderMessage {
@@ -134,14 +137,49 @@ const glFromCanvas = (canvas: HTMLCanvasElement) => {
   return gl;
 };
 
-const loadTexture = (url: string, texture: WebGLTexture, gl: WebGL2RenderingContext) => {
+interface TextureHandle {
+  img: HTMLImageElement;
+  video: HTMLVideoElement;
+};
+
+const loadTexture: LoadTextureFunction = (userTexture: UserTexture) => {
   const img = document.createElement("img");
-  img.onload = () => {
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+  img.src = userTexture.url;
+
+  const video = document.createElement("video");
+  video.muted = true;
+  video.autoplay = true;
+  video.loop = true;
+  video.controls = false;
+  video.playsInline = true;
+  video.src = userTexture.url;
+
+  const handle: TextureHandle = { img, video };
+  userTexture.handle = handle;
+}
+
+const updateTexture: UpdateTextureFunction = (userTexture: UserTexture) => {
+  // We support static images by clearing then handle out after the texture is loaded
+  if (!userTexture.handle) {
+    return;
+  }
+
+  const gl = userTexture.gl;
+  const handle: TextureHandle = userTexture.handle;
+
+  if (handle.img.complete && handle.img.naturalHeight !== 0) {
+    gl.bindTexture(gl.TEXTURE_2D, userTexture.texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, handle.img);
     gl.generateMipmap(gl.TEXTURE_2D);
-  };
-  img.src = url;
+    userTexture.handle = null;
+  } else if (handle.video.readyState === 4) {
+    if (handle.video.paused) {
+      handle.video.play().catch(() => { });
+    }
+    gl.bindTexture(gl.TEXTURE_2D, userTexture.texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, handle.video);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
 }
 
 // We separate this out because browsers often do not allow creation of AudioContexts
@@ -217,7 +255,7 @@ export class RaverieVisualizerBrowser extends RaverieVisualizer {
   }
 
   public constructor(canvas: HTMLCanvasElement) {
-    super(glFromCanvas(canvas), loadTexture);
+    super(glFromCanvas(canvas), loadTexture, updateTexture);
 
     this.onCompileJavaScriptLayer = (layer) => {
       const iframe = document.createElement("iframe");
