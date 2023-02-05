@@ -716,6 +716,8 @@ interface ProcessedProgram {
 
 interface RenderTarget {
   parent: RenderTargets;
+  width: number;
+  height: number;
   texture: WebGLTexture;
   buffer: WebGLFramebuffer;
   useCount: number;
@@ -1135,6 +1137,8 @@ export const defaultVolumeAverageCount = 180;
 export const defaultMinDecibels = -100;
 export const defaultMaxDecibels = -30;
 
+export const maxRenderTargetSize = 8192;
+
 const average = (array: Float32Array) => {
   let sum = 0;
   for (let i = 0; i < array.length; ++i) {
@@ -1150,27 +1154,37 @@ const rollingAverage = (newValue: number, oldAverage: number, n: number) => {
 
 export class RenderTargets {
   public get width() {
-    return this.widthInternal;
+    return this.widthFinal;
   }
 
   public get height() {
-    return this.heightInternal;
+    return this.heightFinal;
   }
 
   private readonly unusedTargets: RenderTarget[] = [];
   private readonly allTargets: RenderTarget[] = [];
 
+  // We start it off at 1 based indexing (insert a dummy)
+  private readonly antiAliasTargets: RenderTarget[] = [undefined as any as RenderTarget];
+
   public constructor(
-    private widthInternal: number,
-    private heightInternal: number) {
+    private widthFinal: number,
+    private heightFinal: number,
+    private widthRender: number,
+    private heightRender: number,
+    private antiAliasLevel: number) {
   }
 }
 
 interface RenderTargetsInternal {
-  widthInternal: number;
-  heightInternal: number;
+  widthFinal: number;
+  heightFinal: number;
+  widthRender: number;
+  heightRender: number;
+  antiAliasLevel: number;
   unusedTargets: RenderTarget[];
   allTargets: RenderTarget[];
+  antiAliasTargets: RenderTarget[];
 }
 
 const DEFAULT_CHECKER_SIZE = 8;
@@ -1426,26 +1440,32 @@ export class RaverieVisualizer {
     this.customTextureUniform = getRequiredUniform(this.customTextureShader, "textureInput");
   }
 
-  private createRenderTarget(parent: RenderTargets): RenderTarget {
+  private createRenderTargetInternal(parent: RenderTargets, width: number, height: number): RenderTarget {
     const gl = this.gl;
     const buffer = expect(gl.createFramebuffer(), "WebGLFramebuffer");
     gl.bindFramebuffer(gl.FRAMEBUFFER, buffer);
     const texture = this.createTexture();
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, parent.width, parent.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    const newTarget: RenderTarget = {
+    return {
       parent,
+      width,
+      height,
       texture: texture,
       buffer: buffer,
       useCount: 0
     };
+  }
 
+  private createRenderTarget(parent: RenderTargets): RenderTarget {
     // We only push the new render target into allTargets and not unusedTargets because the
     // only reason this function gets called is to allocate a target that is about to be used
     const targetsInternal = parent as any as RenderTargetsInternal;
+    const newTarget = this.createRenderTargetInternal(parent, targetsInternal.widthRender, targetsInternal.heightRender);
+
     targetsInternal.allTargets.push(newTarget);
     return newTarget;
   }
@@ -1456,14 +1476,44 @@ export class RaverieVisualizer {
     gl.deleteTexture(renderTarget.texture);
   }
 
-  public createRenderTargets(width: number, height: number): RenderTargets {
-    return new RenderTargets(Math.max(width, 1), Math.max(height, 1));
+  public createRenderTargets(width: number, height: number, desiredAntiAliasLevel: number = 1): RenderTargets {
+    width = Math.max(width, 1);
+    height = Math.max(height, 1);
+
+    const maxDimension = Math.max(width, height);
+    const maxAntiAliasLevel = Math.floor(Math.sqrt(maxRenderTargetSize / maxDimension)) + 1;
+    const determinedAntiAliasLevel = clamp(desiredAntiAliasLevel, 1, maxAntiAliasLevel);
+    const scale = Math.pow(2, determinedAntiAliasLevel - 1);
+    const renderWidth = width * scale;
+    const renderHeight = height * scale;
+
+    const targets = new RenderTargets(width, height, renderWidth, renderHeight, determinedAntiAliasLevel);
+    const targetsInternal = targets as any as RenderTargetsInternal;
+
+    for (let aa = 1; aa < determinedAntiAliasLevel; ++aa) {
+      const aaPower = Math.pow(2, aa);
+      const targetWidth = Math.floor(renderWidth / aaPower);
+      const targetHeight = Math.floor(renderHeight / aaPower);
+
+      const aaTarget = this.createRenderTargetInternal(targets, targetWidth, targetHeight);
+
+      // Ensure this target cannot be 'released' and put back into unused targets, as it is not the same size
+      aaTarget.useCount = -1;
+
+      targetsInternal.antiAliasTargets.push(aaTarget);
+    }
+
+    return targets;
   }
 
   public resizeRenderTargets(targets: RenderTargets, width: number, height: number) {
     const targetsInternal = targets as any as RenderTargetsInternal;
-    targetsInternal.widthInternal = Math.max(width, 1);
-    targetsInternal.heightInternal = Math.max(height, 1);
+    if (targetsInternal.antiAliasLevel !== 1) {
+      throw new Error("Anti-aliased targets cannot be resized yet (not implemented)");
+    }
+
+    targetsInternal.widthRender = targetsInternal.widthFinal = Math.max(width, 1);
+    targetsInternal.heightRender = targetsInternal.heightFinal = Math.max(height, 1);
 
     const gl = this.gl;
     for (const target of targetsInternal.allTargets) {
@@ -1497,7 +1547,11 @@ export class RaverieVisualizer {
   }
 
   private releaseRenderTarget(target: RenderTarget) {
-    if (target.useCount <= 0) {
+    // As a special case, some render targets like anti-alias targets don't get freed
+    if (target.useCount === -1) {
+      return;
+    }
+    if (target.useCount === 0) {
       throw new Error("Attempt to release already freed RenderTarget");
     }
 
@@ -2396,8 +2450,8 @@ export class RaverieVisualizer {
         1.0,
         renderTarget.buffer,
         null,
-        renderTarget.parent.width,
-        renderTarget.parent.height,
+        renderTarget.width,
+        renderTarget.height,
         0);
     }
   };
@@ -2417,7 +2471,7 @@ export class RaverieVisualizer {
       const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
 
       const targetsInternal = renderTargets as any as RenderTargetsInternal;
-      this.gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
+      this.gl.viewport(0, 0, targetsInternal.widthRender, targetsInternal.heightRender);
 
       const checkerTarget = this.requestRenderTarget(renderTargets);
       this.clearRenderTargetInternal(checkerTarget, checkerSize);
@@ -2439,8 +2493,8 @@ export class RaverieVisualizer {
             1,
             renderTarget.buffer,
             checkerTarget.texture,
-            targetsInternal.widthInternal,
-            targetsInternal.heightInternal,
+            targetsInternal.widthRender,
+            targetsInternal.heightRender,
             timeSeconds,
             onRender);
           processedLayer.layer.blendMode = blendMode;
@@ -2455,8 +2509,8 @@ export class RaverieVisualizer {
             1,
             renderTarget.buffer,
             checkerTarget.texture,
-            targetsInternal.widthInternal,
-            targetsInternal.heightInternal,
+            targetsInternal.widthRender,
+            targetsInternal.heightRender,
             timeSeconds,
             onRender);
           this.customTextureShader.layer.id = "";
@@ -2627,7 +2681,7 @@ export class RaverieVisualizer {
 
       const gl = this.gl;
       const targetsInternal = renderTargets as any as RenderTargetsInternal;
-      gl.viewport(0, 0, targetsInternal.widthInternal, targetsInternal.heightInternal);
+      gl.viewport(0, 0, targetsInternal.widthRender, targetsInternal.heightRender);
 
       const timeSeconds = timeStampMs / 1000;
 
@@ -2651,8 +2705,8 @@ export class RaverieVisualizer {
                 groupOpacity,
                 writeTarget.buffer,
                 readTarget.texture,
-                targetsInternal.widthInternal,
-                targetsInternal.heightInternal,
+                targetsInternal.widthRender,
+                targetsInternal.heightRender,
                 timeSeconds);
 
               this.releaseRenderTarget(readTarget);
@@ -2665,7 +2719,7 @@ export class RaverieVisualizer {
                 const globals: JavaScriptGlobals = {
                   gBlendMode: blendModeIndex,
                   gOpacity: layer.layer.opacity * parentOpacity,
-                  gResolution: [targetsInternal.widthInternal, targetsInternal.heightInternal],
+                  gResolution: [targetsInternal.widthRender, targetsInternal.heightRender],
                   gPreviousLayer: null,
                   gTime: timeSeconds,
                   gFrame: this.frame,
@@ -2706,8 +2760,8 @@ export class RaverieVisualizer {
                 groupOpacity,
                 writeTarget.buffer,
                 readTarget.texture,
-                targetsInternal.widthInternal,
-                targetsInternal.heightInternal,
+                targetsInternal.widthRender,
+                targetsInternal.heightRender,
                 timeSeconds);
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.opacity = 1;
@@ -2735,8 +2789,8 @@ export class RaverieVisualizer {
                 1,
                 writeTarget.buffer,
                 readTarget.texture,
-                targetsInternal.widthInternal,
-                targetsInternal.heightInternal,
+                targetsInternal.widthRender,
+                targetsInternal.heightRender,
                 timeSeconds);
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.id = "";
@@ -2753,19 +2807,40 @@ export class RaverieVisualizer {
 
       const initialTarget = this.requestRenderTarget(renderTargets);
       this.clearRenderTargetInternal(initialTarget);
-      const finalTarget = renderRecursive(processedLayerGroup, 1.0, initialTarget);
+      let finalReadTarget = renderRecursive(processedLayerGroup, 1.0, initialTarget);
 
+      for (let aa = 1; aa < targetsInternal.antiAliasLevel; ++aa) {
+        // This is a special case where we do not call requestRenderTarget as the targets
+        // have already been pre-allocated. Moreover, releaseRenderTarget does nothing to AA targets
+        const aaTarget = targetsInternal.antiAliasTargets[aa];
+        this.gl.viewport(0, 0, aaTarget.width, aaTarget.height);
+        console.log("Down sampling from", finalReadTarget.width, finalReadTarget.height, "to", aaTarget.width, aaTarget.height);
+
+        this.renderLayerShaderInternal(
+          this.copyShader,
+          1.0,
+          aaTarget.buffer,
+          finalReadTarget.texture,
+          aaTarget.width,
+          aaTarget.height,
+          0);
+
+        this.releaseRenderTarget(finalReadTarget);
+        finalReadTarget = aaTarget;
+      }
+
+      this.gl.viewport(0, 0, targetsInternal.widthFinal, targetsInternal.heightFinal);
       // Render to the back buffer (we pass null for the render buffer)
       this.renderLayerShaderInternal(
         this.copyShader,
         1.0,
         null,
-        finalTarget.texture,
-        targetsInternal.widthInternal,
-        targetsInternal.heightInternal,
-        timeSeconds);
+        finalReadTarget.texture,
+        targetsInternal.widthFinal,
+        targetsInternal.heightFinal,
+        0);
 
-      this.releaseRenderTarget(finalTarget);
+      this.releaseRenderTarget(finalReadTarget);
 
       return frameTimeSeconds;
     } finally {
