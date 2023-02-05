@@ -23,6 +23,7 @@ export type LayerBlendMode =
   "normal" |
   "dissolve" |
   "overwrite" |
+  "mask" |
   "none" |
 
   "darken" |
@@ -56,6 +57,7 @@ export const blendModeList: LayerBlendMode[] = [
   "normal",
   "dissolve",
   "overwrite",
+  "mask",
   "none",
 
   "darken",
@@ -96,6 +98,7 @@ export const blendModeDisplay: (LayerBlendMode | null)[] = [
   "normal",
   "dissolve",
   "overwrite",
+  "mask",
   "none",
   null,
   "darken",
@@ -1051,12 +1054,18 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
   if (blendMode == gBlendModePassThrough || blendMode == gBlendModeOverwrite) {
     return source;
   }
+  float srcAlpha = source.a * opacity;
 
-  if (blendMode == gBlendModeNone) {
+  // Mask is a special blend mode that always overwrites alpha only
+  if (blendMode == gBlendModeMask) {
+    dest.a = srcAlpha;
     return dest;
   }
 
-  float srcAlpha = source.a * opacity;
+  // None is a special mode that doesn't render anything, used for cases where we want to render off screen targets
+  if (blendMode == gBlendModeNone) {
+    return dest;
+  }
 
   // We also handle dissolve as a special case since it never blends (always opaque)
   if (blendMode == gBlendModeDissolve) {
