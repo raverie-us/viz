@@ -320,7 +320,7 @@ export interface CompiledUniformBoolVector extends CompiledUniformBase {
 export interface CompiledUniformEnum extends CompiledUniformBase {
   type: EnumType;
   shaderValue: ShaderValueEnum;
-  defaultValue: number;
+  defaultValue: string;
   enumDescription: EnumDescription;
 }
 
@@ -812,7 +812,7 @@ const validateGLSLBoolVector = (
 interface EnumDescription {
   stringToInt: Record<string, number>;
   intToString: Record<number, string>;
-  defaultValue: number;
+  defaultValue: string;
 }
 
 const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
@@ -823,7 +823,7 @@ const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
   const result: EnumDescription = {
     intToString: {},
     stringToInt: {},
-    defaultValue: 0
+    defaultValue: ""
   };
 
   if (Array.isArray(enumDefinition)) {
@@ -846,7 +846,7 @@ const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
       return null;
     }
 
-    result.defaultValue = enumDefinition[keys[0]];
+    result.defaultValue = keys[0];
 
     for (const key of keys) {
       const enumValue = enumDefinition[key];
@@ -862,16 +862,17 @@ const parseEnumDescription = (enumDefinition: any): EnumDescription | null => {
   return result;
 };
 
-const validateGLSLEnum = (glslType: EnumType, value: any, validatedDefault: number, enumDescription: EnumDescription): number => {
+const validateGLSLEnum = (glslType: EnumType, value: any, validatedDefault: string, enumDescription: EnumDescription): string => {
   if (typeof value === "number") {
     // As long as it's a valid enum value
-    if (enumDescription.intToString[value]) {
-      return value;
+    const stringValue = enumDescription.intToString[value];
+    if (stringValue) {
+      return stringValue;
     }
   } else if (typeof value === "string") {
     const enumValue = enumDescription.stringToInt[value];
     if (enumValue !== undefined) {
-      return enumValue;
+      return value;
     }
   }
 
@@ -2328,7 +2329,8 @@ export class RaverieVisualizer {
           case "enum": {
             const validatedValue = validateGLSLEnum(processedUniform.type, value,
               processedUniform.defaultValue, processedUniform.enumDescription);
-            gl.uniform1i(processedUniform.location, validatedValue);
+            const numericValue = processedUniform.enumDescription.stringToInt[validatedValue] || 0;
+            gl.uniform1i(processedUniform.location, numericValue);
             break;
           }
           case "sampler2D": {
