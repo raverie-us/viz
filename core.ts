@@ -1060,7 +1060,8 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
 
   // Mask is a special blend mode that always overwrites alpha only
   if (blendMode == gBlendModeMask) {
-    dest.a = srcAlpha;
+    // We use min because we don't want to set alpha to a value higher than what exists on the dest
+    dest.a = min(dest.a, srcAlpha);
     return dest;
   }
 
