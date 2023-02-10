@@ -663,6 +663,7 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gFrame: WebGLUniformLocation | null;
   gPreviousLayer: WebGLUniformLocation | null;
   gBlendMode: WebGLUniformLocation | null;
+  gFlipY: WebGLUniformLocation | null;
 
   gAudioFrequencies: WebGLUniformLocation | null;
   gAudioSamples: WebGLUniformLocation | null;
@@ -1406,9 +1407,14 @@ export class RaverieVisualizer {
       in vec2 _gVertexPosition;
       out vec2 gPosition;
       out vec2 gUV;
+      uniform bool gFlipY;
       void main() {
-        gPosition = _gVertexPosition;
-        gUV = (_gVertexPosition + vec2(1.0, 1.0)) * 0.5;
+        vec2 pos = _gVertexPosition;
+        if (gFlipY) {
+          pos.y = -pos.y;
+        }
+        gPosition = pos;
+        gUV = (pos + vec2(1.0, 1.0)) * 0.5;
         gl_Position = vec4(_gVertexPosition, 0.0, 1.0);
       }`;
 
@@ -2031,6 +2037,7 @@ export class RaverieVisualizer {
       gFrame: getUniformLocation("gFrame"),
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
       gBlendMode: getUniformLocation("gBlendMode"),
+      gFlipY: getUniformLocation("gFlipY"),
       gAudioFrequencies: getUniformLocation("gAudioFrequencies"),
       gAudioSamples: getUniformLocation("gAudioSamples"),
       gAudioVolume: getUniformLocation("gAudioVolume"),
@@ -2211,6 +2218,7 @@ export class RaverieVisualizer {
     width: number,
     height: number,
     timeSeconds: number,
+    flipY: boolean,
     onRender?: RenderLayerCodeCallback) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
@@ -2226,6 +2234,7 @@ export class RaverieVisualizer {
       gl.uniform2f(processedLayerShader.gResolution, width, height);
       gl.uniform1f(processedLayerShader.gTime, timeSeconds);
       gl.uniform1f(processedLayerShader.gFrame, this.frame);
+      gl.uniform1i(processedLayerShader.gFlipY, Number(flipY));
 
       const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
       gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
@@ -2463,7 +2472,8 @@ export class RaverieVisualizer {
         null,
         renderTarget.width,
         renderTarget.height,
-        0);
+        0,
+        false);
     }
   };
 
@@ -2472,6 +2482,7 @@ export class RaverieVisualizer {
     timeStampMs: number,
     renderTargets: RenderTargets,
     onRender: RenderLayerCodeCallback,
+    flipY = false,
     checkerSize: number = DEFAULT_CHECKER_SIZE) {
     if (this.isRenderingInternal) {
       throw new Error("A frame is currently being rendered, wait for the promise returned by 'render()' or check 'isRendering'");
@@ -2507,6 +2518,7 @@ export class RaverieVisualizer {
             targetsInternal.widthRender,
             targetsInternal.heightRender,
             timeSeconds,
+            flipY,
             onRender);
           processedLayer.layer.blendMode = blendMode;
           processedLayer.layer.opacity = opacity;
@@ -2523,6 +2535,7 @@ export class RaverieVisualizer {
             targetsInternal.widthRender,
             targetsInternal.heightRender,
             timeSeconds,
+            flipY,
             onRender);
           this.customTextureShader.layer.id = "";
         }
@@ -2670,7 +2683,8 @@ export class RaverieVisualizer {
   public render(
     compiledLayerGroup: CompiledLayerGroup,
     timeStampMs: number,
-    renderTargets: RenderTargets): number {
+    renderTargets: RenderTargets,
+    flipY = false): number {
     if (this.isRenderingInternal) {
       throw new Error("A frame is currently being rendered, check 'isRendering'");
     }
@@ -2718,7 +2732,8 @@ export class RaverieVisualizer {
                 readTarget.texture,
                 targetsInternal.widthRender,
                 targetsInternal.heightRender,
-                timeSeconds);
+                timeSeconds,
+                false);
 
               this.releaseRenderTarget(readTarget);
               readTarget = writeTarget;
@@ -2773,7 +2788,8 @@ export class RaverieVisualizer {
                 readTarget.texture,
                 targetsInternal.widthRender,
                 targetsInternal.heightRender,
-                timeSeconds);
+                timeSeconds,
+                false);
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.opacity = 1;
 
@@ -2802,7 +2818,8 @@ export class RaverieVisualizer {
                 readTarget.texture,
                 targetsInternal.widthRender,
                 targetsInternal.heightRender,
-                timeSeconds);
+                timeSeconds,
+                false);
               this.customTextureShader.layer.blendMode = "normal";
               this.customTextureShader.layer.id = "";
 
@@ -2825,7 +2842,6 @@ export class RaverieVisualizer {
         // have already been pre-allocated. Moreover, releaseRenderTarget does nothing to AA targets
         const aaTarget = targetsInternal.antiAliasTargets[aa];
         this.gl.viewport(0, 0, aaTarget.width, aaTarget.height);
-        console.log("Down sampling from", finalReadTarget.width, finalReadTarget.height, "to", aaTarget.width, aaTarget.height);
 
         this.renderLayerShaderInternal(
           this.copyShader,
@@ -2834,7 +2850,8 @@ export class RaverieVisualizer {
           finalReadTarget.texture,
           aaTarget.width,
           aaTarget.height,
-          0);
+          0,
+          false);
 
         this.releaseRenderTarget(finalReadTarget);
         finalReadTarget = aaTarget;
@@ -2849,7 +2866,8 @@ export class RaverieVisualizer {
         finalReadTarget.texture,
         targetsInternal.widthFinal,
         targetsInternal.heightFinal,
-        0);
+        0,
+        flipY);
 
       this.releaseRenderTarget(finalReadTarget);
 
