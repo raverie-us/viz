@@ -1704,6 +1704,11 @@ export class RaverieVisualizer {
         const commentText = afterUniform.substring(commentStart + 2);
         const innerJson = commentText.replace(/[-a-zA-Z0-9_.]+\s*:/gum, (found) => {
           const identifier = found.substring(0, found.indexOf(":")).trim();
+          // TODO(trevor): Hack for data urls. We should do something better than regex
+          // find/replace where we walk the potential JSON and ignore replacements in strings
+          if (identifier === "data") {
+            return found;
+          }
           return `"${identifier}":`;
         });
 
