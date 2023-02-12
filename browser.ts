@@ -182,25 +182,23 @@ const updateTexture: UpdateTextureFunction = (userTexture: UserTexture) => {
   }
 }
 
+type AudioInputType = AudioNode | MediaStream | AudioBuffer | null;
+
+// We intentionally use 40kHz and cut in in half for human audible range, see below
+const SAMPLE_RATE = 40000;
+
 // We separate this out because browsers often do not allow creation of AudioContexts
 // until the user has interacted with the page (or dependent upon security settings)
-class AudioAnalyser {
-  public audioContext: AudioContext;
+class RaverieAudioAnalyserCore {
+  public audioContextBase: BaseAudioContext;
 
   public frequencyAnalyser: AnalyserNode;
   public samplesAnalyser: AnalyserNode;
 
-  public inputNode: AudioNode | null = null;
+  public constructor(audioContext: BaseAudioContext) {
+    this.audioContextBase = audioContext;
 
-  public constructor() {
-    // We intentionally use 40kHz and cut in in half for human audible range, see below
-    const SAMPLE_RATE = 40000;
-    this.audioContext = new AudioContext({
-      latencyHint: "interactive",
-      sampleRate: SAMPLE_RATE
-    });
-
-    this.frequencyAnalyser = this.audioContext.createAnalyser();
+    this.frequencyAnalyser = audioContext.createAnalyser();
     // Normally the fftSize should be double of whatever we want for the frequencyBinCount.
     // The human audible range is from 20hz to 20kHz. We intentially set SAMPLE_RATE to 40kHz
     // and then cut the output frequency buffer in half to remove non-human audible frequencies.
@@ -210,7 +208,7 @@ class AudioAnalyser {
 
     // We don't want to cut the samples in half like the above frequency
     // buffer, so we create a separate AnalyserNode just for samples
-    this.samplesAnalyser = this.audioContext.createAnalyser();
+    this.samplesAnalyser = audioContext.createAnalyser();
     this.samplesAnalyser.fftSize = defaultAudioSampleCount * 2;
     this.samplesAnalyser.smoothingTimeConstant = 1.0;
 
@@ -221,39 +219,144 @@ class AudioAnalyser {
       throw new Error(`Mismatched frequencyBinCount, got ${this.frequencyAnalyser.frequencyBinCount}, expected ${defaultAudioSampleCount}`);
     }
   }
+}
 
-  public connectAudioSource(input: AudioNode | MediaStream | null) {
+export abstract class RaverieAudioAnalyserBase {
+  protected core: RaverieAudioAnalyserCore | null = null;
+
+  protected frequencies = new Float32Array(defaultAudioSampleCount);
+  protected samples = new Float32Array(defaultAudioSampleCount);
+
+  protected abstract initialize(): void;
+
+  protected initializeInternal(audioContext: BaseAudioContext) {
+    this.core = new RaverieAudioAnalyserCore(audioContext);
+  }
+
+  protected getCore(): RaverieAudioAnalyserCore {
+    if (!this.core) {
+      this.initialize();
+
+      if (!this.core) {
+        throw new Error("Bad initialize implementation, it should have ensured this.core existed");
+      }
+    }
+    return this.core;
+  }
+
+  protected updateVisualizerAudioInternal(visualizer: RaverieVisualizer) {
+    if (this.core) {
+      this.core.frequencyAnalyser.getFloatFrequencyData(this.frequencies);
+      this.core.samplesAnalyser.getFloatTimeDomainData(this.samples);
+    } else {
+      this.frequencies.fill(defaultMinDecibels);
+      this.samples.fill(0);
+    }
+
+    visualizer.updateAudioSamples(this.frequencies, this.samples);
+  }
+
+  public async decodeAudioData(audioData: ArrayBuffer): Promise<AudioBuffer> {
+    return this.getCore().audioContextBase.decodeAudioData(audioData);
+  }
+};
+
+export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
+  protected inputNode: AudioNode | null = null;
+  protected input: AudioInputType = null;
+
+  public get source(): AudioInputType {
+    return this.input;
+  }
+
+  public get audioContext(): AudioContext {
+    return this.getCore().audioContextBase as AudioContext;
+  }
+
+  public initialize() {
+    if (!this.core) {
+      this.initializeInternal(new AudioContext({
+        latencyHint: "interactive",
+        sampleRate: SAMPLE_RATE
+      }));
+    }
+  }
+
+  public updateVisualizerAudio(visualizer: RaverieVisualizer) {
+    this.updateVisualizerAudioInternal(visualizer);
+  }
+
+  public connectAudioSource(input: AudioInputType) {
+    const core = this.getCore();
+
     if (this.inputNode) {
-      this.inputNode.disconnect(this.frequencyAnalyser);
-      this.inputNode.disconnect(this.samplesAnalyser);
+      this.inputNode.disconnect();
+      this.inputNode.disconnect();
       this.inputNode = null;
     }
 
     if (input) {
-      this.inputNode = input instanceof MediaStream
-        ? this.audioContext.createMediaStreamSource(input)
-        : input;
+      if (input instanceof MediaStream) {
+        if (!(core.audioContextBase instanceof AudioContext)) {
+          throw new Error("Cannot use a MediaStream with an OfflineAudioContext");
+        }
 
-      this.inputNode.connect(this.frequencyAnalyser);
-      this.inputNode.connect(this.samplesAnalyser);
+        this.inputNode = core.audioContextBase.createMediaStreamSource(input);
+      } else if (input instanceof AudioBuffer) {
+        const bufferSource = core.audioContextBase.createBufferSource();
+        bufferSource.buffer = input;
+        bufferSource.start();
+        this.inputNode = bufferSource;
+      } else {
+        this.inputNode = input;
+      }
+
+      this.inputNode.connect(core.frequencyAnalyser);
+      this.inputNode.connect(core.samplesAnalyser);
+    }
+
+    this.input = input;
+  }
+}
+
+export class RaverieAudioAnalyserOffline extends RaverieAudioAnalyserBase {
+  public get audioContext(): OfflineAudioContext {
+    return this.getCore().audioContextBase as OfflineAudioContext;
+  }
+
+  public initialize() {
+    if (!this.core) {
+      this.initializeContext(1000);
     }
   }
-};
+
+  private initializeContext(frameTimeMs: number) {
+    super.initializeInternal(new OfflineAudioContext({
+      numberOfChannels: 1,
+      length: SAMPLE_RATE * (frameTimeMs / 1000),
+      sampleRate: SAMPLE_RATE
+    }));
+  }
+
+  public async updateVisualizerAudioSingleFrame(visualizer: RaverieVisualizer, input: AudioBuffer, frameTimeMs: number, timeMs: number) {
+    this.initializeContext(frameTimeMs);
+
+    const core = this.getCore();
+
+    const bufferSource = core.audioContextBase.createBufferSource();
+    bufferSource.buffer = input;
+    bufferSource.start(0, timeMs / 1000);
+
+    bufferSource.connect(core.frequencyAnalyser);
+    bufferSource.connect(core.samplesAnalyser);
+
+    await this.audioContext.startRendering();
+
+    this.updateVisualizerAudioInternal(visualizer);
+  }
+}
 
 export class RaverieVisualizerBrowser extends RaverieVisualizer {
-  private audioAnalyser: AudioAnalyser | null = null;
-
-  private frequencies = new Float32Array(defaultAudioSampleCount);
-  private samples = new Float32Array(defaultAudioSampleCount);
-
-  public get hasAudioSource() {
-    return Boolean(this.audioAnalyser?.inputNode);
-  }
-
-  public get audioContext(): AudioContext | null {
-    return this.audioAnalyser?.audioContext || null;
-  }
-
   public constructor(canvas: HTMLCanvasElement) {
     super(glFromCanvas(canvas), loadTexture, updateTexture);
 
@@ -420,23 +523,5 @@ export class RaverieVisualizerBrowser extends RaverieVisualizer {
       }
       return null;
     };
-  }
-
-  public connectAudioSource(input: AudioNode | MediaStream | null) {
-    if (!this.audioAnalyser) {
-      this.audioAnalyser = new AudioAnalyser();
-    }
-    this.audioAnalyser.connectAudioSource(input);
-  }
-
-  public updateAudio() {
-    if (this.audioAnalyser) {
-      this.audioAnalyser.frequencyAnalyser.getFloatFrequencyData(this.frequencies);
-      this.audioAnalyser.samplesAnalyser.getFloatTimeDomainData(this.samples);
-    } else {
-      this.frequencies.fill(defaultMinDecibels);
-      this.samples.fill(0);
-    }
-    super.updateAudioSamples(this.frequencies, this.samples);
   }
 }
