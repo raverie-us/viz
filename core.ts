@@ -17,6 +17,11 @@ export interface LayerGroup extends LayerBase {
   layers: Layer[];
 }
 
+export interface LayerRoot extends LayerGroup {
+  width: number;
+  height: number;
+}
+
 export type LayerBlendMode =
   "passThrough" |
 
@@ -403,6 +408,10 @@ export interface CompiledLayerGroup extends CompiledLayerBase {
   idToLayer: Record<string, CompiledLayer>;
 }
 
+export interface CompiledLayerRoot extends CompiledLayerGroup {
+  layer: LayerRoot;
+}
+
 export const defaultEmptyLayerGroup = (): LayerGroup => ({
   type: "group",
   id: "",
@@ -413,9 +422,28 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   layers: []
 });
 
+const defaultWidth = 360;
+const defaultHeight = 640;
+
+export const defaultEmptyLayerRoot = (): LayerRoot => ({
+  ...defaultEmptyLayerGroup(),
+  width: defaultWidth,
+  height: defaultHeight
+});
+
 export const defaultEmptyCompiledLayerGroup = (): CompiledLayerGroup => pass<ProcessedLayerGroup>({
   type: "group",
   layer: defaultEmptyLayerGroup(),
+  idToLayer: {},
+  parent: null,
+  timeSeconds: 0,
+  layers: [],
+  usesAudioInput: false
+});
+
+export const defaultEmptyCompiledLayerRoot = (): CompiledLayerRoot => pass<ProcessedLayerRoot>({
+  type: "group",
+  layer: defaultEmptyLayerRoot(),
   idToLayer: {},
   parent: null,
   timeSeconds: 0,
@@ -692,6 +720,11 @@ interface ProcessedLayerGroup extends CompiledLayerGroup {
   layers: ProcessedLayer[];
   idToLayer: IdToLayer;
   timeSeconds: number;
+}
+
+interface ProcessedLayerRoot extends ProcessedLayerGroup {
+  parent: null;
+  layer: LayerRoot;
 }
 
 // This type contains all the possible attributes for all types
@@ -1644,23 +1677,33 @@ export class RaverieVisualizer {
     return texture;
   }
 
-  public compile(layerGroup: LayerGroup, mode: "clone" | "modifyInPlace" = "clone", previous?: CompiledLayerGroup): CompiledLayerGroup {
+  public compile(layerRoot: LayerRoot, mode: "clone" | "modifyInPlace" = "clone", previous?: CompiledLayerRoot): CompiledLayerRoot {
+    const root = mode === "clone"
+      ? JSON.parse(JSON.stringify(layerRoot)) as LayerRoot
+      : layerRoot;
+
+    // Backwards compatibility
+    if (root.width === undefined) {
+      root.width = defaultWidth;
+    }
+    if (root.height === undefined) {
+      root.height = defaultHeight;
+    }
+
     // Let the user pick if we make a copy, because we're going to potentially
     // modify the group such as if we find new uniforms within the shaders
-    const previousProcessedGroup = previous as ProcessedLayerGroup | undefined;
-    const previousIdToLayer: IdToLayer | undefined = previousProcessedGroup
-      ? { ...previousProcessedGroup.idToLayer }
+    const previousProcessedRoot = previous as ProcessedLayerRoot | undefined;
+    const previousIdToLayer: IdToLayer | undefined = previousProcessedRoot
+      ? { ...previousProcessedRoot.idToLayer }
       : undefined;
-    const processedLayerGroup = this.compileLayerGroup(mode === "clone"
-      ? JSON.parse(JSON.stringify(layerGroup)) as LayerGroup
-      : layerGroup, null, previousIdToLayer);
+    const processedLayerRoot = this.compileLayerRoot(root, previousIdToLayer);
 
     // The remaining layers inside previousIdToLayer must be deleted
     for (const id in previousIdToLayer) {
       this.deleteLayer(previousIdToLayer[id], false);
     }
 
-    return processedLayerGroup;
+    return processedLayerRoot;
   }
 
   private parseUniforms(layerCode: LayerCode, parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
@@ -2099,6 +2142,10 @@ export class RaverieVisualizer {
     }
 
     return processedLayerJavaScript;
+  }
+
+  private compileLayerRoot(layerRoot: LayerRoot, previousIdToLayer?: IdToLayer): ProcessedLayerRoot {
+    return this.compileLayerGroup(layerRoot, null, previousIdToLayer) as ProcessedLayerRoot;
   }
 
   private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerGroup {
