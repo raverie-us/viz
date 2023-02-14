@@ -1706,7 +1706,9 @@ export class RaverieVisualizer {
     return processedLayerRoot;
   }
 
-  private parseUniforms(layerCode: LayerCode, parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
+  private parseUniforms(parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
+    const layerCode = parent.layer;
+
     // tags: <types>
     const uniformRegex =
       /uniform\s+(int|float|vec2|vec3|vec4|ivec2|ivec3|ivec4|bool|bvec2|bvec3|bvec4|sampler2D|gradient|button|axis)\s+([a-zA-Z_][a-zA-Z0-9_]*)(.*)/gum;
@@ -2006,12 +2008,20 @@ export class RaverieVisualizer {
   private rebuildFromPrevious<T extends ProcessedLayerCode>(layer: T["layer"], parent: ProcessedLayerGroup | null, previousIdToLayer: IdToLayer | undefined): T | null {
     // If the previous layer type and code are the same, then steal it
     const previous = previousIdToLayer && previousIdToLayer[layer.id];
-    if (previous && previous.type === layer.type && previous.code === layer.code) {
+    if (previous && previous.type === layer.type && previous.code === layer.code && previous.layer.code === layer.code) {
       const previousLayer = previous as T;
       previousLayer.parent = parent;
       previousLayer.layer = layer;
 
-      this.copyProcessedUniformToShaderValues(layer, previousLayer.uniforms);
+      const getUniformLocation = (name: string) => previousLayer.type === "shader" && previousLayer.program
+        ? this.gl.getUniformLocation(previousLayer.program, name)
+        : null;
+
+      previousLayer.layer.values = layer.values;
+
+      // TODO(trevor): This can be made more efficient by not having to parse
+      // every parameter (just use the old ones). Would need to detect renames, etc.
+      previousLayer.uniforms = this.parseUniforms(previousLayer, getUniformLocation);
 
       // We remove the layer from previousIdToLayer so that we know which ones were used and which to delete
       delete previousIdToLayer[layer.id];
@@ -2107,7 +2117,7 @@ export class RaverieVisualizer {
       Boolean(processedLayerShader.gAudioVolumeTrough) ||
       Boolean(processedLayerShader.gAudioReactiveScalar);
 
-    processedLayerShader.uniforms = this.parseUniforms(layerShader, processedLayerShader, getUniformLocation);
+    processedLayerShader.uniforms = this.parseUniforms(processedLayerShader, getUniformLocation);
     return processedLayerShader;
   }
 
@@ -2138,7 +2148,7 @@ export class RaverieVisualizer {
     if (this.onCompileJavaScriptLayer) {
       const result = this.onCompileJavaScriptLayer(layerJavaScript);
       processedLayerJavaScript.handle = result.handle;
-      processedLayerJavaScript.uniforms = this.parseUniforms(layerJavaScript, processedLayerJavaScript, () => null);
+      processedLayerJavaScript.uniforms = this.parseUniforms(processedLayerJavaScript, () => null);
     }
 
     return processedLayerJavaScript;
