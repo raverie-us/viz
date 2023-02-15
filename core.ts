@@ -480,9 +480,14 @@ export const defaultEmptyLayerJavaScript = (): LayerJavaScript => ({
   values: []
 });
 
-export const wrapLayerShaderInGroup = (layerShader: LayerShader): LayerGroup => ({
+export const wrapLayerInLayerGroup = (layer: Layer): LayerGroup => ({
   ...defaultEmptyLayerGroup(),
-  layers: [layerShader]
+  layers: [layer]
+});
+
+export const wrapLayerInLayerRoot = (layer: Layer): LayerRoot => ({
+  ...defaultEmptyLayerRoot(),
+  layers: [layer]
 });
 
 export const cloneLayer = <T extends Layer>(layer: T): T =>
