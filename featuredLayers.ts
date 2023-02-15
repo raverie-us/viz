@@ -13,7 +13,7 @@ import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
 import { audioInputLayer } from "./layers/audioInput";
 
-const untrimmedLayers: LayerCode[] = [
+export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
   glitchLayer,
   godRaysLayer,
@@ -29,7 +29,15 @@ const untrimmedLayers: LayerCode[] = [
   emptyShaderLayer,
 ]
 
-export const featuredLayers: LayerCode[] = untrimmedLayers.map((layer) => ({
-  ...layer,
-  code: layer.code.trim()
-}));
+export const visualLayers: LayerCode[] = [
+  connnectedPointsLayer,
+  glitchLayer,
+  godRaysLayer,
+  gradientLayer,
+  gradientColorizeLayer,
+  kaleidoscopeLayer,
+  liquidLayer,
+  spiralLayer,
+  tunnelLayer,
+  textureLayer,
+]
