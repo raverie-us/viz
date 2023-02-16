@@ -109,7 +109,7 @@ vec4 render() {
   sum.a *= RCP_NUM_SAMPLES_F;
 
   return sum;
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

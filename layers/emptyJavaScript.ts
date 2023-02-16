@@ -17,5 +17,5 @@ window.render = (layer, globals) => {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   return createImageBitmap(canvas);
-};`
+};`.trim()
 };

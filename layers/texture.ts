@@ -57,7 +57,7 @@ vec4 render() {
   }
   
   return texture(textureInput, uv);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

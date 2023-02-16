@@ -14,7 +14,7 @@ vec4 render() {
   vec4 sampled = gSampleGradient(colors, t);
   sampled.a *= color.a;
   return sampled;
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

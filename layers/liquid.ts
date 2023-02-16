@@ -229,7 +229,7 @@ vec4 render() {
   col = mix(sampleCol.rgb, col, lighting);
   
   return vec4(col, (baseCol1.a + baseCol2.a) / 2.0);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

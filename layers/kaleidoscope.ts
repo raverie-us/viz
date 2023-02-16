@@ -26,7 +26,7 @@ vec4 render() {
   uv = uv * gRotateMatrix2D(gTime * rotationsPerSecond);
   uv += scrollSpeed * gTime;
   return texture(gPreviousLayer, uv);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

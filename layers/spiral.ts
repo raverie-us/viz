@@ -21,7 +21,7 @@ vec4 render() {
   vec4 prev = texture(gPreviousLayer, gUV);
   float t = fract(float(spirals) / 2.0 * radians / gPI + warpFactor * pow(radius, warpExponent) - gTime * speed);
   return gSampleGradient(colors, t);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

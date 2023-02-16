@@ -143,7 +143,7 @@ vec4 render() {
   color.rgb *= intensity;
   color.a = clamp(color.a, 0.0, 1.0);
   return color;
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

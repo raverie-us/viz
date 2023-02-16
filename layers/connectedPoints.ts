@@ -289,7 +289,7 @@ vec4 render() {
   p.x *= RESOLUTION.x/RESOLUTION.y;
   float t = gLuminance(effect(ROT(TIME * rotateSpeed) * p, q));
   return gSampleGradient(colors, t);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

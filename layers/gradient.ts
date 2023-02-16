@@ -16,7 +16,7 @@ vec4 render() {
   vec2 uv = gUV * gRotateMatrix2D(gDegreesToRadians(rotationDegrees));
   uv = uv * gRotateMatrix2D(gTime * rotationsPerSecond);
   return gSampleGradient(colors, uv.x * float(repeat) + colorCycleRate * gTime);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",

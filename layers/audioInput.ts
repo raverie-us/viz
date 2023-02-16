@@ -23,7 +23,7 @@ vec4 render() {
   float audioFrequency = texture(gAudioFrequencies, vec2(gUV.x, 0)).r;
   float audioSample = texture(gAudioSamples, vec2(gUV.x, 0)).r;
   return vec4(audioFrequency > gUV.y, audioSample > gUV.y, gAudioReactiveScalar, 1);
-}`,
+}`.trim(),
   blendMode: "normal",
   opacity: 1,
   timeMode: "normal",
