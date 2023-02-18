@@ -1183,7 +1183,7 @@ export type ControlsUpdateCallback = () => void;
 export const defaultFrameTime = 1 / 60;
 export const defaultFramesAheadForAsyncLayers = 2;
 export const defaultAudioSampleCount = 512;
-export const defaultVolumeAverageCount = 180;
+export const defaultVolumeAverageCount = 80;
 export const defaultMinDecibels = -100;
 export const defaultMaxDecibels = -30;
 
@@ -1365,6 +1365,8 @@ export class RaverieVisualizer {
 
     const SMOOTH_SAMPLE_RADIUS = 2;
     const SMOOTH_SAMPLE_TOTAL = SMOOTH_SAMPLE_RADIUS * 2 + 1;
+    const VOLUME_AVERAGE_INTERPOLANT = 0.75;
+    const REACTIVE_SCALAR_INTERPOLANT = 0.5;
 
     for (let i = 0; i < defaultAudioSampleCount; ++i) {
       const frequencyDecibelsClamped = clamp(frequencies[i], defaultMinDecibels, defaultMaxDecibels);
@@ -1392,7 +1394,7 @@ export class RaverieVisualizer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, defaultAudioSampleCount, 1, 0, gl.RED, gl.FLOAT, this.audioSamples);
 
     // https://physics.stackexchange.com/questions/46228/averaging-decibels
-    this.audioVolume = average(this.audioFrequencies);
+    this.audioVolume = lerp(this.audioVolume, average(this.audioFrequencies), VOLUME_AVERAGE_INTERPOLANT);
     this.audioVolumeAverage = rollingAverage(
       this.audioVolume, this.audioVolumeAverage, defaultVolumeAverageCount);
 
@@ -1414,7 +1416,11 @@ export class RaverieVisualizer {
     // is OK because we clamp it which properly handles Infinity
     const unclampedAudioReactiveScalar =
       (this.audioVolume - this.audioVolumeTrough) / (this.audioVolumePeak - this.audioVolumeTrough);
-    this.audioReactiveScalar = clamp(unclampedAudioReactiveScalar, 0, 1);
+    const clampedAudioReactiveScalar = isNaN(unclampedAudioReactiveScalar)
+      ? 0
+      : clamp(unclampedAudioReactiveScalar, 0, 1);
+    this.audioReactiveScalar = lerp(
+      this.audioReactiveScalar, clampedAudioReactiveScalar, REACTIVE_SCALAR_INTERPOLANT);
   }
 
   public constructor(
