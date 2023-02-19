@@ -3,6 +3,7 @@ import { connnectedPointsLayer } from "./layers/connectedPoints";
 import { emptyShaderLayer } from "./layers/emptyShader";
 import { emptyJavaScriptLayer } from "./layers/emptyJavaScript";
 import { glitchLayer } from "./layers/glitch";
+import { boxBlur } from "./layers/boxBlur";
 import { godRaysLayer } from "./layers/godRays";
 import { gradientLayer } from "./layers/gradient";
 import { gradientColorizeLayer } from "./layers/gradientColorize";
@@ -16,6 +17,7 @@ import { audioInputLayer } from "./layers/audioInput";
 export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
   glitchLayer,
+  boxBlur,
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
@@ -32,6 +34,7 @@ export const featuredLayers: LayerCode[] = [
 export const visualLayers: LayerCode[] = [
   connnectedPointsLayer,
   glitchLayer,
+  boxBlur,
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
