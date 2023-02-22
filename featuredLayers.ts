@@ -8,6 +8,7 @@ import { boxBlur } from "./layers/boxBlur";
 import { godRaysLayer } from "./layers/godRays";
 import { gradientLayer } from "./layers/gradient";
 import { gradientColorizeLayer } from "./layers/gradientColorize";
+import { pixelatedPalette } from "./layers/pixelatedPalette";
 import { kaleidoscopeLayer } from "./layers/kaleidoscope";
 import { liquidLayer } from "./layers/liquid";
 import { spiralLayer } from "./layers/spiral";
@@ -23,6 +24,7 @@ export const featuredLayers: LayerCode[] = [
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
+  pixelatedPalette,
   kaleidoscopeLayer,
   liquidLayer,
   spiralLayer,
@@ -41,6 +43,7 @@ export const visualLayers: LayerCode[] = [
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
+  pixelatedPalette,
   kaleidoscopeLayer,
   liquidLayer,
   spiralLayer,
