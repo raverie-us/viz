@@ -15,6 +15,7 @@ import { spiralLayer } from "./layers/spiral";
 import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
 import { audioInputLayer } from "./layers/audioInput";
+import { audioWaveformLayer } from "./layers/audioWaveform";
 
 export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
@@ -30,6 +31,7 @@ export const featuredLayers: LayerCode[] = [
   spiralLayer,
   tunnelLayer,
   audioInputLayer,
+  audioWaveformLayer,
   textureLayer,
   emptyJavaScriptLayer,
   emptyShaderLayer,
@@ -48,5 +50,6 @@ export const visualLayers: LayerCode[] = [
   liquidLayer,
   spiralLayer,
   tunnelLayer,
+  audioWaveformLayer,
   textureLayer,
 ]
