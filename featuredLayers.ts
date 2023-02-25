@@ -16,6 +16,7 @@ import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
 import { audioInputLayer } from "./layers/audioInput";
 import { audioWaveformLayer } from "./layers/audioWaveform";
+import { repeaterLayer } from "./layers/repeater";
 
 export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
@@ -27,6 +28,7 @@ export const featuredLayers: LayerCode[] = [
   gradientColorizeLayer,
   pixelatedPalette,
   kaleidoscopeLayer,
+  repeaterLayer,
   liquidLayer,
   spiralLayer,
   tunnelLayer,
@@ -47,6 +49,7 @@ export const visualLayers: LayerCode[] = [
   gradientColorizeLayer,
   pixelatedPalette,
   kaleidoscopeLayer,
+  repeaterLayer,
   liquidLayer,
   spiralLayer,
   tunnelLayer,
