@@ -8,6 +8,7 @@ export const spiralLayer: LayerShader = {
   code: `
 uniform vec2 position; // type: "position"
 uniform gradient colors; // default: {0.47:[0,0,0,1], 0.50:[1,1,1,1], 0.97:[1,1,1,1], 1.00:[0,0,0,1]}
+uniform bool warpPreviousLayer; // default: false
 uniform int spirals; // default: 1, min: 0, max: 20
 uniform float warpExponent; // default: 0.4, min: -0.2, max: 2
 uniform float warpFactor; // default: 7.0, min: -10, max: 10
@@ -20,6 +21,12 @@ vec4 render() {
   float radians = atan(uv.y, uv.x);
   vec4 prev = texture(gPreviousLayer, gUV);
   float t = fract(float(spirals) / 2.0 * radians / gPI + warpFactor * pow(radius, warpExponent) - gTime * speed);
+
+  vec2 sampleUv = vec2(t, length(uv) + 0.5);
+  if (warpPreviousLayer) {
+    return texture(gPreviousLayer, sampleUv);
+  }
+
   return gSampleGradient(colors, t);
 }`.trim(),
   blendMode: "normal",
