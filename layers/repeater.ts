@@ -31,6 +31,7 @@ vec4 sampleLayer(float value, float sampleOpacityAmount, float fadeInOut, vec4 p
   vec2 uv = pos * vec2(1.0 / scaleValue) * 0.5 + 0.5;
   vec4 color = texture(gPreviousLayer, uv);
   vec4 gradientColor = gSampleGradient(colors, value);
+  gradientColor.a = min(color.a, gradientColor.a);
   color = gApplyBlendMode(colorsBlendMode, colorsOpacity, gradientColor, color);
   color.a *= fadeInOut;
   return gApplyBlendMode(sampleBlendMode, sampleOpacityAmount * fadeInOut, color, previousColor);
