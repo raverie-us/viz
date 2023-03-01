@@ -8,8 +8,8 @@ export const pixelatedPalette: LayerShader = {
   code: `
 uniform gradient palette;
 uniform bool useLuminanceForPaletteValue; // default: false
-uniform int paletteSize; // default: 8, min: 2, max: 16
-uniform int pixelate; // default: 2, min: 1, max: 10
+uniform int paletteSize; // default: 8, min: 2, max: 20
+uniform int pixelate; // default: 2, min: 1, max: 4
 uniform sampler2D bayer; // default: {filter: "nearest", wrapHorizontal: "repeat", wrapVertical: "repeat", url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAAAAADhZOFXAAAACXBIWXMAAAsTAAALEwEAmpwYAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6QAAdTAAAOpgAAA6mAAAF2+SX8VGAAAAZ0lEQVR42mJgaFBbINChuwIggBj2Oz1IOOH1MgMggBiMN4j3W+2QmwEQQAwf8y8E/iy/EQEQQEzKMvFRgryB3gABxHDG9232EbenKQABxGC/R3G2+WbpyQABxPCv+k7M15IroQABBgAZ8B60eaEoLgAAAABJRU5ErkJggg=="}, randomize: false
 
 vec4 ditherLerp(vec2 pixelPos, vec4 color1, vec4 color2, float interpolant) {
