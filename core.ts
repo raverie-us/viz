@@ -138,7 +138,7 @@ export const blendModeDisplayGroup: (LayerBlendMode | null)[] = [
   ...blendModeDisplay
 ];
 
-export type LayerShaderTimeMode =
+export type TimeMode =
   "normal" |
   "pingpong";
 
@@ -151,6 +151,104 @@ export type Sampler2DType = "sampler2D";
 export type GradientType = "gradient";
 export type ButtonType = "button";
 export type AxisType = "axis";
+export type VectorType = BoolVectorType | NumberVectorType;
+
+export interface CurveInputTime {
+  type: "time";
+  duration: number;
+  mode: TimeMode;
+}
+
+export interface CurveInputButton {
+  type: ButtonType;
+  bindings: ShaderButtonBindings;
+}
+
+export interface CurveInputAxis {
+  type: AxisType;
+  bindings: ShaderAxisBindings;
+}
+
+export interface CurveInputAudioReactiveScalar {
+  type: "audioReactiveScalar";
+}
+
+export interface CurveInputAudioVolume {
+  type: "audioVolume";
+}
+
+export interface CurveInputAudioVolumeAverage {
+  type: "audioVolumeAverage";
+}
+
+export interface Curve {
+  min?: number;
+  max?: number;
+}
+
+export type CurveInput =
+  CurveInputTime |
+  CurveInputButton |
+  CurveInputAxis |
+  CurveInputAudioReactiveScalar |
+  CurveInputAudioVolume |
+  CurveInputAudioVolumeAverage;
+
+export interface CurveWithInput extends Curve {
+  input?: CurveInput;
+}
+
+export const evaluateCurve = (curve: Curve, inputValue: number) => {
+  // For now we don't actually have a curve, we're just pretending it's linear
+  const min = curve.min === undefined ? 0 : curve.min;
+  const max = curve.max === undefined ? 1 : curve.max;
+  return min + (max - min) * inputValue;
+}
+
+const validateCurve = (value: any): CurveWithInput | undefined => {
+  const isCurveWithInput =
+    typeof value === "object" &&
+    value &&
+    (value.min === undefined || typeof value.min === "number") &&
+    (value.max === undefined || typeof value.max === "number") &&
+    (value.input === undefined || typeof value.input === "object" && value.input);
+
+  if (isCurveWithInput) {
+    return value as CurveWithInput;
+  }
+  return undefined;
+}
+
+const validateCurves = (type: VectorType, value: any): (CurveWithInput | undefined)[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const components = getVectorComponents(type);
+  value.length = components;
+
+  for (let i = 0; i < components; ++i) {
+    value[i] = validateCurve(value[i]);
+  }
+
+  return value;
+}
+
+const extractCurve = (foundShaderValue: ShaderValueWithCurves | null, defaultCurve: CurveWithInput | undefined | null) => {
+  // If we had a previous value, then we never attach the defaultCurve (always just use the previous)
+  if (foundShaderValue) {
+    return validateCurve(foundShaderValue.curve);
+  }
+  return defaultCurve;
+}
+
+const extractCurves = (type: VectorType, foundShaderValue: ShaderValueWithCurves | null, defaultCurve: (CurveWithInput | undefined | null)[] | undefined | null) => {
+  // If we had a previous value, then we never attach the defaultCurve (always just use the previous)
+  if (foundShaderValue) {
+    return validateCurves(type, foundShaderValue.curve);
+  }
+  return defaultCurve;
+}
 
 export interface ShaderValueBase {
   name: string;
@@ -159,21 +257,29 @@ export interface ShaderValueBase {
 export interface ShaderValueNumber extends ShaderValueBase {
   type: NumberType;
   value: number;
+  curve?: CurveWithInput | null;
 }
 
 export interface ShaderValueNumberVector extends ShaderValueBase {
   type: NumberVectorType;
   value: number[];
+  curve?: (CurveWithInput | undefined | null)[] | null;
 }
 
 export interface ShaderValueBool extends ShaderValueBase {
   type: BoolType;
   value: boolean;
+  curve?: CurveWithInput | null;
 }
 
 export interface ShaderValueBoolVector extends ShaderValueBase {
   type: BoolVectorType;
   value: boolean[];
+  curve?: (CurveWithInput | undefined | null)[] | null;
+}
+
+export interface ShaderValueWithCurves extends ShaderValueBase {
+  curve?: CurveWithInput | null | (CurveWithInput | undefined | null)[];
 }
 
 // The value is either the exact enum numeric value (not the index)
@@ -275,7 +381,7 @@ export interface LayerCodeBase extends LayerBase {
   code: string;
   values: ShaderValue[];
   timeScale: number;
-  timeMode: LayerShaderTimeMode;
+  timeMode: TimeMode;
 }
 
 export interface LayerShader extends LayerCodeBase {
@@ -296,6 +402,7 @@ export interface CompiledUniformNumber extends CompiledUniformBase {
   type: NumberType;
   shaderValue: ShaderValueNumber;
   defaultValue: number;
+  defaultCurve?: CurveWithInput | null;
   minValue: number;
   maxValue: number;
   stepValue: number;
@@ -305,6 +412,7 @@ export interface CompiledUniformNumberVector extends CompiledUniformBase {
   type: NumberVectorType;
   shaderValue: ShaderValueNumberVector;
   defaultValue: number[];
+  defaultCurve?: (CurveWithInput | undefined | null)[];
   minValue: number[];
   maxValue: number[];
   stepValue: number[];
@@ -314,12 +422,14 @@ export interface CompiledUniformBool extends CompiledUniformBase {
   type: BoolType;
   shaderValue: ShaderValueBool;
   defaultValue: boolean;
+  defaultCurve?: CurveWithInput | null;
 }
 
 export interface CompiledUniformBoolVector extends CompiledUniformBase {
   type: BoolVectorType;
   shaderValue: ShaderValueBoolVector;
   defaultValue: boolean[];
+  defaultCurve?: (CurveWithInput | undefined | null)[];
 }
 
 export interface CompiledUniformEnum extends CompiledUniformBase {
@@ -739,6 +849,7 @@ interface ProcessedComment {
   max?: any;
   step?: any;
   enum?: any;
+  curve?: any;
 }
 
 interface ProcessedShaderSuccess {
@@ -794,7 +905,7 @@ export const getNumberVectorParts = (glslType: NumberVectorType): NumberVectorPa
   components: Number(glslType[glslType.length - 1])
 });
 
-export const getBoolVectorComponents = (glslType: BoolVectorType): number =>
+export const getVectorComponents = (glslType: BoolVectorType | NumberVectorType): number =>
   Number(glslType[glslType.length - 1]);
 
 const vectorScalarConstructor = <T>(componentCount: number, fillValue: T): T[] => {
@@ -809,7 +920,7 @@ export const vectorNumberScalarConstructor = (glslType: NumberVectorType, fillVa
 }
 
 export const vectorBoolScalarConstructor = (glslType: BoolVectorType, fillValue: boolean = false): boolean[] => {
-  const components = getBoolVectorComponents(glslType);
+  const components = getVectorComponents(glslType);
   return vectorScalarConstructor<boolean>(components, fillValue);
 }
 
@@ -829,8 +940,17 @@ const validateGLSLNumberVector = (
   return result;
 }
 
-const validateGLSLBool = (glslType: BoolType, value: any, validatedDefault: boolean = false): boolean =>
-  (value === undefined || value === null) ? validatedDefault : Boolean(value);
+const validateGLSLBool = (glslType: BoolType, value: any, validatedDefault: boolean = false): boolean => {
+  if (value === undefined || value === null) {
+    return validatedDefault;
+  }
+
+  if (typeof value === "number") {
+    return value >= 0.5;
+  }
+
+  return Boolean(value);
+}
 
 const validateGLSLBoolVector = (
   glslType: BoolVectorType,
@@ -840,7 +960,7 @@ const validateGLSLBoolVector = (
     return validatedDefault;
   }
 
-  const components = getBoolVectorComponents(glslType);
+  const components = getVectorComponents(glslType);
   const result: boolean[] = [];
   for (let i = 0; i < components; ++i) {
     result[i] = validateGLSLBool("bool", value[i], validatedDefault[i]);
@@ -1777,7 +1897,7 @@ export class RaverieVisualizer {
       }
 
       // We always first look by name
-      let foundShaderValue: ShaderValue | null = null;
+      let foundShaderValue: ShaderValue & ShaderValueWithCurves | null = null;
       for (let i = 0; i < oldShaderValues.length; ++i) {
         const oldShaderValue = oldShaderValues[i];
         if (oldShaderValue.name === name) {
@@ -1830,6 +1950,7 @@ export class RaverieVisualizer {
           }
 
           const defaultValue = validateGLSLNumber(type, parsedComment.default);
+          const defaultCurve = validateCurve(parsedComment.curve);
           return pass<ProcessedUniformNumber>({
             type,
             location,
@@ -1839,9 +1960,11 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue)
+              value: validateGLSLNumber(type, foundShaderValue?.value, defaultValue),
+              curve: extractCurve(foundShaderValue, defaultCurve)
             },
             defaultValue,
+            defaultCurve,
             minValue: validateGLSLNumber(type, parsedComment.min, Number.NEGATIVE_INFINITY),
             maxValue: validateGLSLNumber(type, parsedComment.max, Number.POSITIVE_INFINITY),
             stepValue: validateGLSLNumber(type, parsedComment.step, minimumStepValue(type)),
@@ -1854,6 +1977,7 @@ export class RaverieVisualizer {
         case "ivec3":
         case "ivec4": {
           const defaultValue = validateGLSLNumberVector(type, parsedComment.default);
+          const defaultCurve = validateCurves(type, parsedComment.curve);
           return pass<ProcessedUniformNumberVector>({
             type,
             location,
@@ -1863,9 +1987,11 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLNumberVector(type, foundShaderValue?.value, defaultValue)
+              value: validateGLSLNumberVector(type, foundShaderValue?.value, defaultValue),
+              curve: extractCurves(type, foundShaderValue, defaultCurve)
             },
             defaultValue,
+            defaultCurve,
             minValue: validateGLSLNumberVector(type, parsedComment.min, vectorNumberScalarConstructor(type, Number.NEGATIVE_INFINITY)),
             maxValue: validateGLSLNumberVector(type, parsedComment.max, vectorNumberScalarConstructor(type, Number.POSITIVE_INFINITY)),
             stepValue: validateGLSLNumberVector(type, parsedComment.step, vectorNumberScalarConstructor(type, minimumStepValue(type))),
@@ -1873,6 +1999,7 @@ export class RaverieVisualizer {
         }
         case "bool": {
           const defaultValue = validateGLSLBool(type, parsedComment.default);
+          const defaultCurve = validateCurve(parsedComment.curve);
           return pass<ProcessedUniformBool>({
             type,
             location,
@@ -1882,15 +2009,18 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLBool(type, foundShaderValue?.value, defaultValue)
+              value: validateGLSLBool(type, foundShaderValue?.value, defaultValue),
+              curve: extractCurve(foundShaderValue, defaultCurve)
             },
-            defaultValue
+            defaultValue,
+            defaultCurve
           });
         }
         case "bvec2":
         case "bvec3":
         case "bvec4": {
           const defaultValue = validateGLSLBoolVector(type, parsedComment.default);
+          const defaultCurve = validateCurves(type, parsedComment.curve);
           return pass<ProcessedUniformBoolVector>({
             type,
             location,
@@ -1900,9 +2030,11 @@ export class RaverieVisualizer {
             shaderValue: {
               name,
               type,
-              value: validateGLSLBoolVector(type, foundShaderValue?.value, defaultValue)
+              value: validateGLSLBoolVector(type, foundShaderValue?.value, defaultValue),
+              curve: extractCurves(type, foundShaderValue, defaultCurve)
             },
-            defaultValue
+            defaultValue,
+            defaultCurve
           });
         }
         case "sampler2D": {
@@ -2284,6 +2416,41 @@ export class RaverieVisualizer {
     return userTexture;
   }
 
+  private evaluatePossibleCurves(processedUniform: ProcessedUniform, timeSeconds: number): ShaderValue["value"] {
+    // Since the actual value types here are just generic maps, it makes it difficult to
+    // generically check for curves and since we can't use them on buttons/axes, skip them
+    const shaderValue = processedUniform.shaderValue;
+    const shaderValueWithCurves = shaderValue as ShaderValueWithCurves;
+
+    const uniformKey = getUniformKey(processedUniform);
+
+    const value = shaderValue.value;
+
+    const curve = shaderValueWithCurves.curve;
+    if (!curve) {
+      return value;
+    }
+
+    if (Array.isArray(curve)) {
+      const valueAsArray = Array.isArray(value) ? value : [];
+
+      const newArray: typeof valueAsArray = [];
+      for (let i = 0; i < curve.length; ++i) {
+        const elementValue = valueAsArray[i];
+        const elementCurve = curve[i];
+
+        if (elementCurve) {
+          newArray[i] = this.evaluateCurve(elementCurve, `${uniformKey}_curve[${i}]`, timeSeconds);
+        } else {
+          newArray[i] = elementValue;
+        }
+      }
+      return newArray;
+    }
+
+    return this.evaluateCurve(curve, `${uniformKey}_curve`, timeSeconds);
+  }
+
   private renderLayerShaderInternal(
     processedLayerShader: ProcessedLayerShader,
     parentOpacity: number,
@@ -2341,8 +2508,7 @@ export class RaverieVisualizer {
           continue;
         }
 
-        const uniformKey = getUniformKey(processedUniform);
-        const value = processedUniform.shaderValue.value;
+        const value = this.evaluatePossibleCurves(processedUniform, timeSeconds);
         // tags: <types>
         switch (processedUniform.type) {
           case "int":
@@ -2498,7 +2664,8 @@ export class RaverieVisualizer {
             break;
           }
           case "button": {
-            const state = this.buttonStates[uniformKey] || defaultButtonState();
+            const uniformKey = getUniformKey(processedUniform);
+            const state = this.evaluateButton(uniformKey, processedUniform.shaderValue.value);
             gl.uniform1i(processedUniform.locationButtonHeld, Number(state.buttonHeld));
             gl.uniform1i(processedUniform.locationButtonTriggered, Number(state.buttonTriggered));
             gl.uniform1i(processedUniform.locationButtonReleased, Number(state.buttonReleased));
@@ -2509,7 +2676,8 @@ export class RaverieVisualizer {
             break;
           }
           case "axis": {
-            const state = this.axisStates[uniformKey] || defaultAxisState();
+            const uniformKey = getUniformKey(processedUniform);
+            const state = this.evaluateAxis(uniformKey, processedUniform.shaderValue.value);
             gl.uniform1f(processedUniform.locationValue, state.value);
             break;
           }
@@ -2623,114 +2791,130 @@ export class RaverieVisualizer {
     }
   };
 
-  private updateControls(compiledLayerGroup: CompiledLayerGroup) {
+  private evaluateCurveInput(curveInput: CurveInput | undefined, uniqueKey: string, timeSeconds: number): number {
+    if (!curveInput) {
+      return timeSeconds % 1.0;
+    }
+    switch (curveInput.type) {
+      case "time":
+        return (timeSeconds / curveInput.duration) % 1.0;
+      case "audioReactiveScalar":
+        return this.audioReactiveScalar;
+      case "audioVolume":
+        return this.audioVolume;
+      case "audioVolumeAverage":
+        return this.audioVolumeAverage;
+      case "button":
+        return this.evaluateButton(uniqueKey, curveInput.bindings).value;
+      case "axis": {
+        return this.evaluateAxis(uniqueKey, curveInput.bindings).value * 0.5 + 0.5;
+      }
+    }
+  }
+
+  private evaluateCurve(curve: CurveWithInput, uniqueKey: string, timeSeconds: number): number {
+    const input = clamp(this.evaluateCurveInput(curve.input, uniqueKey, timeSeconds), 0, 1);
+    return evaluateCurve(curve, input);
+  }
+
+  private evaluateAxis(uniqueKey: string, bindings: ShaderAxisBindings): ShaderAxisState {
     if (!this.onSampleButton || !this.onSampleAxis) {
-      return
+      return defaultAxisState();
     }
     const onSampleButton = this.onSampleButton;
     const onSampleAxis = this.onSampleAxis;
 
-    if (this.onBeforeControlsUpdate) {
-      this.onBeforeControlsUpdate();
-    }
+    let cumulativeAxis = 0;
+    let cumulativeAxisFromButtons = 0;
 
-    const walk = (compiledLayer: CompiledLayer) => {
-      if (compiledLayer.type === "group") {
-        for (const childLayer of compiledLayer.layers) {
-          walk(childLayer);
-        }
-      } else {
-        for (const uniform of compiledLayer.uniforms) {
-          const uniformKey = getUniformKey(uniform);
+    // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
+    // basically we almost want that to be the "shader value", maybe in the future we'll have it all
+    for (const deviceId in bindings) {
+      const axisInputId = bindings[deviceId];
 
-          if (uniform.type === "button") {
-            const cumulativeButton: SampledButton = {
-              buttonHeld: false,
-              touchHeld: false,
-              value: 0,
-            };
-
-            // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
-            // basically we almost want that to be the "shader value", maybe in the future we'll have it all
-            for (const deviceId in uniform.shaderValue.value) {
-              const buttonInputId = uniform.shaderValue.value[deviceId];
-              const sampledButton = onSampleButton(deviceId, buttonInputId);
-              if (sampledButton) {
-                cumulativeButton.buttonHeld ||= sampledButton.buttonHeld;
-                cumulativeButton.touchHeld ||= sampledButton.touchHeld;
-                cumulativeButton.value = Math.max(cumulativeButton.value, sampledButton.value);
-              }
+      if (typeof axisInputId === "object") {
+        const axisFromButtons = axisInputId;
+        let pressedButtonCount = 0;
+        let axis = 0;
+        for (const key in axisFromButtons) {
+          const buttonInputId = axisFromButtons[key];
+          if (key !== "default") {
+            const valueIfPressed = Number(key);
+            const sampledButton = onSampleButton(deviceId, buttonInputId);
+            if (sampledButton && sampledButton.buttonHeld) {
+              axis = valueIfPressed;
+              ++pressedButtonCount;
             }
-
-            const prevState = this.buttonStates[uniformKey];
-            const prevButtonHeld = prevState?.buttonHeld || false;
-            const prevTouchHeld = prevState?.touchHeld || false;
-
-            const nextState: ShaderButtonState = {
-              buttonHeld: cumulativeButton.buttonHeld,
-              buttonTriggered: cumulativeButton.buttonHeld && !prevButtonHeld,
-              buttonReleased: !cumulativeButton.buttonHeld && prevButtonHeld,
-              touchHeld: cumulativeButton.touchHeld,
-              touchTriggered: cumulativeButton.touchHeld && !prevTouchHeld,
-              touchReleased: !cumulativeButton.touchHeld && prevTouchHeld,
-              value: cumulativeButton.value
-            };
-
-            this.buttonStates[uniformKey] = nextState;
-          } else if (uniform.type === "axis") {
-            let cumulativeAxis = 0;
-            let cumulativeAxisFromButtons = 0;
-
-            // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
-            // basically we almost want that to be the "shader value", maybe in the future we'll have it all
-            for (const deviceId in uniform.shaderValue.value) {
-              const axisInputId = uniform.shaderValue.value[deviceId];
-
-              if (typeof axisInputId === "object") {
-                const axisFromButtons = axisInputId;
-                let pressedButtonCount = 0;
-                let axis = 0;
-                for (const key in axisFromButtons) {
-                  const buttonInputId = axisFromButtons[key];
-                  if (key !== "default") {
-                    const valueIfPressed = Number(key);
-                    const sampledButton = onSampleButton(deviceId, buttonInputId);
-                    if (sampledButton && sampledButton.buttonHeld) {
-                      axis = valueIfPressed;
-                      ++pressedButtonCount;
-                    }
-                  }
-                }
-
-                // We only set the axis value if we press a single button
-                // this prevents having to choose a "winner" if multiple buttons are pressed
-                // Adding values together also does not work well, especially if you have
-                // an axis whose value defaults to any value other than 0, and pressing a
-                // button should make it go to 0
-                axis = pressedButtonCount === 1
-                  ? axis
-                  : axisFromButtons.default || 0;
-
-                if (Math.abs(axis) > Math.abs(cumulativeAxisFromButtons)) {
-                  cumulativeAxisFromButtons = clamp(axis, -1, 1);
-                }
-              } else {
-                const sampledAxis = onSampleAxis(deviceId, axisInputId);
-                if (sampledAxis && Math.abs(sampledAxis.value) > Math.abs(cumulativeAxis)) {
-                  cumulativeAxis = sampledAxis.value;
-                }
-              }
-            }
-
-            this.axisStates[uniformKey] = {
-              value: cumulativeAxis === 0 ? cumulativeAxisFromButtons : cumulativeAxis
-            };
           }
         }
+
+        // We only set the axis value if we press a single button
+        // this prevents having to choose a "winner" if multiple buttons are pressed
+        // Adding values together also does not work well, especially if you have
+        // an axis whose value defaults to any value other than 0, and pressing a
+        // button should make it go to 0
+        axis = pressedButtonCount === 1
+          ? axis
+          : axisFromButtons.default || 0;
+
+        if (Math.abs(axis) > Math.abs(cumulativeAxisFromButtons)) {
+          cumulativeAxisFromButtons = clamp(axis, -1, 1);
+        }
+      } else {
+        const sampledAxis = onSampleAxis(deviceId, axisInputId);
+        if (sampledAxis && Math.abs(sampledAxis.value) > Math.abs(cumulativeAxis)) {
+          cumulativeAxis = sampledAxis.value;
+        }
       }
+    }
+
+    const nextState = {
+      value: cumulativeAxis === 0 ? cumulativeAxisFromButtons : cumulativeAxis
+    };
+    this.axisStates[uniqueKey] = nextState;
+    return nextState;
+  }
+
+  private evaluateButton(uniqueKey: string, bindings: ShaderButtonBindings): ShaderButtonState {
+    if (!this.onSampleButton) {
+      return defaultButtonState();
+    }
+    const onSampleButton = this.onSampleButton;
+
+    const cumulativeButton: SampledButton = {
+      buttonHeld: false,
+      touchHeld: false,
+      value: 0,
     };
 
-    walk(compiledLayerGroup);
+    // TODO(trevor): In the future, we want the control defaults/bindings to be modifiable
+    // basically we almost want that to be the "shader value", maybe in the future we'll have it all
+    for (const deviceId in bindings) {
+      const buttonInputId = bindings[deviceId];
+      const sampledButton = onSampleButton(deviceId, buttonInputId);
+      if (sampledButton) {
+        cumulativeButton.buttonHeld ||= sampledButton.buttonHeld;
+        cumulativeButton.touchHeld ||= sampledButton.touchHeld;
+        cumulativeButton.value = Math.max(cumulativeButton.value, sampledButton.value);
+      }
+    }
+
+    const prevState = this.buttonStates[uniqueKey];
+    const prevButtonHeld = prevState?.buttonHeld || false;
+    const prevTouchHeld = prevState?.touchHeld || false;
+
+    const nextState: ShaderButtonState = {
+      buttonHeld: cumulativeButton.buttonHeld,
+      buttonTriggered: cumulativeButton.buttonHeld && !prevButtonHeld,
+      buttonReleased: !cumulativeButton.buttonHeld && prevButtonHeld,
+      touchHeld: cumulativeButton.touchHeld,
+      touchTriggered: cumulativeButton.touchHeld && !prevTouchHeld,
+      touchReleased: !cumulativeButton.touchHeld && prevTouchHeld,
+      value: cumulativeButton.value
+    };
+
+    this.buttonStates[uniqueKey] = nextState;
+    return nextState;
   }
 
   public renderCompletedForJavaScriptLayer(requestId: number, compiledLayer: CompiledLayerJavaScript, image: ImageBitmap | null) {
@@ -2775,8 +2959,9 @@ export class RaverieVisualizer {
       if (this.onBeforeRender) {
         this.onBeforeRender(frameTimeSeconds);
       }
-
-      this.updateControls(compiledLayerGroup);
+      if (this.onBeforeControlsUpdate) {
+        this.onBeforeControlsUpdate();
+      }
 
       const gl = this.gl;
       const targetsInternal = renderTargets as any as RenderTargetsInternal;
@@ -2837,9 +3022,9 @@ export class RaverieVisualizer {
                   const uniformKey = getUniformKey(uniform);
                   const name = uniform.shaderValue.name;
                   if (uniform.type === "button") {
-                    uniforms[name] = this.buttonStates[uniformKey] || defaultButtonState();
+                    uniforms[name] = this.evaluateButton(uniformKey, uniform.shaderValue.value);
                   } else if (uniform.type === "axis") {
-                    uniforms[name] = this.axisStates[uniformKey] || defaultAxisState();
+                    uniforms[name] = this.evaluateAxis(uniformKey, uniform.shaderValue.value);
                   } else {
                     uniforms[name] = uniform.shaderValue.value;
                   }
