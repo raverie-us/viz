@@ -1523,14 +1523,17 @@ export class RaverieVisualizer {
       this.audioRollingVolumes.shift();
     }
 
-    this.audioVolumePeak = 0;
-    this.audioVolumeTrough = 1;
+    let audioVolumePeak = 0;
+    let audioVolumeTrough = 1;
     for (const lastVolume of this.audioRollingVolumes) {
-      this.audioVolumePeak = Math.max(this.audioVolumePeak, lastVolume);
-      this.audioVolumeTrough = Math.min(this.audioVolumeTrough, lastVolume);
+      audioVolumePeak = Math.max(this.audioVolumePeak, lastVolume);
+      audioVolumeTrough = Math.min(audioVolumeTrough, lastVolume);
     }
-    this.audioVolumePeak = Math.max(this.audioVolumePeak, this.audioVolumeAverage);
-    this.audioVolumeTrough = Math.min(this.audioVolumeTrough, this.audioVolumeAverage);
+    audioVolumePeak = Math.max(audioVolumePeak, this.audioVolumeAverage);
+    audioVolumeTrough = Math.min(audioVolumeTrough, this.audioVolumeAverage);
+
+    this.audioVolumePeak = lerp(this.audioVolumePeak, audioVolumePeak, VOLUME_AVERAGE_INTERPOLANT);
+    this.audioVolumeTrough = lerp(this.audioVolumeTrough, audioVolumeTrough, VOLUME_AVERAGE_INTERPOLANT);
 
     // Note this may be Infinity if audioVolumePeak === audioVolumeTrough, but this
     // is OK because we clamp it which properly handles Infinity
