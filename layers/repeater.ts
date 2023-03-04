@@ -7,7 +7,7 @@ export const repeaterLayer: LayerShader = {
   visible: true,
   code: `
 uniform float rotationDegrees; // default: -90, min: -360, max: 360
-uniform float speed; // default: 0.2, min: 0, max: 2
+uniform float speed; // default: 0.1, min: 0, max: 1
 uniform float scaleStart; // default: 1, min: 0.1, max: 5
 uniform float scaleEnd; // default: 2, min: 0.1, max: 5
 uniform int iterations; // default: 10, min: 1, max: 40
