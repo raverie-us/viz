@@ -7,11 +7,11 @@ export const audioWaveformLayer: LayerShader = {
   visible: true,
   code: `
 uniform vec2 position; // type: "position"
-uniform float rotationDegrees; // min: -360, max: 360
+uniform float rotationDegrees; // min: -360, max: 360, randomize: false
 uniform vec2 scale; // default: [1,1]
 
 uniform gradient colors;
-uniform float thickness; // default: 0.01, min: 0, max: 0.5
+uniform float thickness; // default: 0.02, min: 0.01, max: 1.0
 uniform bool symetric;
 
 vec4 render() {
