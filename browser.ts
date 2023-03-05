@@ -158,10 +158,10 @@ const loadTexture: LoadTextureFunction = (userTexture: UserTexture) => {
   userTexture.handle = handle;
 }
 
-const updateTexture: UpdateTextureFunction = (userTexture: UserTexture) => {
+const updateTexture: UpdateTextureFunction = (userTexture: UserTexture): boolean => {
   // We support static images by clearing then handle out after the texture is loaded
   if (!userTexture.handle) {
-    return;
+    return false;
   }
 
   const gl = userTexture.gl;
@@ -172,6 +172,7 @@ const updateTexture: UpdateTextureFunction = (userTexture: UserTexture) => {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, handle.img);
     gl.generateMipmap(gl.TEXTURE_2D);
     userTexture.handle = null;
+    return true;
   } else if (handle.video.readyState === 4) {
     if (handle.video.paused) {
       handle.video.play().catch(() => { });
@@ -179,7 +180,9 @@ const updateTexture: UpdateTextureFunction = (userTexture: UserTexture) => {
     gl.bindTexture(gl.TEXTURE_2D, userTexture.texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, handle.video);
     gl.generateMipmap(gl.TEXTURE_2D);
+    return true;
   }
+  return false;
 }
 
 type AudioInputType = AudioNode | MediaStream | AudioBuffer | null;

@@ -1121,7 +1121,7 @@ export interface UserTexture {
 }
 
 export type LoadTextureFunction = (userTexture: UserTexture) => void;
-export type UpdateTextureFunction = (userTexture: UserTexture) => void;
+export type UpdateTextureFunction = (userTexture: UserTexture) => boolean;
 
 export const maxGradientStops = 16;
 
@@ -1809,6 +1809,52 @@ export class RaverieVisualizer {
     // By default unloaded textures are just 1x1 pixel black with no alpha (0,0,0,0)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     return texture;
+  }
+
+  public async preload(layerRoot: LayerRoot): Promise<void> {
+    const compiledLayerRoot = this.compile(layerRoot, "clone");
+
+    const pendingTextures: UserTexture[] = [];
+
+    const loadTexture = (shaderTexture: ShaderTexture) => {
+      const userTexture = this.getOrCacheTexture(shaderTexture.url);
+      pendingTextures.push(userTexture);
+    }
+
+    for (const compiledLayer of Object.values(compiledLayerRoot.idToLayer)) {
+      if (compiledLayer.type !== "group") {
+        for (const uniform of compiledLayer.uniforms) {
+          if (uniform.type === "sampler2D") {
+            loadTexture(validateGLSLSampler2D("sampler2D", uniform.defaultValue));
+            loadTexture(validateGLSLSampler2D("sampler2D", uniform.shaderValue.value));
+          }
+        }
+      }
+    }
+
+    let resolver: (() => void) | null = null;
+    const promise = new Promise<void>((resolve) => {
+      resolver = resolve;
+    });
+
+    // TODO(trevor): Refactor this to use loaded events, it introduces a dependence on setInterval...
+    const interval = setInterval(() => {
+      const incompleteTextures: UserTexture[] = [];
+      for (const pendingTexture of pendingTextures) {
+        if (!this.updateTexture(pendingTexture)) {
+          incompleteTextures.push(pendingTexture);
+        }
+      }
+      if (incompleteTextures.length === 0) {
+        resolver!();
+        clearInterval(interval);
+      }
+
+      pendingTextures.length = 0;
+      pendingTextures.push(...incompleteTextures);
+    }, 10);
+
+    return promise;
   }
 
   public compile(layerRoot: LayerRoot, mode: "clone" | "modifyInPlace" = "clone", previous?: CompiledLayerRoot): CompiledLayerRoot {
