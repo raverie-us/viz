@@ -142,6 +142,8 @@ interface TextureHandle {
   video: HTMLVideoElement;
 };
 
+export const loadedVideos: HTMLVideoElement[] = [];
+
 const loadTexture: LoadTextureFunction = (userTexture: UserTexture) => {
   const img = document.createElement("img");
   img.src = userTexture.url;
@@ -153,6 +155,7 @@ const loadTexture: LoadTextureFunction = (userTexture: UserTexture) => {
   video.controls = false;
   video.playsInline = true;
   video.src = userTexture.url;
+  loadedVideos.push(video);
 
   const handle: TextureHandle = { img, video };
   userTexture.handle = handle;
