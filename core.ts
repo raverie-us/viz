@@ -532,8 +532,8 @@ export const defaultEmptyLayerGroup = (): LayerGroup => ({
   layers: []
 });
 
-const defaultWidth = 360;
-const defaultHeight = 640;
+export const defaultWidth = 360;
+export const defaultHeight = 640;
 
 export const defaultEmptyLayerRoot = (): LayerRoot => ({
   ...defaultEmptyLayerGroup(),
