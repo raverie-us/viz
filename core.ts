@@ -2991,7 +2991,8 @@ export class RaverieVisualizer {
     compiledLayerGroup: CompiledLayerGroup,
     timeStampMs: number,
     renderTargets: RenderTargets,
-    flipY = false): number {
+    flipY = false,
+    renderToBackBuffer = true): number {
     if (this.isRenderingInternal) {
       throw new Error("A frame is currently being rendered, check 'isRendering'");
     }
@@ -3165,17 +3166,21 @@ export class RaverieVisualizer {
         finalReadTarget = aaTarget;
       }
 
-      this.gl.viewport(0, 0, targetsInternal.widthFinal, targetsInternal.heightFinal);
-      // Render to the back buffer (we pass null for the render buffer)
-      this.renderLayerShaderInternal(
-        this.copyShader,
-        1.0,
-        null,
-        finalReadTarget.texture,
-        targetsInternal.widthFinal,
-        targetsInternal.heightFinal,
-        0,
-        flipY);
+      if (renderToBackBuffer) {
+        this.gl.viewport(0, 0, targetsInternal.widthFinal, targetsInternal.heightFinal);
+        // Render to the back buffer (we pass null for the render buffer)
+        this.renderLayerShaderInternal(
+          this.copyShader,
+          1.0,
+          null,
+          finalReadTarget.texture,
+          targetsInternal.widthFinal,
+          targetsInternal.heightFinal,
+          0,
+          flipY);
+      } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, finalReadTarget.buffer);
+      }
 
       this.releaseRenderTarget(finalReadTarget);
 
