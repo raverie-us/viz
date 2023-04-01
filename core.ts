@@ -375,8 +375,6 @@ export type ShaderValue =
   ShaderValueButton |
   ShaderValueAxis;
 
-export type ShaderType = number | number[] | ShaderTexture;
-
 export interface LayerCodeBase extends LayerBase {
   code: string;
   values: ShaderValue[];
