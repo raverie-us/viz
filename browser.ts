@@ -191,6 +191,12 @@ const updateTexture: UpdateTextureFunction = (userTexture: UserTexture): boolean
 type AudioInputType = AudioNode | MediaStream | AudioBuffer | null;
 
 // We intentionally use 40kHz and cut in in half for human audible range, see below
+// Unfortunately Firefox has a bug that doesn't allow the AudioContext to have a different
+// sample rate than the microphone, and even specifying the sampleRate to be the same in
+// getUserMedia doesn't seem to have any effect, so we have to ignore SAMPLE_RATE in Firefox
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1674892
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1725336
+const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
 const SAMPLE_RATE = 40000;
 
 // We separate this out because browsers often do not allow creation of AudioContexts
@@ -283,7 +289,7 @@ export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
     if (!this.core) {
       this.initializeInternal(new AudioContext({
         latencyHint: "interactive",
-        sampleRate: SAMPLE_RATE
+        sampleRate: isFirefox ? undefined : SAMPLE_RATE
       }));
     }
   }
@@ -339,6 +345,7 @@ export class RaverieAudioAnalyserOffline extends RaverieAudioAnalyserBase {
   private initializeContext(frameTimeMs: number) {
     super.initializeInternal(new OfflineAudioContext({
       numberOfChannels: 1,
+      // Note that in Firefox, we still use SAMPLE_RATE for the offline audio context
       length: SAMPLE_RATE * (frameTimeMs / 1000),
       sampleRate: SAMPLE_RATE
     }));
