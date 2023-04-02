@@ -2498,6 +2498,19 @@ export class RaverieVisualizer {
     return this.evaluateCurve(curve, `${uniformKey}_curve`, timeSeconds);
   }
 
+  private checkErrors() {
+    const errorCode = this.gl.getError();
+    switch (errorCode) {
+      case this.gl.NO_ERROR: return;
+      case this.gl.INVALID_ENUM: throw new Error("INVALID_ENUM");
+      case this.gl.INVALID_VALUE: throw new Error("INVALID_VALUE");
+      case this.gl.INVALID_OPERATION: throw new Error("INVALID_OPERATION");
+      case this.gl.INVALID_FRAMEBUFFER_OPERATION: throw new Error("INVALID_FRAMEBUFFER_OPERATION");
+      case this.gl.OUT_OF_MEMORY: throw new Error("OUT_OF_MEMORY");
+      case this.gl.CONTEXT_LOST_WEBGL: throw new Error("CONTEXT_LOST_WEBGL");
+    }
+  }
+
   private renderLayerShaderInternal(
     processedLayerShader: ProcessedLayerShader,
     parentOpacity: number,
@@ -2521,7 +2534,7 @@ export class RaverieVisualizer {
       gl.uniform1f(processedLayerShader.gOpacity, processedLayerShader.layer.opacity * parentOpacity);
       gl.uniform2f(processedLayerShader.gResolution, width, height);
       gl.uniform1f(processedLayerShader.gTime, timeSeconds);
-      gl.uniform1f(processedLayerShader.gFrame, this.frame);
+      gl.uniform1i(processedLayerShader.gFrame, this.frame);
       gl.uniform1i(processedLayerShader.gFlipY, Number(flipY));
 
       const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
@@ -3185,6 +3198,7 @@ export class RaverieVisualizer {
       return frameTimeSeconds;
     } finally {
       this.isRenderingInternal = false;
+      this.checkErrors();
     }
   }
 }
