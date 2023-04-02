@@ -11,13 +11,13 @@ uniform float rotationDegrees; // min: -360, max: 360, randomize: false
 uniform vec2 scale; // default: [1,1]
 
 uniform gradient colors;
-uniform float thickness; // default: 0.02, min: 0.01, max: 1.0
+uniform float thickness; // default: 0.02, min: 0.02, max: 1.0
 uniform bool symetric;
 
 vec4 render() {
   vec2 posAspect = gPosition;
   posAspect.y *= gResolution.y / gResolution.x;
-  vec2 pos = (posAspect - position) * gRotateMatrix2D(gDegreesToRadians(rotationDegrees)) / scale;
+  vec2 pos = (posAspect - position) * gRotateMatrix2D(gDegreesToRadians(rotationDegrees)) / (scale * vec2(1, 2));
 
   float value = abs(texture(gAudioSamples, vec2(pos.x, 0)).r * 2.0 - 1.0) + thickness * 0.5;
   float t = clamp((pos.y - -value) / (value * 2.0), 0.0, 1.0);
