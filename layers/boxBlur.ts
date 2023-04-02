@@ -1,6 +1,6 @@
 import { LayerShader } from "../core";
 
-export const boxBlur: LayerShader = {
+export const boxBlurLayer: LayerShader = {
   type: "shader",
   name: "box blur",
   id: "box blur",

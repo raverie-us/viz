@@ -4,7 +4,7 @@ import { emptyShaderLayer } from "./layers/emptyShader";
 import { emptyJavaScriptLayer } from "./layers/emptyJavaScript";
 import { glitchLayer } from "./layers/glitch";
 import { chromaticAberrationLayer } from "./layers/chromaticAberration";
-import { boxBlur } from "./layers/boxBlur";
+import { boxBlurLayer } from "./layers/boxBlur";
 import { godRaysLayer } from "./layers/godRays";
 import { gradientLayer } from "./layers/gradient";
 import { gradientColorizeLayer } from "./layers/gradientColorize";
@@ -24,7 +24,7 @@ export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
   glitchLayer,
   chromaticAberrationLayer,
-  boxBlur,
+  boxBlurLayer,
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
@@ -47,7 +47,7 @@ export const visualLayers: LayerCode[] = [
   connnectedPointsLayer,
   glitchLayer,
   chromaticAberrationLayer,
-  boxBlur,
+  boxBlurLayer,
   godRaysLayer,
   gradientLayer,
   gradientColorizeLayer,
