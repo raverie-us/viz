@@ -15,6 +15,7 @@ import { spiralLayer } from "./layers/spiral";
 import { swirlLayer } from "./layers/swirl";
 import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
+import { infiniteCaveLayer } from "./layers/cave";
 import { audioInputLayer } from "./layers/audioInput";
 import { audioWaveformLayer } from "./layers/audioWaveform";
 import { repeaterLayer } from "./layers/repeater";
@@ -36,6 +37,7 @@ export const featuredLayers: LayerCode[] = [
   spiralLayer,
   swirlLayer,
   tunnelLayer,
+  infiniteCaveLayer,
   audioInputLayer,
   audioWaveformLayer,
   textureLayer,
@@ -59,6 +61,7 @@ export const visualLayers: LayerCode[] = [
   spiralLayer,
   swirlLayer,
   tunnelLayer,
+  infiniteCaveLayer,
   audioWaveformLayer,
   textureLayer,
 ]
