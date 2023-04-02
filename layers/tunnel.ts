@@ -17,9 +17,9 @@ export const tunnelLayer: LayerShader = {
 
 uniform vec2 position; // type: "position"
 uniform float squareness; // default: 0, min: 0, max: 1
-uniform float scrollSpeed; // default: 0.2, min: -1, max: 1
-uniform float rotateSpeed; // default: 0.1, min: -1, max: 1
-uniform int rotateRepeat; // default: 2, min: 1, max: 10
+uniform float scrollSpeed; // default: 0.2, min: -0.5, max: 0.5
+uniform float rotateSpeed; // default: 0.1, min: -0.5, max: 0.5
+uniform int rotateRepeat; // default: 2, min: 1, max: 6
 uniform float zoom; // default: 0.5, min: 0, max: 1
 uniform gradient depthGradient; // default: {0:[1,1,1,1], 1:[0,0,0,1]}
 uniform int depthBlendMode; // enum: "blendMode", default: "multiply"
@@ -36,7 +36,7 @@ vec4 render() {
   float cylindrical = length(p);
   float square = pow(pow(p.x * p.x, 4.0) + pow(p.y * p.y, 4.0), 1.0 / 8.0);
 
-  float r = mix(cylindrical, square, squareness);
+  float r = mix(cylindrical, square, pow(squareness, 4.0));
 
   // index texture by (animated inverse) radious and angle
   float angle = atan(p.y,p.x);
