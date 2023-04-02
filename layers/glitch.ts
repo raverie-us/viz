@@ -8,9 +8,9 @@ export const glitchLayer: LayerShader = {
   authorName: "hornet",
   authorUrl: "https://www.shadertoy.com/view/lsfGD2",
   code: `
-uniform float intensity; // default :0.1, min: 0, max: 1
-uniform float horizontal; // default: 0.05, min: 0, max: 0.5
-uniform float vertical; // default: 0.1, min: 0, max: 0.5
+uniform float intensity; // default: 0.5, min: 0, max: 1
+uniform float horizontal; // default: 1, min: 0, max: 1
+uniform float vertical; // default: 1, min: 0, max: 1
 float sat( float t ) {
   return clamp( t, 0.0, 1.0 );
 }
@@ -68,7 +68,7 @@ vec4 render() {
   
   float time = mod(gTime, 32.0); // + modelmat[0].x + modelmat[0].z;
 
-  float GLITCH = intensity;
+  float GLITCH = pow(intensity * 0.5, 2.0);
     
   float gnm = sat( GLITCH );
   float rnd0 = rand( mytrunc( vec2(time, time), 6.0 ) );
@@ -85,10 +85,10 @@ vec4 render() {
 
   float pxrnd = rand( uv + time );
 
-  float ofs = horizontal * r2 * GLITCH * ( rnd0 > 0.5 ? 1.0 : -1.0 );
+  float ofs = horizontal * 0.5 * r2 * GLITCH * ( rnd0 > 0.5 ? 1.0 : -1.0 );
   ofs += 0.5 * pxrnd * ofs;
 
-  uv.y += vertical * r3 * GLITCH;
+  uv.y += vertical * 2.0 * r3 * GLITCH;
 
     const int NUM_SAMPLES = 10;
     const float RCP_NUM_SAMPLES_F = 1.0 / float(NUM_SAMPLES);
