@@ -12,6 +12,7 @@ import { pixelatedPalette } from "./layers/pixelatedPalette";
 import { kaleidoscopeLayer } from "./layers/kaleidoscope";
 import { liquidLayer } from "./layers/liquid";
 import { spiralLayer } from "./layers/spiral";
+import { swirlLayer } from "./layers/swirl";
 import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
 import { audioInputLayer } from "./layers/audioInput";
@@ -33,6 +34,7 @@ export const featuredLayers: LayerCode[] = [
   repeaterLayer,
   liquidLayer,
   spiralLayer,
+  swirlLayer,
   tunnelLayer,
   audioInputLayer,
   audioWaveformLayer,
@@ -55,6 +57,7 @@ export const visualLayers: LayerCode[] = [
   repeaterLayer,
   liquidLayer,
   spiralLayer,
+  swirlLayer,
   tunnelLayer,
   audioWaveformLayer,
   textureLayer,
