@@ -13,10 +13,10 @@ export const connnectedPointsLayer: LayerShader = {
 //  Net of stars very obviously inspired by BigWings - The Universe Within:
 //   https://www.shadertoy.com/view/lscczl
 uniform gradient colors; // default: {0: [0,0,0,1], 0.5: [1,1,1,1]}
-uniform float thickness; // default: 0.1, min: 0, max: 1
-uniform float zoom; //default: 1, min: 0.1, max: 2
-uniform float flySpeed; //default: 1, min: 0, max: 5
-uniform float warpingSpeed; //default: 1, min: 0, max: 5
+uniform float thickness; // default: 0.1, min: 0.1, max: 1
+uniform float zoom; //default: 1, min: 0.2, max: 2
+uniform float flySpeed; //default: 1, min: 0, max: 2
+uniform float warpingSpeed; //default: 1, min: 0, max: 4
 uniform float rotateSpeed; // default: 0, min: -1, max: 1
 uniform float maxTilt; //default: 1, min: 0, max: 5
 uniform float randomness; //default: 1, min: 0, max: 1
