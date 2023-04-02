@@ -9,9 +9,9 @@ export const spiralLayer: LayerShader = {
 uniform vec2 position; // type: "position"
 uniform gradient colors; // default: {0.47:[0,0,0,1], 0.50:[1,1,1,1], 0.97:[1,1,1,1], 1.00:[0,0,0,1]}
 uniform bool warpPreviousLayer; // default: false
-uniform int spirals; // default: 1, min: 0, max: 20
-uniform float warpExponent; // default: 0.4, min: -0.2, max: 2
-uniform float warpFactor; // default: 7.0, min: -10, max: 10
+uniform int spirals; // default: 1, min: 0, max: 15
+uniform float warpExponent; // default: 0.4, min: 0, max: 1.5
+uniform float warpFactor; // default: 7.0, min: -4, max: 4
 uniform float speed; // default: 1, min: 0, max: 2
 
 vec4 render() {
