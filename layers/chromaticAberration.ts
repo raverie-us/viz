@@ -7,7 +7,7 @@ export const chromaticAberrationLayer: LayerShader = {
   visible: true,
   code: `
 uniform float rotationDegrees; // min: -360, max: 360
-uniform float scale; // default: 5.0, min: 0, max: 20
+uniform float scale; // default: 5.0, min: 1, max: 20
 
 vec4 render() {
   mat2 rotation = gRotateMatrix2D(gDegreesToRadians(-rotationDegrees));
