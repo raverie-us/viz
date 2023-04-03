@@ -1,9 +1,9 @@
 import { LayerShader } from "../core";
 
-export const fractalLayer: LayerShader = {
+export const fractalFlowLayer: LayerShader = {
   type: "shader",
-  name: "fractal",
-  id: "fractal",
+  name: "fractal flow",
+  id: "fractal flow",
   visible: true,
   code: `
 uniform gradient colors; // default: {0:[1,1,1,1], 0.5:[0,0,0,1], 1:[1,1,1,1]}

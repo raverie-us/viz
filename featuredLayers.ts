@@ -19,7 +19,7 @@ import { infiniteCaveLayer } from "./layers/cave";
 import { audioInputLayer } from "./layers/audioInput";
 import { audioWaveformLayer } from "./layers/audioWaveform";
 import { repeaterLayer } from "./layers/repeater";
-import { fractalLayer } from "./layers/fractal";
+import { fractalFlowLayer } from "./layers/fractalFlow";
 import { fractalCircuitLayer } from "./layers/fractalCircuit";
 
 export const featuredLayers: LayerCode[] = [
@@ -32,7 +32,7 @@ export const featuredLayers: LayerCode[] = [
   gradientColorizeLayer,
   pixelatedPalette,
   kaleidoscopeLayer,
-  fractalLayer,
+  fractalFlowLayer,
   fractalCircuitLayer,
   repeaterLayer,
   liquidLayer,
@@ -57,7 +57,7 @@ export const visualLayers: LayerCode[] = [
   gradientColorizeLayer,
   pixelatedPalette,
   kaleidoscopeLayer,
-  fractalLayer,
+  fractalFlowLayer,
   fractalCircuitLayer,
   repeaterLayer,
   liquidLayer,
