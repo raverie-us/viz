@@ -20,6 +20,7 @@ import { audioInputLayer } from "./layers/audioInput";
 import { audioWaveformLayer } from "./layers/audioWaveform";
 import { repeaterLayer } from "./layers/repeater";
 import { fractalLayer } from "./layers/fractal";
+import { fractalCircuitLayer } from "./layers/fractalCircuit";
 
 export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
@@ -32,6 +33,7 @@ export const featuredLayers: LayerCode[] = [
   pixelatedPalette,
   kaleidoscopeLayer,
   fractalLayer,
+  fractalCircuitLayer,
   repeaterLayer,
   liquidLayer,
   spiralLayer,
@@ -56,6 +58,7 @@ export const visualLayers: LayerCode[] = [
   pixelatedPalette,
   kaleidoscopeLayer,
   fractalLayer,
+  fractalCircuitLayer,
   repeaterLayer,
   liquidLayer,
   spiralLayer,
