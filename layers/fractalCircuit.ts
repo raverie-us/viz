@@ -13,13 +13,14 @@ uniform gradient colors;
 uniform float intensity; // default: 1, min: 0.5, max: 2
 uniform float speed; // default: 1, min: 0, max: 1
 uniform float audioReactivity; // default: 1, min: 0, max: 1
-uniform float warping; // default: 1, min: 0, max: 1
+uniform float warping; // default: 0, min: 0, max: 1
 uniform float rotation; // default: 0, min: -180, max: 180
-uniform int iterations; // default: 9, min: 4, max: 12
-uniform float thickness; // default: 1, min: 0.1, max: 2
+uniform float rotationSpeed; // default: 5, min: -10, max: 10
+uniform int iterations; // default: 7, min: 4, max: 12
+uniform float thickness; // default: 0.5, min: 0.1, max: 2
 
 uniform float fractal; // default: 0.5, min: 0, max: 1
-uniform float zoom; // default: 0.2, min: 0.01, max: 1
+uniform float zoom; // default: 0.85, min: 0.01, max: 1
 
 float shape=0.;
 vec3 color=vec3(0.),randcol;
@@ -29,7 +30,7 @@ void formula(vec2 z, float c) {
 	float o,ot2,ot=ot2=1000.;
 	for (int i=0; i<iterations; i++) {
 		z=abs(z)/clamp(dot(z,z),.1,.5 + warping * 0.5)-c;
-        z = gRotateMatrix2D(rotation * gPI / 180.0) * z;
+        z = gRotateMatrix2D((rotation + rotationSpeed * gTime) * gPI / 180.0) * z;
 		float l=length(z);
 		o=min(max(abs(min(z.x,z.y)),-l+.25),abs(l-.25));
 		ot=min(ot,o);
@@ -37,7 +38,7 @@ void formula(vec2 z, float c) {
 		minit=max(minit,float(i)*(1.-abs(sign(ot-o))));
 	}
 	minit+=1.;
-	float w=0.005 * thickness * minit*2.;
+	float w=0.04 * thickness * minit*2.;
 	float circ=pow(max(0.,w-ot2)/w,6.);
 	shape+=max(pow(max(0.,w-ot)/w,.25),circ);
 	vec3 col=gSampleGradient(colors,minit*.1).rgb;
@@ -56,7 +57,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     }
 	vec2 uv=pos;
 	vec2 luv=uv;
-    float invZoom = 1.0 - zoom;
+    float invZoom = 2.0 - zoom * 2.0;
 	uv*=invZoom;
 	vec2 pix=(1.0/6.0)/gResolution*invZoom;
 	for (int aa=0; aa<36; aa++) {
