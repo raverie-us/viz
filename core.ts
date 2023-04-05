@@ -3190,6 +3190,22 @@ export class RaverieVisualizer {
           0,
           flipY);
       } else {
+        if (flipY) {
+          const flipTarget = this.requestRenderTarget(renderTargets);
+          this.renderLayerShaderInternal(
+            this.copyShader,
+            1.0,
+            flipTarget.buffer,
+            finalReadTarget.texture,
+            targetsInternal.widthFinal,
+            targetsInternal.heightFinal,
+            0,
+            true);
+
+          this.releaseRenderTarget(finalReadTarget);
+          finalReadTarget = flipTarget;
+        }
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, finalReadTarget.buffer);
       }
 
