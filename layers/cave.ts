@@ -6,7 +6,7 @@ export const infiniteCaveLayer: LayerShader = {
   id: "infinite cave",
   visible: true,
   code: `
-uniform float speed; // default: 5, min: 0, max: 10
+uniform float speed; // default: 10, min: 0, max: 20
 uniform float backgroundStrength; // default: 1, min: 1, max: 1.5
 uniform float bumpiness; // default: 0.5, min: 0, max: 1
 uniform float thickness; // default: 0.5, min: 0, max: 1
