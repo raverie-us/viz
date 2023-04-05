@@ -69,15 +69,14 @@ vec4 ray(vec3 ro, vec3 rd) {
   return vec4(t, rt.y, rt.zw);
 }
 
-vec3 calculate_normal(vec3 pos) {
-  const float eps = 0.001;
-  vec4 n = vec4(0.0);
-  for (int i = min(gFrame, 0); i < 4; i++) {
-    vec4 s = vec4(pos, 0.0);
-    s[i] += eps;
-    n[i] = map(s.xyz).x;
-  }
-  return normalize(n.xyz - n.w);
+vec3 calculate_normal( in vec3 p ) // for function f(p)
+{
+    const float h = 0.0001; // replace by an appropriate value
+    const vec2 k = vec2(1,-1);
+    return normalize( k.xyy*map( p + k.xyy*h ).x + 
+                      k.yyx*map( p + k.yyx*h ).x + 
+                      k.yxy*map( p + k.yxy*h ).x + 
+                      k.xxx*map( p + k.xxx*h ).x );
 }
 
 vec4 render(vec3 ro, vec3 rd) {
