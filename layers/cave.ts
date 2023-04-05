@@ -70,7 +70,7 @@ vec4 ray(vec3 ro, vec3 rd) {
 }
 
 vec3 calculate_normal(vec3 pos) {
-  const float eps = 0.00001;
+  const float eps = 0.001;
   vec4 n = vec4(0.0);
   for (int i = min(gFrame, 0); i < 4; i++) {
     vec4 s = vec4(pos, 0.0);
