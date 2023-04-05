@@ -21,6 +21,7 @@ import { audioWaveformLayer } from "./layers/audioWaveform";
 import { repeaterLayer } from "./layers/repeater";
 import { fractalFlowLayer } from "./layers/fractalFlow";
 import { fractalCircuitLayer } from "./layers/fractalCircuit";
+import { fxaaLayer } from "./layers/fxaa";
 
 export const featuredLayers: LayerCode[] = [
   connnectedPointsLayer,
@@ -42,6 +43,7 @@ export const featuredLayers: LayerCode[] = [
   infiniteCaveLayer,
   audioInputLayer,
   audioWaveformLayer,
+  fxaaLayer,
   textureLayer,
   emptyJavaScriptLayer,
   emptyShaderLayer,
