@@ -2502,12 +2502,12 @@ export class RaverieVisualizer {
     const errorCode = this.gl.getError();
     switch (errorCode) {
       case this.gl.NO_ERROR: return;
-      case this.gl.INVALID_ENUM: throw new Error("INVALID_ENUM");
-      case this.gl.INVALID_VALUE: throw new Error("INVALID_VALUE");
-      case this.gl.INVALID_OPERATION: throw new Error("INVALID_OPERATION");
-      case this.gl.INVALID_FRAMEBUFFER_OPERATION: throw new Error("INVALID_FRAMEBUFFER_OPERATION");
-      case this.gl.OUT_OF_MEMORY: throw new Error("OUT_OF_MEMORY");
-      case this.gl.CONTEXT_LOST_WEBGL: throw new Error("CONTEXT_LOST_WEBGL");
+      case this.gl.INVALID_ENUM: console.error("INVALID_ENUM");
+      case this.gl.INVALID_VALUE: console.error("INVALID_VALUE");
+      case this.gl.INVALID_OPERATION: console.error("INVALID_OPERATION");
+      case this.gl.INVALID_FRAMEBUFFER_OPERATION: console.error("INVALID_FRAMEBUFFER_OPERATION");
+      case this.gl.OUT_OF_MEMORY: console.error("OUT_OF_MEMORY");
+      case this.gl.CONTEXT_LOST_WEBGL: console.error("CONTEXT_LOST_WEBGL");
     }
   }
 
