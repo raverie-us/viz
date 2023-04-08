@@ -18,6 +18,8 @@ uniform vec2 position; // type: "position"
 uniform vec2 scale; // default: [1,1]
 uniform float rotationDegrees; // min: -360, max: 360
 uniform vec2 center; // min: [-1,-1], max: [1,1]
+uniform float patternOffset; // min: 0, max: 1
+uniform bool verticalPattern; // default: true
 
 float aspect(vec2 dimensions) {
   return dimensions.x / dimensions.y;
@@ -47,6 +49,12 @@ vec4 render() {
     }
     pos += center;
     uv = pos * 0.5 + 0.5;
+
+    int patternAxis = int(verticalPattern);
+    int patternOppositeAxis = 1 - patternAxis;
+    if (int(floor(uv[patternOppositeAxis])) % 2 == 0) {
+      uv[patternAxis] += patternOffset;
+    }
   }
 
   if (horizontalBackground && (uv.x < 0.0 || uv.x > 1.0)) {
