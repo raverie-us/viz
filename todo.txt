@@ -239,3 +239,7 @@ Ability to bind:
    - that way this can be used in the texture shader, but also just in any other shader that wants to sample a texture
    - would need to bind a background color and two bools
    - maybe we can put it into a struct, and declare it next to the sampler
+
+Make this whole thing use the shadertoy globals
+ - change all g to i
+   - #define iChannel0/4 as iPreviousLayer

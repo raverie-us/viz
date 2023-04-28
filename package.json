@@ -1,6 +1,6 @@
 {
   "name": "@raverie/visualizer",
-  "version": "1.0.165",
+  "version": "1.0.195",
   "description": "",
   "main": "dist/core.js",
   "types": "dist/core.d.ts",
