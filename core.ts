@@ -1305,7 +1305,7 @@ export const defaultVolumeAverageCount = 80;
 export const defaultMinDecibels = -100;
 export const defaultMaxDecibels = -30;
 
-export const maxRenderTargetSize = 8192;
+export const maxRenderTargetSize = 16384;
 
 const average = (array: Float32Array) => {
   let sum = 0;
