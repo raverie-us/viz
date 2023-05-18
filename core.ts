@@ -1301,7 +1301,7 @@ export type ControlsUpdateCallback = () => void;
 export const defaultFrameTime = 1 / 60;
 export const defaultFramesAheadForAsyncLayers = 2;
 export const defaultAudioSampleCount = 512;
-export const defaultVolumeAverageCount = 80;
+export const defaultVolumeAverageSeconds = 0.5;
 export const defaultMinDecibels = -100;
 export const defaultMaxDecibels = -30;
 
@@ -1314,11 +1314,6 @@ const average = (array: Float32Array) => {
   }
   return sum / array.length;
 };
-
-const rollingAverage = (newValue: number, oldAverage: number, n: number) => {
-  return oldAverage * (n - 1) / n + newValue / n;
-};
-
 
 export class RenderTargets {
   public get width() {
@@ -1419,6 +1414,11 @@ const clearObject = (obj: any) => {
   }
 }
 
+interface AudioVolume {
+  volume: number;
+  timeStampMs: number;
+}
+
 export class RaverieVisualizer {
   private textureCache: Record<string, UserTexture | undefined> = {};
 
@@ -1462,7 +1462,7 @@ export class RaverieVisualizer {
   private audioVolumeAverage: number = 0;
   private audioVolumePeak: number = 0;
   private audioVolumeTrough: number = 0;
-  private audioRollingVolumes: number[] = [];
+  private audioRollingVolumes: AudioVolume[] = [];
 
   // This is a number between [0, 1] that can be used for things like reactive lighting.
   //   0 represents the current volume is at or below the rolling average volume
@@ -1473,7 +1473,7 @@ export class RaverieVisualizer {
     return this.isRenderingInternal;
   }
 
-  public updateAudioSamples(frequencies: Float32Array, samples: Float32Array) {
+  public updateAudioSamples(frequencies: Float32Array, samples: Float32Array, timeStampMs: number) {
     if (frequencies.length !== defaultAudioSampleCount) {
       throw new Error(`The number of audio frequencies should be ${defaultAudioSampleCount}`);
     }
@@ -1484,7 +1484,7 @@ export class RaverieVisualizer {
     const SMOOTH_SAMPLE_RADIUS = 2;
     const SMOOTH_SAMPLE_TOTAL = SMOOTH_SAMPLE_RADIUS * 2 + 1;
     const VOLUME_AVERAGE_INTERPOLANT = 0.75;
-    const REACTIVE_SCALAR_INTERPOLANT = 0.5;
+    const REACTIVE_SCALAR_INTERPOLANT = 0.65;
 
     for (let i = 0; i < defaultAudioSampleCount; ++i) {
       const frequencyDecibelsClamped = clamp(frequencies[i], defaultMinDecibels, defaultMaxDecibels);
@@ -1513,20 +1513,31 @@ export class RaverieVisualizer {
 
     // https://physics.stackexchange.com/questions/46228/averaging-decibels
     this.audioVolume = lerp(this.audioVolume, average(this.audioFrequencies), VOLUME_AVERAGE_INTERPOLANT);
-    this.audioVolumeAverage = rollingAverage(
-      this.audioVolume, this.audioVolumeAverage, defaultVolumeAverageCount);
 
-    this.audioRollingVolumes.push(this.audioVolume);
-    if (this.audioRollingVolumes.length > defaultVolumeAverageCount) {
-      this.audioRollingVolumes.shift();
+    this.audioRollingVolumes.push({
+      timeStampMs,
+      volume: this.audioVolume
+    });
+
+    while (this.audioRollingVolumes.length > 0) {
+      const audioVolume = this.audioRollingVolumes[0];
+      const audioVolumeAgeSeconds = (timeStampMs - audioVolume.timeStampMs) / 1000;
+      if (audioVolumeAgeSeconds > defaultVolumeAverageSeconds) {
+        this.audioRollingVolumes.shift();
+      } else {
+        break;
+      }
     }
 
     let audioVolumePeak = 0;
     let audioVolumeTrough = 1;
+    this.audioVolumeAverage = 0;
     for (const lastVolume of this.audioRollingVolumes) {
-      audioVolumePeak = Math.max(this.audioVolumePeak, lastVolume);
-      audioVolumeTrough = Math.min(audioVolumeTrough, lastVolume);
+      audioVolumePeak = Math.max(this.audioVolumePeak, lastVolume.volume);
+      audioVolumeTrough = Math.min(audioVolumeTrough, lastVolume.volume);
+      this.audioVolumeAverage += lastVolume.volume;
     }
+    this.audioVolumeAverage /= this.audioRollingVolumes.length;
     audioVolumePeak = Math.max(audioVolumePeak, this.audioVolumeAverage);
     audioVolumeTrough = Math.min(audioVolumeTrough, this.audioVolumeAverage);
 

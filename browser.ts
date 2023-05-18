@@ -256,7 +256,7 @@ export abstract class RaverieAudioAnalyserBase {
     return this.core;
   }
 
-  protected updateVisualizerAudioInternal(visualizer: RaverieVisualizer) {
+  protected updateVisualizerAudioInternal(visualizer: RaverieVisualizer, timeStampMs: number) {
     if (this.core) {
       this.core.frequencyAnalyser.getFloatFrequencyData(this.frequencies);
       this.core.samplesAnalyser.getFloatTimeDomainData(this.samples);
@@ -265,7 +265,7 @@ export abstract class RaverieAudioAnalyserBase {
       this.samples.fill(0);
     }
 
-    visualizer.updateAudioSamples(this.frequencies, this.samples);
+    visualizer.updateAudioSamples(this.frequencies, this.samples, timeStampMs);
   }
 
   public async decodeAudioData(audioData: ArrayBuffer): Promise<AudioBuffer> {
@@ -294,8 +294,8 @@ export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
     }
   }
 
-  public updateVisualizerAudio(visualizer: RaverieVisualizer) {
-    this.updateVisualizerAudioInternal(visualizer);
+  public updateVisualizerAudio(visualizer: RaverieVisualizer, timeStampMs: number) {
+    this.updateVisualizerAudioInternal(visualizer, timeStampMs);
   }
 
   public connectAudioSource(input: AudioInputType) {
@@ -365,7 +365,7 @@ export class RaverieAudioAnalyserOffline extends RaverieAudioAnalyserBase {
 
     await this.audioContext.startRendering();
 
-    this.updateVisualizerAudioInternal(visualizer);
+    this.updateVisualizerAudioInternal(visualizer, timeMs);
   }
 }
 
