@@ -336,9 +336,13 @@ interface ShaderButtonState {
   buttonHeld: boolean;
   buttonTriggered: boolean;
   buttonReleased: boolean;
+  buttonTriggeredTimestamp: number;
+  buttonReleasedTimestamp: number;
   touchHeld: boolean;
   touchTriggered: boolean;
   touchReleased: boolean;
+  touchTriggeredTimestamp: number;
+  touchReleasedTimestamp: number;
   value: number;
 }
 
@@ -621,9 +625,13 @@ const defaultButtonState = (): ShaderButtonState => ({
   buttonHeld: false,
   buttonTriggered: false,
   buttonReleased: false,
+  buttonTriggeredTimestamp: 0,
+  buttonReleasedTimestamp: 0,
   touchHeld: false,
   touchTriggered: false,
   touchReleased: false,
+  touchTriggeredTimestamp: 0,
+  touchReleasedTimestamp: 0,
   value: 0
 });
 
@@ -763,9 +771,13 @@ interface ProcessedUniformButton extends ProcessedUniformBase, CompiledUniformBu
   locationButtonHeld: WebGLUniformLocation | null;
   locationButtonTriggered: WebGLUniformLocation | null;
   locationButtonReleased: WebGLUniformLocation | null;
+  locationButtonTriggeredTimestamp: WebGLUniformLocation | null;
+  locationButtonReleasedTimestamp: WebGLUniformLocation | null;
   locationTouchHeld: WebGLUniformLocation | null;
   locationTouchTriggered: WebGLUniformLocation | null;
   locationTouchReleased: WebGLUniformLocation | null;
+  locationTouchTriggeredTimestamp: WebGLUniformLocation | null;
+  locationTouchReleasedTimestamp: WebGLUniformLocation | null;
   locationValue: WebGLUniformLocation | null;
 }
 
@@ -1191,9 +1203,13 @@ struct gButton {
   bool buttonHeld;
   bool buttonTriggered;
   bool buttonReleased;
+  float buttonTriggeredTimestamp;
+  float buttonReleasedTimestamp;
   bool touchHeld;
   bool touchTriggered;
   bool touchReleased;
+  float touchTriggeredTimestamp;
+  float touchReleasedTimestamp;
   float value;
 };
 #define button gButton
@@ -2142,9 +2158,13 @@ export class RaverieVisualizer {
           const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`);
           const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`);
           const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`);
+          const locationButtonTriggeredTimestamp = getUniformLocation(`${name}.buttonTriggeredTimestamp`);
+          const locationButtonReleasedTimestamp = getUniformLocation(`${name}.buttonReleasedTimestamp`);
           const locationTouchHeld = getUniformLocation(`${name}.touchHeld`);
           const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`);
           const locationTouchReleased = getUniformLocation(`${name}.touchReleased`);
+          const locationTouchTriggeredTimestamp = getUniformLocation(`${name}.touchTriggeredTimestamp`);
+          const locationTouchReleasedTimestamp = getUniformLocation(`${name}.touchReleasedTimestamp`);
           const locationValue = getUniformLocation(`${name}.value`);
 
           return pass<ProcessedUniformButton>({
@@ -2156,9 +2176,13 @@ export class RaverieVisualizer {
             locationButtonHeld,
             locationButtonTriggered,
             locationButtonReleased,
+            locationButtonTriggeredTimestamp,
+            locationButtonReleasedTimestamp,
             locationTouchHeld,
             locationTouchTriggered,
             locationTouchReleased,
+            locationTouchTriggeredTimestamp,
+            locationTouchReleasedTimestamp,
             locationValue,
             shaderValue: {
               name,
@@ -2513,12 +2537,12 @@ export class RaverieVisualizer {
     const errorCode = this.gl.getError();
     switch (errorCode) {
       case this.gl.NO_ERROR: return;
-      case this.gl.INVALID_ENUM: console.error("INVALID_ENUM");
-      case this.gl.INVALID_VALUE: console.error("INVALID_VALUE");
-      case this.gl.INVALID_OPERATION: console.error("INVALID_OPERATION");
-      case this.gl.INVALID_FRAMEBUFFER_OPERATION: console.error("INVALID_FRAMEBUFFER_OPERATION");
-      case this.gl.OUT_OF_MEMORY: console.error("OUT_OF_MEMORY");
-      case this.gl.CONTEXT_LOST_WEBGL: console.error("CONTEXT_LOST_WEBGL");
+      case this.gl.INVALID_ENUM: console.error("INVALID_ENUM"); return;
+      case this.gl.INVALID_VALUE: console.error("INVALID_VALUE"); return;
+      case this.gl.INVALID_OPERATION: console.error("INVALID_OPERATION"); return;
+      case this.gl.INVALID_FRAMEBUFFER_OPERATION: console.error("INVALID_FRAMEBUFFER_OPERATION"); return;
+      case this.gl.OUT_OF_MEMORY: console.error("OUT_OF_MEMORY"); return;
+      case this.gl.CONTEXT_LOST_WEBGL: console.error("CONTEXT_LOST_WEBGL"); return;
     }
   }
 
@@ -2740,9 +2764,13 @@ export class RaverieVisualizer {
             gl.uniform1i(processedUniform.locationButtonHeld, Number(state.buttonHeld));
             gl.uniform1i(processedUniform.locationButtonTriggered, Number(state.buttonTriggered));
             gl.uniform1i(processedUniform.locationButtonReleased, Number(state.buttonReleased));
+            gl.uniform1f(processedUniform.locationButtonTriggeredTimestamp, state.buttonTriggeredTimestamp);
+            gl.uniform1f(processedUniform.locationButtonReleasedTimestamp, state.buttonReleasedTimestamp);
             gl.uniform1i(processedUniform.locationTouchHeld, Number(state.touchHeld));
             gl.uniform1i(processedUniform.locationTouchTriggered, Number(state.touchTriggered));
             gl.uniform1i(processedUniform.locationTouchReleased, Number(state.touchReleased));
+            gl.uniform1f(processedUniform.locationTouchTriggeredTimestamp, state.touchTriggeredTimestamp);
+            gl.uniform1f(processedUniform.locationTouchReleasedTimestamp, state.touchReleasedTimestamp);
             gl.uniform1f(processedUniform.locationValue, state.value);
             break;
           }
@@ -2974,13 +3002,36 @@ export class RaverieVisualizer {
     const prevButtonHeld = prevState?.buttonHeld || false;
     const prevTouchHeld = prevState?.touchHeld || false;
 
+    const buttonTriggered = cumulativeButton.buttonHeld && !prevButtonHeld;
+    const buttonReleased = !cumulativeButton.buttonHeld && prevButtonHeld;
+    const touchTriggered = cumulativeButton.touchHeld && !prevTouchHeld;
+    const touchReleased = !cumulativeButton.touchHeld && prevTouchHeld;
+
+    const timeSeconds = this.lastTimeStampMs / 1000;
+    const buttonTriggeredTimestamp = buttonTriggered
+      ? timeSeconds
+      : (prevState?.buttonTriggeredTimestamp || 0);
+    const buttonReleasedTimestamp = buttonReleased
+      ? timeSeconds
+      : (prevState?.buttonReleasedTimestamp || 0);
+    const touchTriggeredTimestamp = touchTriggered
+      ? timeSeconds
+      : (prevState?.touchTriggeredTimestamp || 0);
+    const touchReleasedTimestamp = touchReleased
+      ? timeSeconds
+      : (prevState?.touchReleasedTimestamp || 0);
+
     const nextState: ShaderButtonState = {
       buttonHeld: cumulativeButton.buttonHeld,
-      buttonTriggered: cumulativeButton.buttonHeld && !prevButtonHeld,
-      buttonReleased: !cumulativeButton.buttonHeld && prevButtonHeld,
+      buttonTriggered,
+      buttonReleased,
+      buttonTriggeredTimestamp,
+      buttonReleasedTimestamp,
       touchHeld: cumulativeButton.touchHeld,
-      touchTriggered: cumulativeButton.touchHeld && !prevTouchHeld,
-      touchReleased: !cumulativeButton.touchHeld && prevTouchHeld,
+      touchTriggered,
+      touchReleased,
+      touchTriggeredTimestamp,
+      touchReleasedTimestamp,
       value: cumulativeButton.value
     };
 

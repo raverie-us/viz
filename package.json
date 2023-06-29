@@ -1,6 +1,6 @@
 {
   "name": "@raverie/viz",
-  "version": "1.0.195",
+  "version": "1.0.202",
   "description": "",
   "main": "dist/core.js",
   "types": "dist/core.d.ts",

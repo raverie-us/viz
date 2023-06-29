@@ -509,7 +509,7 @@ export class RaverieVisualizerBrowser extends RaverieVisualizer {
         if (gamepad && typeof inputId === "number") {
           const button = gamepad.buttons[inputId];
           if (button !== undefined) {
-            return { buttonHeld: button.pressed, touchHeld: button.touched, value: button.value };
+            return { buttonHeld: button.value > 0.99, touchHeld: button.touched, value: button.value };
           }
         }
       }
