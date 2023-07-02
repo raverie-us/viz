@@ -540,7 +540,6 @@ export const defaultEmptyCompiledLayerGroup = (): CompiledLayerGroup => pass<Pro
   layer: defaultEmptyLayerGroup(),
   idToLayer: {},
   parent: null,
-  timeSeconds: 0,
   layers: [],
   usesAudioInput: false
 });
@@ -550,7 +549,6 @@ export const defaultEmptyCompiledLayerRoot = (): CompiledLayerRoot => pass<Proce
   layer: defaultEmptyLayerRoot(),
   idToLayer: {},
   parent: null,
-  timeSeconds: 0,
   layers: [],
   usesAudioInput: false
 });
@@ -832,7 +830,6 @@ interface ProcessedLayerGroup extends CompiledLayerGroup {
   parent: ProcessedLayerGroup | null;
   layers: ProcessedLayer[];
   idToLayer: IdToLayer;
-  timeSeconds: number;
 }
 
 interface ProcessedLayerRoot extends ProcessedLayerGroup {
@@ -2390,7 +2387,6 @@ export class RaverieVisualizer {
       layer: layerGroup,
       layers: [],
       idToLayer: {},
-      timeSeconds: 0,
       usesAudioInput: false,
     };
 
