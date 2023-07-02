@@ -439,6 +439,58 @@ export class RaverieVisualizerBrowser extends RaverieVisualizer {
       }
     });
 
+    this.onSafeEval = <T>(javaScript: string) => {
+      return new Promise<T>((resolve, reject) => {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.setAttribute("sandbox", "allow-scripts");
+        const originLiteral = JSON.stringify(location.origin);
+        const iframeScript =
+          `<script type="module">
+          try {
+            const result = JSON.stringify(eval(${JSON.stringify(javaScript)}));
+            window.parent.postMessage({
+              type: "safe-eval-result",
+              result,
+              error: false
+            }, ${originLiteral});
+          } catch (error) {
+            window.parent.postMessage({
+              type: "safe-eval-result",
+              result: error.toString(),
+              error: true
+            }, ${originLiteral});
+          }
+        </script>`;
+        iframe.onload = () => {
+          if (!iframe.contentWindow) {
+            throw new Error("Cannot eval, contentWindow is null");
+          }
+          window.addEventListener("message", (event) => {
+            if (event.data && event.data.type === "safe-eval-result") {
+              iframe.remove();
+              const result = event.data.result;
+              if (typeof result !== "string") {
+                reject(new Error(`Safe eval should always return a JSON string, got '${typeof result}'`));
+                return;
+              }
+              if (event.data.error) {
+                reject(new Error(result));
+              } else {
+                try {
+                  resolve(JSON.parse(result));
+                } catch {
+                  reject(new Error(`Safe eval was unable to parse JSON result '${result}'`));
+                }
+              }
+            }
+          });
+        }
+        iframe.src = `data:text/html;base64,${btoa(iframeScript)}`;
+        document.body.append(iframe);
+      })
+    };
+
     // Allow the canvas to take focus
     canvas.tabIndex = 1;
     canvas.addEventListener("pointerdown", () => {

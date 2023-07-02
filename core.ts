@@ -1413,6 +1413,7 @@ export type RenderJavaScriptCallback = (
   uniforms: CompactUniforms,
 ) => void;
 export type DeleteJavaScriptCallback = (layer: CompiledLayerJavaScript) => void;
+export type SafeEvalCallback = <T>(javaScript: string) => Promise<T>;
 
 const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: ProcessedLayerShader, uniformName: string): T => {
   const uniform = processedLayerShader.uniforms.find((uniform) => uniform.name === uniformName);
@@ -1468,6 +1469,8 @@ export class RaverieVisualizer {
   public onCompileJavaScriptLayer: CompileJavaScriptCallback | null = null;
   public onRenderJavaScriptLayer: RenderJavaScriptCallback | null = null;
   public onDeleteJavaScriptLayer: DeleteJavaScriptCallback | null = null;
+  
+  public onSafeEval: SafeEvalCallback | null = null;
 
   private audioFrequencies: Float32Array = new Float32Array(defaultAudioSampleCount);
   private audioFrequenciesTexture: WebGLTexture;
@@ -1488,6 +1491,15 @@ export class RaverieVisualizer {
   public get isRendering() {
     return this.isRenderingInternal;
   }
+
+  public safeEvalExpressionWithArguments = <T = any>(script: string, args: Record<string, ShaderValue>) => {
+    if (!this.onSafeEval) {
+      return null;
+    }
+    const paramsWithDefaults = Object.entries(args).map((entry) => `${entry[0]}=${JSON.stringify(entry[1])}`).join(",");
+    console.log(paramsWithDefaults);
+    return this.onSafeEval<T>(`((${paramsWithDefaults}) => ${script})()`);
+  };
 
   public updateAudioSamples(frequencies: Float32Array, samples: Float32Array, timeStampMs: number) {
     if (frequencies.length !== defaultAudioSampleCount) {
