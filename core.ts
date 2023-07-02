@@ -4,7 +4,6 @@ export interface LayerBase {
   visible: boolean;
   opacity: number;
   blendMode: LayerBlendMode;
-  forkedFromId?: string;
   authorName?: string;
   authorUrl?: string;
 }
@@ -138,10 +137,6 @@ export const blendModeDisplayGroup: (LayerBlendMode | null)[] = [
   ...blendModeDisplay
 ];
 
-export type TimeMode =
-  "normal" |
-  "pingpong";
-
 export type NumberType = "int" | "float";
 export type NumberVectorType = "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4";
 export type BoolType = "bool";
@@ -156,7 +151,6 @@ export type VectorType = BoolVectorType | NumberVectorType;
 export interface CurveInputTime {
   type: "time";
   duration: number;
-  mode: TimeMode;
 }
 
 export interface CurveInputButton {
@@ -382,8 +376,6 @@ export type ShaderValue =
 export interface LayerCodeBase extends LayerBase {
   code: string;
   values: ShaderValue[];
-  timeScale: number;
-  timeMode: TimeMode;
 }
 
 export interface LayerShader extends LayerCodeBase {
@@ -570,8 +562,6 @@ export const defaultEmptyLayerShader = (): LayerShader => ({
   visible: true,
   opacity: 1.0,
   blendMode: "normal",
-  timeMode: "normal",
-  timeScale: 1.0,
   code: `
 vec4 render() {
   return texture(gPreviousLayer, gUV);
@@ -586,8 +576,6 @@ export const defaultEmptyLayerJavaScript = (): LayerJavaScript => ({
   visible: true,
   opacity: 1.0,
   blendMode: "normal",
-  timeMode: "normal",
-  timeScale: 1.0,
   code: "",
   values: []
 });
