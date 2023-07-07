@@ -1,6 +1,6 @@
 {
   "name": "@raverie/viz",
-  "version": "1.0.202",
+  "version": "1.0.215",
   "description": "",
   "main": "dist/core.js",
   "types": "dist/core.d.ts",
@@ -11,6 +11,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^4.8.4"
+    "typescript": "^5.1.6"
   }
 }
