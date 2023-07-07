@@ -154,7 +154,5 @@ vec4 render() {
 }`.trim(),
   blendMode: "normal",
   opacity: 1,
-  timeMode: "normal",
-  timeScale: 1,
   values: []
 };
