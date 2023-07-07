@@ -5,7 +5,7 @@ import {
   ShaderValue,
   CompiledUniform,
   defaultEmptyLayerShader,
-  defaultEmptyLayerGroup
+  defaultEmptyLayerRoot
 } from "./core.js";
 
 // Note: This must be a 'function' https://github.com/microsoft/TypeScript/issues/34523
@@ -28,7 +28,7 @@ const singleLayerTest = (compiledLayerGroup: CompiledLayerGroup): CompiledLayerS
 
 const compileTestLayerGroup = (visualizer: RaverieVisualizer, code: string, values: ShaderValue[]) => {
   return visualizer.compile({
-    ...defaultEmptyLayerGroup(),
+    ...defaultEmptyLayerRoot(),
     layers: [
       {
         ...defaultEmptyLayerShader(),
@@ -97,7 +97,7 @@ const runUniformReorderTest = (visualizer: RaverieVisualizer) => {
 
 const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
   const compiledLayerGroup = visualizer.compile({
-    ...defaultEmptyLayerGroup(),
+    ...defaultEmptyLayerRoot(),
     layers: [
       {
         type: "group",
@@ -105,7 +105,8 @@ const runNestedGroupTest = (visualizer: RaverieVisualizer) => {
         name: "nested",
         visible: true,
         opacity: 1.0,
-        layers: []
+        layers: [],
+        blendMode: "passThrough"
       }
     ]
   });
