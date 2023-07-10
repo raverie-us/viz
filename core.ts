@@ -1,19 +1,26 @@
-export interface LayerBase {
+const MINIMAL_REBUILD_ENABLED = false;
+
+export interface LayerObject {
   name: string;
   id: string;
   visible: boolean;
-  opacity: number;
-  blendMode: LayerBlendMode;
   authorName?: string;
   authorUrl?: string;
 }
 
-export type LayerCode = LayerShader | LayerJavaScript;
+export interface LayerBase extends LayerObject {
+  opacity: number;
+  blendMode: LayerBlendMode;
+}
+
+export type LayerCode = LayerShader | LayerJavaScript | LayerSDF;
 export type Layer = LayerCode | LayerGroup;
+export type LayerGroupChild = LayerShader | LayerJavaScript | LayerGroup;
+export type LayerWithChildren = LayerGroup | LayerShader | LayerSDF;
 
 export interface LayerGroup extends LayerBase {
   type: "group";
-  layers: Layer[];
+  layers: LayerGroupChild[];
 }
 
 export interface LayerRoot extends LayerGroup {
@@ -378,8 +385,19 @@ export interface LayerCodeBase extends LayerBase {
   values: ShaderValue[];
 }
 
+export interface LayerSDF extends LayerObject {
+  type: "sdf";
+
+  code: string;
+  values: ShaderValue[];
+
+  layers: LayerSDF[];
+};
+
 export interface LayerShader extends LayerCodeBase {
   type: "shader";
+
+  layers?: LayerSDF[];
 }
 
 export interface LayerJavaScript extends LayerCodeBase {
@@ -388,6 +406,7 @@ export interface LayerJavaScript extends LayerCodeBase {
 
 export interface CompiledUniformBase {
   name: string;
+  nameMangleIndex: number;
   parent: CompiledLayerCode;
   parsedComment: Record<string, any>;
 }
@@ -478,7 +497,10 @@ export interface CompiledError {
   text: string;
 }
 
-export interface CompiledLayerBase {
+export interface CompiledLayerObject {
+}
+
+export interface CompiledLayerBase extends CompiledLayerObject {
   parent: CompiledLayerGroup | null;
   usesAudioInput: boolean;
 }
@@ -489,9 +511,37 @@ export interface CompiledLayerCodeBase extends CompiledLayerBase {
   errors: CompiledError[];
 }
 
+interface SDFParam {
+  name: string;
+};
+
+export interface CompiledLayerSDF extends CompiledLayerObject {
+  type: "sdf";
+  layer: LayerSDF;
+  layers: CompiledLayerSDF[];
+  parent: CompiledLayerSDF | null;
+
+  usesAudioInput: boolean;
+
+  code: string;
+  uniforms: CompiledUniform[];
+  errors: CompiledError[];
+  functionNameMangleIndex: number;
+  mangledId: string;
+
+  sdfParameters: SDFParam[];
+  variadicSdf: boolean;
+  attributes: SDFFunctionAttributes;
+
+  shaderNodes: SDFShaderNode[];
+}
+
 export interface CompiledLayerShader extends CompiledLayerCodeBase {
   type: "shader";
   layer: LayerShader;
+
+  layers: CompiledLayerSDF[];
+  sdfTreeResult: SDFShaderTreeResult | null;
 }
 
 export interface CompiledLayerJavaScript extends CompiledLayerCodeBase {
@@ -500,20 +550,21 @@ export interface CompiledLayerJavaScript extends CompiledLayerCodeBase {
   handle: any;
 }
 
-export type CompiledLayerCode = CompiledLayerShader | CompiledLayerJavaScript;
+export type CompiledLayerCode = CompiledLayerShader | CompiledLayerJavaScript | CompiledLayerSDF;
 export type CompiledLayer = CompiledLayerCode | CompiledLayerGroup;
+export type CompiledLayerWithChildren = CompiledLayerGroup | CompiledLayerShader | CompiledLayerSDF;
 
 export interface CompiledLayerGroup extends CompiledLayerBase {
   type: "group";
   layer: LayerGroup;
   layers: CompiledLayer[];
-
-  // A complete flattened hierarchy of every layer (recursive) under this group
-  idToLayer: Record<string, CompiledLayer>;
 }
 
 export interface CompiledLayerRoot extends CompiledLayerGroup {
   layer: LayerRoot;
+
+  // A complete flattened hierarchy of every layer (recursive) under this group
+  idToLayer: Record<string, CompiledLayer>;
 }
 
 export const defaultEmptyLayerGroup = (): LayerGroup => ({
@@ -538,7 +589,6 @@ export const defaultEmptyLayerRoot = (): LayerRoot => ({
 export const defaultEmptyCompiledLayerGroup = (): CompiledLayerGroup => pass<ProcessedLayerGroup>({
   type: "group",
   layer: defaultEmptyLayerGroup(),
-  idToLayer: {},
   parent: null,
   layers: [],
   usesAudioInput: false
@@ -578,12 +628,12 @@ export const defaultEmptyLayerJavaScript = (): LayerJavaScript => ({
   values: []
 });
 
-export const wrapLayerInLayerGroup = (layer: Layer): LayerGroup => ({
+export const wrapLayerInLayerGroup = (layer: LayerGroupChild): LayerGroup => ({
   ...defaultEmptyLayerGroup(),
   layers: [layer]
 });
 
-export const wrapLayerInLayerRoot = (layer: Layer): LayerRoot => ({
+export const wrapLayerInLayerRoot = (layer: LayerGroupChild): LayerRoot => ({
   ...defaultEmptyLayerRoot(),
   layers: [layer]
 });
@@ -639,9 +689,13 @@ export const sortGradientStops = (gradient: ShaderGradient): ShaderGradientStop[
 export interface FoundLayer {
   layer: Layer;
   layerIndex: number;
-  parent: LayerGroup;
+  parent: LayerWithChildren;
 }
-export const findChildLayerAndParentById = (root: LayerGroup, id: string): FoundLayer | null => {
+export const findChildLayerAndParentById = (root: LayerWithChildren, id: string): FoundLayer | null => {
+  if (!root.layers) {
+    return null;
+  }
+
   for (let i = 0; i < root.layers.length; ++i) {
     const childLayer = root.layers[i];
     if (childLayer.id === id) {
@@ -661,33 +715,47 @@ export const findChildLayerAndParentById = (root: LayerGroup, id: string): Found
   return null;
 }
 
-export const removeLayer = (root: LayerGroup, id: string): boolean => {
+export const removeLayer = (root: LayerWithChildren, id: string): boolean => {
   const result = findChildLayerAndParentById(root, id);
-  if (!result) {
+  if (!result || !result.parent.layers) {
     return false;
   }
   result.parent.layers.splice(result.layerIndex, 1);
   return true;
 };
 
-export const addLayer = (root: LayerGroup, layerToAdd: Layer, relativeToId?: string): void => {
+const addLayerIfValid = (parent: Layer, layerToAdd: Layer, layerIndex = 0): boolean => {
+  if (parent.type === "group") {
+    if (layerToAdd.type === "group" || layerToAdd.type === "shader" || layerToAdd.type === "js") {
+      parent.layers.splice(layerIndex, 0, layerToAdd);
+      return true;
+    }
+  }
+
+  if (parent.type === "shader" || parent.type === "sdf") {
+    if (layerToAdd.type === "sdf") {
+      if (!parent.layers) {
+        parent.layers = [];
+      }
+
+      parent.layers.splice(layerIndex, 0, layerToAdd);
+      return true;
+    }
+  }
+  return false;
+}
+
+export const addLayer = (root: LayerWithChildren, layerToAdd: Layer, relativeToId?: string): boolean => {
   if (!relativeToId) {
-    root.layers.unshift(layerToAdd);
-    return;
+    return addLayerIfValid(root, layerToAdd);
   }
 
   const result = findChildLayerAndParentById(root, relativeToId);
   if (!result) {
-    root.layers.unshift(layerToAdd);
-    return;
+    return addLayerIfValid(root, layerToAdd);
   }
 
-  // As a special case, if we're adding relative to a group layer, we'll add it as a child
-  if (result.layer.type === "group") {
-    result.layer.layers.unshift(layerToAdd);
-  } else {
-    result.parent.layers.splice(result.layerIndex, 0, layerToAdd);
-  }
+  return addLayerIfValid(result.parent, layerToAdd, result.layerIndex);
 };
 
 const expect = <T>(value: T | null | undefined, name: string): T => {
@@ -787,7 +855,11 @@ type ProcessedUniform =
 interface NewUniform {
   type: GLSLType;
   name: string;
+  nameMangleIndex: number;
   afterUniform: string;
+}
+
+interface ProcessedLayerSDF extends CompiledLayerSDF {
 }
 
 interface ProcessedLayerShader extends CompiledLayerShader {
@@ -821,7 +893,7 @@ interface ProcessedLayerJavaScript extends CompiledLayerJavaScript {
   lastRequestId: number;
 }
 
-type ProcessedLayerCode = ProcessedLayerShader | ProcessedLayerJavaScript;
+type ProcessedLayerCode = ProcessedLayerShader | ProcessedLayerJavaScript | ProcessedLayerSDF;
 type ProcessedLayer = ProcessedLayerCode | ProcessedLayerGroup;
 
 type IdToLayer = Record<string, ProcessedLayer>;
@@ -829,12 +901,13 @@ type IdToLayer = Record<string, ProcessedLayer>;
 interface ProcessedLayerGroup extends CompiledLayerGroup {
   parent: ProcessedLayerGroup | null;
   layers: ProcessedLayer[];
-  idToLayer: IdToLayer;
 }
 
 interface ProcessedLayerRoot extends ProcessedLayerGroup {
   parent: null;
   layer: LayerRoot;
+
+  idToLayer: IdToLayer;
 }
 
 // This type contains all the possible attributes for all types
@@ -859,6 +932,7 @@ type ProcessedShader = ProcessedShaderSuccess | ProcessedShaderFailed;
 
 interface ProcessedProgram {
   program: WebGLProgram | null;
+  completeCode: string;
   error?: string;
 }
 
@@ -1120,6 +1194,71 @@ export type UpdateTextureFunction = (userTexture: UserTexture) => boolean;
 
 export const maxGradientStops = 16;
 
+
+interface SDFFunctionAttributes {
+  halfExtents?: string;
+};
+
+interface SDFShaderNode {
+  id: number;
+  sdf: CompiledLayerSDF;
+  children: SDFShaderNode[];
+};
+
+interface SDFShaderTreeResult {
+  root: SDFShaderNode;
+  nodeCount: number;
+  allValidSdfs: CompiledLayerSDF[];
+  shaderNodeIdToObject: Record<number, CompiledLayerSDF>;
+  objectIdToShaderNodes: Record<string, SDFShaderNode[]>;
+};
+
+const sdfVariadicMax = 64;
+const sdfNoHitId = 0xffffffff;
+const sdfHighlightNone = 0xffffffff;
+
+const sdfUnion: LayerSDF = {
+  type: "sdf",
+  name: "union",
+  id: "union",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+  gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+    float distance = max(d1.distance, d2.distance);
+    return gSdf(distance, d2.distance < d1.distance ? d2.id : d1.id);
+  }`,
+};
+
+const sanitizeIdentifierForGLSL = (name: string) => {
+  if (!/^[a-zA-Z_]/gum.test(name)) {
+    name = `_${name}`;
+  }
+  return name.replace(/[^a-zA-Z0-9_]/gum, "_");
+};
+
+const debugShaderTree = (root: SDFShaderNode) => {
+  let graph = 'digraph {\n';
+  const recurse = (node: SDFShaderNode) => {
+    graph += `${node.id} [label="${node.sdf.layer.name}"]\n`;
+    for (const child of node.children) {
+      graph += `${node.id} -> ${child.id}\n`;
+      recurse(child);
+    }
+  };
+  recurse(root);
+  graph += '}\n';
+  return graph;
+}
+
+const addLineNumbers = (text: string, firstLine = 1) => {
+  const lines = text.split("\n");
+  const numberLength = (lines.length - 1 + firstLine).toString().length;
+  return lines.map((line, index) =>
+    `${(index + firstLine).toString().padStart(numberLength, "0")}: ${line}`).join("\n");
+}
+
 const newlineRegex = /\r|\n|\r\n/u;
 const fragmentShaderHeader = `#version 300 es
 precision highp float;
@@ -1283,9 +1422,30 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
   vec4 blendModeBlended = vec4(srcAlpha * blended + (1.0 - srcAlpha) * dst, min(srcAlpha + dest.a, 1.0));
   return mix(alphaBlended, blendModeBlended, dest.a);
 }
+
+const int gSdfVariadicMax = ${sdfVariadicMax};
+#define VARIADIC_SDF sdf sdfArray[gSdfVariadicMax], int sdfCount
+const int gSdfNoHitId = ${sdfNoHitId};
+const int gSdfHighlightNone = ${sdfHighlightNone};
+
+struct gSdf {
+  float distance;
+  int id;
+};
+
+struct gSdfInputs {
+  vec3 point;
+  int id;
+};
+
+gSdf gNullSdf = gSdf(-1.0, gSdfNoHitId);
+gSdfInputs gNullSdfInputs = gSdfInputs(vec3(0), gSdfNoHitId);
+gSdf gNullSdfArray[gSdfVariadicMax];
 `;
 
-const fragmentShaderHeaderLineCount = fragmentShaderHeader.split(newlineRegex).length;
+const countCodeLines = (code: string) => code.split(newlineRegex).length;
+
+const fragmentShaderHeaderLineCount = countCodeLines(fragmentShaderHeader);
 
 const fragmentShaderFooter = `
 void main() {
@@ -1438,6 +1598,8 @@ export class RaverieVisualizer {
   private readonly customTextureUniform: ProcessedUniformSampler2D;
   private customTexture: WebGLTexture | null = null;
 
+  private readonly unionSdf: CompiledLayerSDF;
+
   private lastTimeStampMs: number = -1;
   private frame: number = -1;
   private isRenderingInternal = false;
@@ -1454,7 +1616,7 @@ export class RaverieVisualizer {
   public onCompileJavaScriptLayer: CompileJavaScriptCallback | null = null;
   public onRenderJavaScriptLayer: RenderJavaScriptCallback | null = null;
   public onDeleteJavaScriptLayer: DeleteJavaScriptCallback | null = null;
-  
+
   public onSafeEval: SafeEvalCallback | null = null;
 
   private audioFrequencies: Float32Array = new Float32Array(defaultAudioSampleCount);
@@ -1482,7 +1644,6 @@ export class RaverieVisualizer {
       return null;
     }
     const paramsWithDefaults = Object.entries(args).map((entry) => `${entry[0]}=${JSON.stringify(entry[1])}`).join(",");
-    console.log(paramsWithDefaults);
     return this.onSafeEval<T>(`((${paramsWithDefaults}) => ${script})()`);
   };
 
@@ -1612,7 +1773,10 @@ export class RaverieVisualizer {
     this.vertexShader = expect(processedVertexShader.shader,
       processedVertexShader.error!);
 
-    this.checkerboardShader = this.compileLayerShader({
+    // This needs to be built first before any layer shaders
+    this.unionSdf = this.compileLayerSDF({}, sdfUnion, null, true);
+
+    this.checkerboardShader = this.compileLayerShader({}, {
       ...defaultEmptyLayerShader(),
       blendMode: "overwrite",
       code: `
@@ -1626,7 +1790,7 @@ export class RaverieVisualizer {
     }, null, true);
     this.checkerboardSize = getRequiredUniform(this.checkerboardShader, "checkerPixelSize");
 
-    this.copyShader = this.compileLayerShader({
+    this.copyShader = this.compileLayerShader({}, {
       ...defaultEmptyLayerShader(),
       blendMode: "overwrite",
       code: `
@@ -1635,7 +1799,7 @@ export class RaverieVisualizer {
       }`
     }, null, true);
 
-    this.customTextureShader = this.compileLayerShader({
+    this.customTextureShader = this.compileLayerShader({}, {
       ...defaultEmptyLayerShader(),
       code: `
       uniform sampler2D textureInput;
@@ -1790,11 +1954,12 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const program = expect(gl.createProgram(), "WebGLProgram");
 
-    const fragmentComposited = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentShaderFooter}`;
-    const processedFragmentShader = this.createShader(fragmentComposited, gl.FRAGMENT_SHADER);
+    const completeCode = `${fragmentShaderHeader}\n${fragmentShader}\n${fragmentShaderFooter}`;
+    const processedFragmentShader = this.createShader(completeCode, gl.FRAGMENT_SHADER);
     if (!processedFragmentShader.shader) {
       return {
         program: null,
+        completeCode,
         error: processedFragmentShader.error,
       };
     }
@@ -1807,10 +1972,11 @@ export class RaverieVisualizer {
       const programLog = gl.getProgramInfoLog(program);
       return {
         program,
+        completeCode,
         error: programLog || "Failed to link"
       };
     }
-    return { program };
+    return { program, completeCode };
   }
 
   private createTexture(optionalFilterMode?: number): WebGLTexture {
@@ -1928,10 +2094,13 @@ export class RaverieVisualizer {
         continue;
       }
 
+      const nameMangleIndex = result[0].indexOf(name) + name.length;
+
       newUniformNames[name] = true;
       newUniforms.push({
         type: result[1] as GLSLType,
         name,
+        nameMangleIndex,
         afterUniform: result[3]
       });
     }
@@ -1940,7 +2109,7 @@ export class RaverieVisualizer {
     const oldShaderValues = layerCode.values.slice(0);
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
-      const { type, name, afterUniform } = unprocessedUniform;
+      const { type, name, nameMangleIndex, afterUniform } = unprocessedUniform;
       const location = getUniformLocation(name);
 
       let parsedComment: ProcessedComment = {};
@@ -2007,6 +2176,7 @@ export class RaverieVisualizer {
                 type: "enum",
                 location,
                 name,
+                nameMangleIndex,
                 parent,
                 parsedComment,
                 shaderValue: {
@@ -2026,6 +2196,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2053,6 +2224,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2075,6 +2247,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2096,6 +2269,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2114,6 +2288,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2140,6 +2315,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             shaderValue: {
@@ -2168,6 +2344,7 @@ export class RaverieVisualizer {
             type,
             location: true,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             locationButtonHeld,
@@ -2197,6 +2374,7 @@ export class RaverieVisualizer {
             type,
             location: true,
             name,
+            nameMangleIndex,
             parent,
             parsedComment,
             locationValue,
@@ -2228,6 +2406,10 @@ export class RaverieVisualizer {
   }
 
   private rebuildFromPrevious<T extends ProcessedLayerCode>(layer: T["layer"], parent: ProcessedLayerGroup | null, previousIdToLayer: IdToLayer | undefined): T | null {
+    if (!MINIMAL_REBUILD_ENABLED) {
+      return null;
+    }
+
     // If the previous layer type and code are the same, then steal it
     const previous = previousIdToLayer && previousIdToLayer[layer.id];
     if (previous && previous.type === layer.type && previous.code === layer.code && previous.layer.code === layer.code) {
@@ -2254,18 +2436,409 @@ export class RaverieVisualizer {
     return null;
   }
 
-  private compileLayerShader(layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError: boolean, previousIdToLayer?: IdToLayer): ProcessedLayerShader {
+  // TODO(trevor): Rebuild - Must take previousIdToLayer to support rebuild
+  private compileLayerSDF(idToLayer: IdToLayer, layerSdf: LayerSDF, parent: CompiledLayerSDF | null, throwOnError: boolean): CompiledLayerSDF {
+    const code = layerSdf.code;
+
+    const parseErrors: CompiledError[] = [];
+    const addParseError = (text: string, line = 0) => {
+      if (throwOnError) {
+        throw new Error(text);
+      }
+      parseErrors.push({ text, line });
+    }
+
+    const signatureRegex = /(?:\/\*(\{.*?\})\*\/)?\s*gSdf\s+map\(gSdfInputs\b/gms;
+    // Keep in sync with the end of the above regex (should be directly after 'map')
+    const signatureEnding = "(gSdfInputs";
+    const signatureResult = signatureRegex.exec(code);
+
+    let attributes: SDFFunctionAttributes = {};
+    let sdfParameters: SDFParam[] = [];
+    let variadicSdf = false;
+    let sdfFooter = `
+      vec4 render() {
+        return vec4(1, 0, 0, 1);
+      }`;
+    let functionNameMangleIndex = -1;
+    if (signatureResult) {
+      functionNameMangleIndex = signatureResult.index + signatureResult[0].length - signatureEnding.length;
+
+      // TODO(trevor): Figure out how to eval this without having to use await
+      const parseAttributes = <T extends Object>(javaScript: string): T => {
+        const attributesOrNull = javaScript ? null/*await safeEval<T>(`(${javaScript})`)*/ : null;
+        return (typeof attributesOrNull === "object" && attributesOrNull)
+          ? attributesOrNull
+          : {} as T;
+      };
+
+      attributes = parseAttributes<SDFFunctionAttributes>(signatureResult[1]);
+      // TODO(trevor): Validate the half extents attribute by running it at least once
+      if (typeof attributes.halfExtents !== "undefined") {
+        if (typeof attributes.halfExtents !== "string") {
+          addParseError(`The halfExtents attribute must be a string that contains JavaScript to build ` +
+            `the AABB half extents as a 3 component array, e.g. [1,1,1], got '${attributes.halfExtents}'`);
+        }
+      }
+
+      const sdfParameters: SDFParam[] = [];
+
+      // We start the parentheses count at 1 since we got the first one in the signature above
+      const signatureStart = signatureResult.index + signatureResult[0].length;
+      let signatureEnd = signatureStart;
+      let parensCount = 1;
+      for (; signatureEnd < code.length; ++signatureEnd) {
+        const c = code[signatureEnd];
+        if (c === "(") {
+          ++parensCount;
+        }
+        if (c === ")") {
+          --parensCount;
+          if (parensCount === 0) {
+            break;
+          }
+        }
+      }
+
+      if (parensCount !== 0) {
+        addParseError("The function signature was not able to be parsed (are there a correct number of parentheses?)");
+      }
+
+      const signature = code.substring(signatureStart, signatureEnd);
+
+      const paramRegex = /(?:gSdf\s+([a-zA-Z_][a-zA-Z0-9_]*)|(VARIADIC_SDF))/gm;
+      for (; ;) {
+        const paramResult = paramRegex.exec(signature);
+        if (!paramResult) {
+          break;
+        }
+
+        if (paramResult[2] === "VARIADIC_SDF") {
+          if (sdfParameters.length) {
+            addParseError("Cannot take sdf parameters and use VARIADIC at the same time");
+          }
+          variadicSdf = true;
+        } else {
+          const paramName = paramResult[1];
+          sdfParameters.push({
+            name: paramName
+          });
+        }
+      }
+
+      // Ultimately all sdf children are swept up and added to a generated root shader
+      // However it is useful to see compiler errors, as well as gather uniforms
+      // so we treat the sdf as if it's a LayerShader temporarily with a special footer
+
+      // The footer will call the map function with "null" sdfs or an empty sdf array for variadics
+      const sdfArgs = variadicSdf
+        ? ", gNullSdfArray, 0"
+        : ", gNullSdf".repeat(sdfParameters.length);
+      sdfFooter = `
+        vec4 render() {
+          gSdf result = map(gNullSdfInputs${sdfArgs});
+          return vec4(result.distance, float(result.id), 0, 1);
+        }`;
+    } else {
+      addParseError(`Function signature must be 'gSdf map(gSdfInputs inputs, ...)'`);
+    }
+
+    // TODO(trevor): Rebuild - Ignoring passing previousIdToLayer until we know it works
+    const processedSdfShader = this.compileLayerShader({}, {
+      type: "shader",
+      blendMode: "passThrough",
+      opacity: 1,
+      code: `${layerSdf.code}\n${sdfFooter}`,
+      id: layerSdf.id,
+      name: layerSdf.name,
+      values: layerSdf.values,
+      visible: layerSdf.visible,
+      authorName: layerSdf.authorName,
+      authorUrl: layerSdf.authorUrl,
+      // We intentionally set this to undefined as we handle the sdf children separately
+      layers: undefined
+    }, null, throwOnError);
+
+    const compiledLayerSdf: CompiledLayerSDF = {
+      type: "sdf",
+
+      layer: layerSdf,
+      layers: [],
+      parent,
+
+      code: layerSdf.code,
+      usesAudioInput: processedSdfShader.usesAudioInput,
+      uniforms: processedSdfShader.uniforms,
+      errors: [...processedSdfShader.errors, ...parseErrors],
+      functionNameMangleIndex,
+      mangledId: sanitizeIdentifierForGLSL(layerSdf.id),
+
+      attributes,
+      sdfParameters,
+      variadicSdf,
+
+      shaderNodes: []
+    };
+
+    // TODO(trevor): Rebuild - Delete the layer immediately until we get rebuilding working
+    // Note that this clears the object, so we have to grab properties before we delete it
+    // We don't want it to clear the uniforms however
+    processedSdfShader.uniforms = [];
+    processedSdfShader.errors = [];
+    this.deleteCompiledLayerShader(processedSdfShader, false);
+
+    for (const sdfChild of layerSdf.layers) {
+      const compiledSdfChild = this.compileLayerSDF(idToLayer, sdfChild, compiledLayerSdf, throwOnError);
+      compiledLayerSdf.layers.push(compiledSdfChild);
+    }
+    this.mapLayerById(idToLayer, compiledLayerSdf);
+    return compiledLayerSdf;
+  }
+
+  private buildSDFShaderTree(rootObj: CompiledLayerSDF): SDFShaderTreeResult {
+    let shaderIdCounter = 0;
+    const allValidSdfs: CompiledLayerSDF[] = [];
+
+    const shaderNodeIdToObject: Record<number, CompiledLayerSDF> = {};
+    const objectIdToShaderNodes: Record<string, SDFShaderNode[]> = {};
+
+    const recurse = (obj: CompiledLayerSDF): SDFShaderNode | null => {
+      if (obj.errors.length !== 0 || obj.functionNameMangleIndex === -1) {
+        // We skip all sdfs and their children if there is an error
+        return null;
+      }
+
+      allValidSdfs.push(obj);
+
+      const createNode = (sdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
+        const id = shaderIdCounter++;
+        shaderNodeIdToObject[id] = obj;
+        const shaderNodesPerObject = objectIdToShaderNodes[obj.layer.id] || [];
+        objectIdToShaderNodes[obj.layer.id] = shaderNodesPerObject;
+        obj.shaderNodes = shaderNodesPerObject;
+        const node: SDFShaderNode = {
+          id,
+          children,
+          sdf,
+        };
+        shaderNodesPerObject.push(node);
+        return node;
+      };
+
+      const createBinaryChain = (shader: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
+        if (children.length < 2) {
+          throw new Error("Expected at least 2 children for a binary chain");
+        }
+        let lhs = children[0];
+        for (let i = 1; i < children.length; ++i) {
+          lhs = createNode(shader, [lhs, children[i]]);
+        }
+        return lhs;
+      }
+
+      const createUnion = (children: SDFShaderNode[]): SDFShaderNode =>
+        createBinaryChain(this.unionSdf, children);
+
+      // First recurse over all children so they are evaluated prior
+      const validChildren: SDFShaderNode[] = [];
+      for (const child of obj.layers) {
+        const childNode = recurse(child);
+        if (childNode) {
+          validChildren.push(childNode);
+        }
+      }
+
+      const sdfParameterCount = obj.sdfParameters.length;
+
+      if (obj.variadicSdf) {
+        // Easy case since it doesn't matter how many children we have
+        return createNode(obj, validChildren);
+      } else {
+        // If we have the exact number of children then just return our node
+        if (sdfParameterCount === validChildren.length) {
+          return createNode(obj, validChildren);
+        }
+
+        // If we don't have enough children to make this valid, then early out
+        if (validChildren.length < sdfParameterCount) {
+          // If we have no children, then we can't validly display anything
+          if (validChildren.length === 0) {
+            return null;
+          }
+          // If we only have one valid child, promote it to be in our place
+          if (validChildren.length === 1) {
+            return validChildren[0];
+          }
+
+          // Otherwise, create a union for all the children in our place
+          return createUnion(validChildren);
+        }
+
+        if (sdfParameterCount === 0 && validChildren.length !== 0) {
+          // Generate a union and place all children and this node under that union
+          return createUnion([...validChildren, createNode(obj, [])]);
+        }
+
+        // Unary operation
+        if (sdfParameterCount === 1) {
+          // At this point we already handled having 0 or 1 parameters above
+          // This means we need to create a union for all children and have that union as our single input
+          return createNode(obj, [createUnion(validChildren)]);
+        }
+
+        // Binary operation
+        if (sdfParameterCount === 2) {
+          // At this point we already handled 0, 1, or 2 parameters above
+          // Binary operations are special and can be chained
+          let lhs = validChildren[0];
+          for (let i = 1; i < validChildren.length; ++i) {
+            lhs = createNode(obj, [lhs, validChildren[i]]);
+          }
+          return lhs;
+        }
+
+        // At this point we've handled all 0, 1, and 2 sdf parameter shaders, meaning the shader has more
+        // We've also handled all cases where we have less children than expected, or the exact number of children
+        // That means here we have more children than were expected, so we make a union for the node itself and
+        // the remaining children
+        if (validChildren.length <= sdfParameterCount) {
+          throw new Error("Should have had more children than expected parameters since we got to this case");
+        }
+        const exactChildren = validChildren.slice(0, sdfParameterCount);
+        const remainingChildren = validChildren.slice(sdfParameterCount);
+        return createUnion([createNode(obj, exactChildren), ...remainingChildren]);
+      }
+    }
+    const root = recurse(rootObj);
+
+    if (!root) {
+      throw new Error("We expected to at least build a valid scene shader node");
+    }
+
+    return { allValidSdfs, root, shaderNodeIdToObject, objectIdToShaderNodes, nodeCount: shaderIdCounter };
+  };
+
+  private buildSDFShader(treeResult: SDFShaderTreeResult) {
+    // All sdf leaf objects have the shader signature:
+    // gSdf map(gSdfInputs inputs, ...)
+
+    let shaderScene = `gSdf s[${treeResult.nodeCount}];\n`;
+    let shaderFunctions = '';
+
+    const insertString = (base: string, baseIndex: number, toBeInserted: string) =>
+      `${base.substring(0, baseIndex)}${toBeInserted}${base.substring(baseIndex)}`;
+
+    for (const sdf of treeResult.allValidSdfs) {
+      if (sdf.errors.length !== 0 || sdf.functionNameMangleIndex === -1) {
+        console.error(sdf);
+        throw new Error("SDF was added that had errors");
+      }
+
+      const insertLocations: number[] = sdf.uniforms.map((uniform) => uniform.nameMangleIndex);
+      insertLocations.push(sdf.functionNameMangleIndex);
+      // Sort it from highest to lowest indices so that as we insert which increases the string
+      // length we don't need to keep track of how much we've offset the string for the next insert
+      insertLocations.sort().reverse();
+
+      let mangledCode = sdf.code;
+      const mangleIdPostfix = `_${sdf.mangledId}`;
+      for (const insertLocation of insertLocations) {
+        mangledCode = insertString(mangledCode, insertLocation, mangleIdPostfix);
+      }
+
+      shaderFunctions += `${mangledCode}\n`;
+    }
+
+    const recurse = (node: SDFShaderNode) => {
+      // First recurse over all children so we generate their code prior
+      for (const child of node.children) {
+        recurse(child);
+      }
+
+      const sdf = node.sdf;
+
+      // If the shader takes variadic SDFs, then we know there are no other
+      // SDF arguments and ALL children are passed via the variadic array
+      // Example:
+      //   sdf sdfArray0[gSdfVariadicMax];
+      //   sdfArray0[0] = s1;
+      // And the call arguments will end with:
+      //   ... sdfArray0, 1);
+      // Since we pass in the actual count as an constant literal, it should be inlined / loop unrolled.
+      let shaderVariadic = "";
+      let shaderParams = "";
+      if (sdf.variadicSdf) {
+        shaderVariadic += `gSdf sdfArray${node.id}[gSdfVariadicMax];\n`;
+        const variadicCount = Math.min(node.children.length, sdfVariadicMax);
+        for (let i = 0; i < variadicCount; ++i) {
+          const child = node.children[i];
+          shaderVariadic += `sdfArray${node.id}[${i}] = s[${child.id}];\n`;
+        }
+        shaderParams += `, sdfArray${node.id}, ${variadicCount}`;
+      } else {
+        for (const child of node.children) {
+          shaderParams += `, s[${child.id}]`;
+        }
+      }
+
+      shaderScene += shaderVariadic;
+      // TODO(trevor): Handle transforms
+      //shaderScene += `vec3 p${node.id} = transform(p, ${transformUniformName});\n`;
+      shaderScene += `vec3 p${node.id} = p;\n`;
+      shaderScene += `s[${node.id}] = map_${sdf.mangledId}(gSdfInputs(p${node.id}, ${node.id})${shaderParams});\n`;
+      //shaderScene += `s[${node.id}].distance *= ${minScaleUniformName};\n`;
+    }
+    recurse(treeResult.root);
+    shaderScene += "return s[renderId];";
+
+    return this.generateSDFShaderHeader(shaderFunctions, treeResult.root.id, shaderScene);
+  };
+
+  private generateSDFShaderHeader(shaderFunctions: string, rootId: number, shaderScene: string) {
+    return `
+    ${shaderFunctions}
+
+    const int gSdfRootId = ${rootId};
+    
+    gSdf gScene(vec3 p, int renderId) {
+      ${shaderScene}
+    }`;
+  }
+
+  private compileLayerShader(idToLayer: IdToLayer, layerShader: LayerShader, parent: ProcessedLayerGroup | null, throwOnError: boolean, previousIdToLayer?: IdToLayer): ProcessedLayerShader {
     const previousRebuild = this.rebuildFromPrevious<ProcessedLayerShader>(layerShader, parent, previousIdToLayer);
     if (previousRebuild) {
       return previousRebuild;
     }
 
+    const compiledSdfChildren: CompiledLayerSDF[] = [];
+    let sdfHeader = this.generateSDFShaderHeader("", 0, "return gNullSdf;");
+    let sdfTreeResult: SDFShaderTreeResult | null = null;
+    if (layerShader.layers) {
+      for (const sdf of layerShader.layers) {
+        compiledSdfChildren.push(this.compileLayerSDF(idToLayer, sdf, null, throwOnError));
+      }
+
+      // Now that we have compiled all the sdf children, we need to generate the sdf shader
+      // We create a fake root that unions all the children together
+      sdfTreeResult = this.buildSDFShaderTree({
+        ...expect(this.unionSdf, "unionSdf"),
+        layers: compiledSdfChildren,
+      });
+
+      debugShaderTree(sdfTreeResult.root);
+      sdfHeader = this.buildSDFShader(sdfTreeResult);
+    }
+
     const gl = this.gl;
-    const processedProgram = this.createProgram(layerShader.code);
+    const processedProgram = this.createProgram(`${sdfHeader}\n${layerShader.code}`);
 
     if (processedProgram.error) {
+      const errorText = `${processedProgram.error}\nFor program:\n${addLineNumbers(processedProgram.completeCode)}`;
       if (throwOnError) {
-        throw new Error(processedProgram.error);
+        throw new Error(errorText);
+      } else {
+        console.log(errorText);
       }
     }
 
@@ -2288,7 +2861,7 @@ export class RaverieVisualizer {
         const result = /^(?:ERROR|WARNING): 0:([0-9]+): (.*)/gum.exec(line);
         if (result) {
           errors.push({
-            line: Number(result[1]) - fragmentShaderHeaderLineCount,
+            line: Number(result[1]) - fragmentShaderHeaderLineCount - countCodeLines(sdfHeader),
             text: result[2]
           });
         } else {
@@ -2312,6 +2885,8 @@ export class RaverieVisualizer {
       uniforms: [],
       errors,
       program,
+      layers: compiledSdfChildren,
+      sdfTreeResult,
       gOpacity: getUniformLocation("gOpacity"),
       gResolution: getUniformLocation("gResolution"),
       gTime: getUniformLocation("gTime"),
@@ -2340,10 +2915,12 @@ export class RaverieVisualizer {
       Boolean(processedLayerShader.gAudioReactiveScalar);
 
     processedLayerShader.uniforms = this.parseUniforms(processedLayerShader, getUniformLocation);
+
+    this.mapLayerById(idToLayer, processedLayerShader);
     return processedLayerShader;
   }
 
-  private compileLayerJavaScript(layerJavaScript: LayerJavaScript, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerJavaScript {
+  private compileLayerJavaScript(idToLayer: IdToLayer, layerJavaScript: LayerJavaScript, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerJavaScript {
     const previousRebuild = this.rebuildFromPrevious<ProcessedLayerJavaScript>(layerJavaScript, parent, previousIdToLayer);
     if (previousRebuild) {
       return previousRebuild;
@@ -2373,54 +2950,52 @@ export class RaverieVisualizer {
       processedLayerJavaScript.uniforms = this.parseUniforms(processedLayerJavaScript, () => null);
     }
 
+    this.mapLayerById(idToLayer, processedLayerJavaScript);
     return processedLayerJavaScript;
   }
 
   private compileLayerRoot(layerRoot: LayerRoot, previousIdToLayer?: IdToLayer): ProcessedLayerRoot {
-    return this.compileLayerGroup(layerRoot, null, previousIdToLayer) as ProcessedLayerRoot;
+    const idToLayer: IdToLayer = {};
+    const processedLayerRoot = this.compileLayerGroup(idToLayer, layerRoot, null, previousIdToLayer) as ProcessedLayerRoot;
+    processedLayerRoot.idToLayer = idToLayer;
+    return processedLayerRoot;
   }
 
-  private compileLayerGroup(layerGroup: LayerGroup, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerGroup {
+  private compileLayerGroup(idToLayer: IdToLayer, layerGroup: LayerGroup, parent: ProcessedLayerGroup | null, previousIdToLayer?: IdToLayer): ProcessedLayerGroup {
     const processedLayerGroup: ProcessedLayerGroup = {
       type: "group",
       parent,
       layer: layerGroup,
       layers: [],
-      idToLayer: {},
       usesAudioInput: false,
     };
 
-    const mapLayerById = (processedLayer: ProcessedLayer) => {
-      const id = processedLayer.layer.id;
-      if (id in processedLayerGroup.idToLayer) {
-        throw new Error(`Layer id '${id}' was not unique (another layer had the same id)`);
-      }
-      processedLayerGroup.idToLayer[id] = processedLayer;
-    }
-
     for (const layer of layerGroup.layers) {
       if (layer.type === "shader") {
-        const processedLayerShader = this.compileLayerShader(layer, processedLayerGroup, false, previousIdToLayer);
+        const processedLayerShader = this.compileLayerShader(idToLayer, layer, processedLayerGroup, false, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerShader);
         processedLayerGroup.usesAudioInput ||= processedLayerShader.usesAudioInput;
-        mapLayerById(processedLayerShader);
       } else if (layer.type === "js") {
-        const processedLayerJavaScript = this.compileLayerJavaScript(layer, processedLayerGroup, previousIdToLayer);
+        const processedLayerJavaScript = this.compileLayerJavaScript(idToLayer, layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedLayerJavaScript);
         processedLayerGroup.usesAudioInput ||= processedLayerJavaScript.usesAudioInput;
-        mapLayerById(processedLayerJavaScript);
       } else {
         // Recursively compile the child group
-        const processedChildGroup = this.compileLayerGroup(layer, processedLayerGroup, previousIdToLayer);
+        const processedChildGroup = this.compileLayerGroup(idToLayer, layer, processedLayerGroup, previousIdToLayer);
         processedLayerGroup.layers.push(processedChildGroup);
         processedLayerGroup.usesAudioInput ||= processedChildGroup.usesAudioInput;
-        mapLayerById(processedChildGroup);
-        for (const nestedCompiledLayer of Object.values(processedChildGroup.idToLayer)) {
-          mapLayerById(nestedCompiledLayer);
-        }
       }
     }
+    this.mapLayerById(idToLayer, processedLayerGroup);
     return processedLayerGroup;
+  }
+
+  private mapLayerById(idToLayer: IdToLayer, processedLayer: ProcessedLayer) {
+    const id = processedLayer.layer.id;
+    if (id in idToLayer) {
+      throw new Error(`Layer id '${id}' was not unique (another layer had the same id)`);
+    }
+    idToLayer[id] = processedLayer;
   }
 
   public deleteLayer(compiledLayer: CompiledLayer, deleteChildLayers = true) {
@@ -2432,9 +3007,21 @@ export class RaverieVisualizer {
         this.deleteCompiledLayerJavaScript(compiledLayer);
         break;
       case "shader":
-        this.deleteCompiledLayerShader(compiledLayer);
+        this.deleteCompiledLayerShader(compiledLayer, deleteChildLayers);
+        break;
+      case "sdf":
+        this.deleteCompiledLayerSDF(compiledLayer, deleteChildLayers);
         break;
     }
+  }
+
+  private deleteCompiledLayerSDF(compiledSdf: CompiledLayerSDF, deleteChildLayers = true) {
+    if (deleteChildLayers) {
+      for (const childSdf of compiledSdf.layers) {
+        this.deleteCompiledLayerSDF(childSdf);
+      }
+    }
+    clearObject(compiledSdf);
   }
 
   private deleteCompiledLayerCode(compiledLayer: CompiledLayerCode) {
@@ -2443,9 +3030,15 @@ export class RaverieVisualizer {
     }
   }
 
-  private deleteCompiledLayerShader(compiledLayer: CompiledLayerShader) {
+  private deleteCompiledLayerShader(compiledLayer: CompiledLayerShader, deleteChildLayers = true) {
     const processedLayer = compiledLayer as ProcessedLayerShader;
     this.gl.deleteProgram(processedLayer.program);
+
+    if (deleteChildLayers) {
+      for (const childSdf of processedLayer.layers) {
+        this.deleteCompiledLayerSDF(childSdf);
+      }
+    }
 
     this.deleteCompiledLayerCode(compiledLayer);
     clearObject(processedLayer);
@@ -2472,7 +3065,11 @@ export class RaverieVisualizer {
       }
     }
 
-    clearObject(processedLayer.idToLayer);
+    // If this is a root group
+    if ("idToLayer" in processedLayer) {
+      const processedRoot = processedLayer as ProcessedLayerRoot;
+      clearObject(processedRoot.idToLayer);
+    }
     clearObject(processedLayer);
   }
 
@@ -2815,7 +3412,7 @@ export class RaverieVisualizer {
   };
 
   public renderLayerShaderPreviews(
-    compiledLayerGroup: CompiledLayerGroup,
+    compiledLayerRoot: CompiledLayerRoot,
     timeStampMs: number,
     renderTargets: RenderTargets,
     onRender: RenderLayerCodeCallback,
@@ -2827,7 +3424,7 @@ export class RaverieVisualizer {
 
     try {
       this.isRenderingInternal = true;
-      const processedLayerGroup = compiledLayerGroup as ProcessedLayerGroup;
+      const processedLayerRoot = compiledLayerRoot as ProcessedLayerRoot;
 
       const targetsInternal = renderTargets as any as RenderTargetsInternal;
       this.gl.viewport(0, 0, targetsInternal.widthRender, targetsInternal.heightRender);
@@ -2841,7 +3438,7 @@ export class RaverieVisualizer {
 
       // We render each layer as if it is a standalone with only the checkerboard behind it
       const results: Record<string, Uint8Array> = {};
-      for (const processedLayer of Object.values(processedLayerGroup.idToLayer)) {
+      for (const processedLayer of Object.values(processedLayerRoot.idToLayer)) {
         if (processedLayer.type === "shader") {
           const blendMode = processedLayer.layer.blendMode;
           processedLayer.layer.blendMode = "normal";
@@ -3174,7 +3771,7 @@ export class RaverieVisualizer {
               this.releaseRenderTarget(readTarget);
               readTarget = writeTarget;
             }
-          } else {
+          } else if (layer.type === "group") {
             if (layer.layer.blendMode === "passThrough") {
               readTarget = renderRecursive(layer, groupOpacity, readTarget);
             } else {
