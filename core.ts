@@ -2481,8 +2481,6 @@ export class RaverieVisualizer {
         }
       }
 
-      const sdfParameters: SDFParam[] = [];
-
       // We start the parentheses count at 1 since we got the first one in the signature above
       const signatureStart = signatureResult.index + signatureResult[0].length;
       let signatureEnd = signatureStart;
@@ -2595,12 +2593,41 @@ export class RaverieVisualizer {
     return compiledLayerSdf;
   }
 
-  private buildSDFShaderTree(rootObj: CompiledLayerSDF): SDFShaderTreeResult {
+  private buildSDFShaderTree(rootObjs: CompiledLayerSDF[]): SDFShaderTreeResult | null {
     let shaderIdCounter = 0;
     const allValidSdfs: CompiledLayerSDF[] = [];
 
     const shaderNodeIdToObject: Record<number, CompiledLayerSDF> = {};
     const objectIdToShaderNodes: Record<string, SDFShaderNode[]> = {};
+
+    const createNode = (ownerSdf: CompiledLayerSDF, sdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
+      const id = shaderIdCounter++;
+      shaderNodeIdToObject[id] = ownerSdf;
+      const shaderNodesPerObject = objectIdToShaderNodes[ownerSdf.layer.id] || [];
+      objectIdToShaderNodes[ownerSdf.layer.id] = shaderNodesPerObject;
+      ownerSdf.shaderNodes = shaderNodesPerObject;
+      const node: SDFShaderNode = {
+        id,
+        children,
+        sdf,
+      };
+      shaderNodesPerObject.push(node);
+      return node;
+    };
+
+    const createBinaryChain = (ownerSdf: CompiledLayerSDF, sdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
+      if (children.length < 2) {
+        throw new Error("Expected at least 2 children for a binary chain");
+      }
+      let lhs = children[0];
+      for (let i = 1; i < children.length; ++i) {
+        lhs = createNode(ownerSdf, sdf, [lhs, children[i]]);
+      }
+      return lhs;
+    }
+
+    const createUnion = (ownerSdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode =>
+      createBinaryChain(ownerSdf, this.unionSdf, children);
 
     const recurse = (obj: CompiledLayerSDF): SDFShaderNode | null => {
       if (obj.errors.length !== 0 || obj.functionNameMangleIndex === -1) {
@@ -2609,35 +2636,6 @@ export class RaverieVisualizer {
       }
 
       allValidSdfs.push(obj);
-
-      const createNode = (sdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
-        const id = shaderIdCounter++;
-        shaderNodeIdToObject[id] = obj;
-        const shaderNodesPerObject = objectIdToShaderNodes[obj.layer.id] || [];
-        objectIdToShaderNodes[obj.layer.id] = shaderNodesPerObject;
-        obj.shaderNodes = shaderNodesPerObject;
-        const node: SDFShaderNode = {
-          id,
-          children,
-          sdf,
-        };
-        shaderNodesPerObject.push(node);
-        return node;
-      };
-
-      const createBinaryChain = (shader: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
-        if (children.length < 2) {
-          throw new Error("Expected at least 2 children for a binary chain");
-        }
-        let lhs = children[0];
-        for (let i = 1; i < children.length; ++i) {
-          lhs = createNode(shader, [lhs, children[i]]);
-        }
-        return lhs;
-      }
-
-      const createUnion = (children: SDFShaderNode[]): SDFShaderNode =>
-        createBinaryChain(this.unionSdf, children);
 
       // First recurse over all children so they are evaluated prior
       const validChildren: SDFShaderNode[] = [];
@@ -2652,11 +2650,11 @@ export class RaverieVisualizer {
 
       if (obj.variadicSdf) {
         // Easy case since it doesn't matter how many children we have
-        return createNode(obj, validChildren);
+        return createNode(obj, obj, validChildren);
       } else {
         // If we have the exact number of children then just return our node
         if (sdfParameterCount === validChildren.length) {
-          return createNode(obj, validChildren);
+          return createNode(obj, obj, validChildren);
         }
 
         // If we don't have enough children to make this valid, then early out
@@ -2671,19 +2669,19 @@ export class RaverieVisualizer {
           }
 
           // Otherwise, create a union for all the children in our place
-          return createUnion(validChildren);
+          return createUnion(obj, validChildren);
         }
 
         if (sdfParameterCount === 0 && validChildren.length !== 0) {
           // Generate a union and place all children and this node under that union
-          return createUnion([...validChildren, createNode(obj, [])]);
+          return createUnion(obj, [...validChildren, createNode(obj, obj, [])]);
         }
 
         // Unary operation
         if (sdfParameterCount === 1) {
           // At this point we already handled having 0 or 1 parameters above
           // This means we need to create a union for all children and have that union as our single input
-          return createNode(obj, [createUnion(validChildren)]);
+          return createNode(obj, obj, [createUnion(obj, validChildren)]);
         }
 
         // Binary operation
@@ -2692,7 +2690,7 @@ export class RaverieVisualizer {
           // Binary operations are special and can be chained
           let lhs = validChildren[0];
           for (let i = 1; i < validChildren.length; ++i) {
-            lhs = createNode(obj, [lhs, validChildren[i]]);
+            lhs = createNode(obj, obj, [lhs, validChildren[i]]);
           }
           return lhs;
         }
@@ -2706,14 +2704,26 @@ export class RaverieVisualizer {
         }
         const exactChildren = validChildren.slice(0, sdfParameterCount);
         const remainingChildren = validChildren.slice(sdfParameterCount);
-        return createUnion([createNode(obj, exactChildren), ...remainingChildren]);
+        return createUnion(obj, [createNode(obj, obj, exactChildren), ...remainingChildren]);
       }
     }
-    const root = recurse(rootObj);
 
-    if (!root) {
-      throw new Error("We expected to at least build a valid scene shader node");
+    const roots: SDFShaderNode[] = [];
+    for (const rootObj of rootObjs) {
+      const result = recurse(rootObj);
+      if (result) {
+        roots.push(result);
+      }
     }
+
+    // If we have no roots, then the tree is pointless
+    if (roots.length === 0) {
+      return null;
+    }
+
+    const root = roots.length === 1
+      ? roots[0]
+      : createUnion(rootObjs[0], roots);
 
     return { allValidSdfs, root, shaderNodeIdToObject, objectIdToShaderNodes, nodeCount: shaderIdCounter };
   };
@@ -2821,20 +2831,19 @@ export class RaverieVisualizer {
 
       // Now that we have compiled all the sdf children, we need to generate the sdf shader
       // We create a fake root that unions all the children together
-      sdfTreeResult = this.buildSDFShaderTree({
-        ...expect(this.unionSdf, "unionSdf"),
-        layers: compiledSdfChildren,
-      });
-
-      debugShaderTree(sdfTreeResult.root);
-      sdfHeader = this.buildSDFShader(sdfTreeResult);
+      sdfTreeResult = this.buildSDFShaderTree(compiledSdfChildren);
+      if (sdfTreeResult) {
+        sdfHeader = this.buildSDFShader(sdfTreeResult);
+      }
     }
 
     const gl = this.gl;
     const processedProgram = this.createProgram(`${sdfHeader}\n${layerShader.code}`);
 
     if (processedProgram.error) {
-      const errorText = `${processedProgram.error}\nFor program:\n${addLineNumbers(processedProgram.completeCode)}`;
+      const programText = addLineNumbers(processedProgram.completeCode);
+      const shaderTreeText = sdfTreeResult ? debugShaderTree(sdfTreeResult.root) : null;
+      const errorText = `${processedProgram.error}\n\n--- Program:\n${programText}\n\n--- Shader Tree:\n${shaderTreeText}`;
       if (throwOnError) {
         throw new Error(errorText);
       } else {
