@@ -406,7 +406,7 @@ export interface LayerJavaScript extends LayerCodeBase {
 
 export interface CompiledUniformBase {
   name: string;
-  nameMangleIndex: number;
+  nameMangleIndices: number[];
   parent: CompiledLayerCode;
   parsedComment: Record<string, any>;
 }
@@ -855,7 +855,7 @@ type ProcessedUniform =
 interface NewUniform {
   type: GLSLType;
   name: string;
-  nameMangleIndex: number;
+  nameMangleIndices: number[];
   afterUniform: string;
 }
 
@@ -2094,13 +2094,21 @@ export class RaverieVisualizer {
         continue;
       }
 
-      const nameMangleIndex = result[0].indexOf(name) + name.length;
+      const nameMangleIndices: number[] = [];
+      const nameUsageRegex = new RegExp(`\\b${name}\\b`, "gum");
+      for (; ;) {
+        const result = nameUsageRegex.exec(layerCode.code);
+        if (!result) {
+          break;
+        }
+        nameMangleIndices.push(result.index + result[0].length);
+      }
 
       newUniformNames[name] = true;
       newUniforms.push({
         type: result[1] as GLSLType,
         name,
-        nameMangleIndex,
+        nameMangleIndices,
         afterUniform: result[3]
       });
     }
@@ -2109,7 +2117,7 @@ export class RaverieVisualizer {
     const oldShaderValues = layerCode.values.slice(0);
 
     const processedUniforms: ProcessedUniform[] = newUniforms.map<ProcessedUniform>((unprocessedUniform, uniformIndex) => {
-      const { type, name, nameMangleIndex, afterUniform } = unprocessedUniform;
+      const { type, name, nameMangleIndices, afterUniform } = unprocessedUniform;
       const location = getUniformLocation(name);
 
       let parsedComment: ProcessedComment = {};
@@ -2176,7 +2184,7 @@ export class RaverieVisualizer {
                 type: "enum",
                 location,
                 name,
-                nameMangleIndex,
+                nameMangleIndices,
                 parent,
                 parsedComment,
                 shaderValue: {
@@ -2196,7 +2204,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2224,7 +2232,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2247,7 +2255,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2269,7 +2277,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2288,7 +2296,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2315,7 +2323,7 @@ export class RaverieVisualizer {
             type,
             location,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             shaderValue: {
@@ -2344,7 +2352,7 @@ export class RaverieVisualizer {
             type,
             location: true,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             locationButtonHeld,
@@ -2374,7 +2382,7 @@ export class RaverieVisualizer {
             type,
             location: true,
             name,
-            nameMangleIndex,
+            nameMangleIndices,
             parent,
             parsedComment,
             locationValue,
@@ -2744,11 +2752,15 @@ export class RaverieVisualizer {
         throw new Error("SDF was added that had errors");
       }
 
-      const insertLocations: number[] = sdf.uniforms.map((uniform) => uniform.nameMangleIndex);
+      const insertLocations: number[] = [];
+      for (const uniform of sdf.uniforms) {
+        insertLocations.push(...uniform.nameMangleIndices);
+      }
+
       insertLocations.push(sdf.functionNameMangleIndex);
       // Sort it from highest to lowest indices so that as we insert which increases the string
       // length we don't need to keep track of how much we've offset the string for the next insert
-      insertLocations.sort().reverse();
+      insertLocations.sort((a, b) => b - a);
 
       let mangledCode = sdf.code;
       const mangleIdPostfix = `_${sdf.mangledId}`;
