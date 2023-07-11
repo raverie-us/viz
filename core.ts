@@ -2631,8 +2631,15 @@ export class RaverieVisualizer {
       return lhs;
     }
 
-    const createUnion = (ownerSdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode =>
-      createBinaryChain(ownerSdf, this.unionSdf, children);
+    // Special case for unions since they are a built in operation
+    let hasAddedUnionSdf = false;
+    const createUnion = (ownerSdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
+      if (!hasAddedUnionSdf) {
+        allValidSdfs.push(this.unionSdf);
+        hasAddedUnionSdf = true;
+      }
+      return createBinaryChain(ownerSdf, this.unionSdf, children);
+    }
 
     const recurse = (obj: CompiledLayerSDF): SDFShaderNode | null => {
       if (obj.errors.length !== 0 || obj.functionNameMangleIndex === -1) {
