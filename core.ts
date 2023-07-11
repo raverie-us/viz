@@ -1231,12 +1231,8 @@ const sdfUnion: LayerSDF = {
   }`,
 };
 
-const sanitizeIdentifierForGLSL = (name: string) => {
-  if (!/^[a-zA-Z_]/gum.test(name)) {
-    name = `_${name}`;
-  }
-  return name.replace(/[^a-zA-Z0-9_]/gum, "_");
-};
+const idToMangleId = (name: string) =>
+  name.replace(/[^a-zA-Z0-9_]/gum, "_").replace(/__+/gum, "_");
 
 const debugShaderTree = (root: SDFShaderNode) => {
   let graph = 'digraph {\n';
@@ -2577,7 +2573,7 @@ export class RaverieVisualizer {
       uniforms: processedSdfShader.uniforms,
       errors: [...processedSdfShader.errors, ...parseErrors],
       functionNameMangleIndex,
-      mangledId: sanitizeIdentifierForGLSL(layerSdf.id),
+      mangledId: idToMangleId(layerSdf.id),
 
       attributes,
       sdfParameters,
