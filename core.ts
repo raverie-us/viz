@@ -1227,8 +1227,8 @@ const sdfUnion: LayerSDF = {
   layers: [],
   code: `
   gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-    float distance = max(d1.distance, d2.distance);
-    return gSdf(distance, d2.distance < d1.distance ? d2.id : d1.id);
+    float distance = min(d1.distance, d2.distance);
+    return gSdf(distance, d1.distance < d2.distance ? d1.id : d2.id);
   }`,
 };
 
