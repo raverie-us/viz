@@ -727,23 +727,30 @@ export const removeLayer = (root: LayerWithChildren, id: string): boolean => {
   return true;
 };
 
-const addLayerIfValid = (parent: Layer, layerToAdd: Layer, layerIndex = 0): boolean => {
+export const canParentLayer = (parent: Layer, child: Layer): LayerWithChildren | null => {
   if (parent.type === "group") {
-    if (layerToAdd.type === "group" || layerToAdd.type === "shader" || layerToAdd.type === "js") {
-      parent.layers.splice(layerIndex, 0, layerToAdd);
-      return true;
+    if (child.type === "group" || child.type === "shader" || child.type === "js") {
+      return parent;
     }
   }
 
   if (parent.type === "shader" || parent.type === "sdf") {
-    if (layerToAdd.type === "sdf") {
-      if (!parent.layers) {
-        parent.layers = [];
-      }
-
-      parent.layers.splice(layerIndex, 0, layerToAdd);
-      return true;
+    if (child.type === "sdf") {
+      return parent;
     }
+  }
+  return null;
+}
+
+const addLayerIfValid = (parent: Layer, layerToAdd: Layer, layerIndex = 0): boolean => {
+  const validParent = canParentLayer(parent, layerToAdd);
+  if (validParent) {
+    if (!validParent.layers) {
+      validParent.layers = [];
+    }
+
+    validParent.layers.splice(layerIndex, 0, layerToAdd as any);
+    return true;
   }
   return false;
 }
