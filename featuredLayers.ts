@@ -1,4 +1,4 @@
-import { LayerCode } from "./core";
+import { LayerCode, LayerSDF } from "./core";
 import { connnectedPointsLayer } from "./layers/connectedPoints";
 import { emptyShaderLayer } from "./layers/emptyShader";
 import { emptyJavaScriptLayer } from "./layers/emptyJavaScript";
@@ -22,8 +22,44 @@ import { repeaterLayer } from "./layers/repeater";
 import { fractalFlowLayer } from "./layers/fractalFlow";
 import { fractalCircuitLayer } from "./layers/fractalCircuit";
 import { fxaaLayer } from "./layers/fxaa";
+import { sdfRayMarchingLayer } from "./layers/sdfRayMarching";
+import {
+  boxSdf,
+  bumpSdf,
+  cylinderSdf,
+  fastIntersectionSdf,
+  fastSubtractionSdf,
+  fastUnionSdf,
+  infiniteCylinderSdf,
+  inflateSdf,
+  intersectionSdf,
+  invertSdf,
+  sphereSdf,
+  subtractionSdf,
+  torusSdf,
+  unionSdf
+} from "./sdfs/sdfs";
+
+export const featuredSdfs: LayerSDF[] = [
+  sphereSdf,
+  boxSdf,
+  cylinderSdf,
+  infiniteCylinderSdf,
+  torusSdf,
+  unionSdf,
+  subtractionSdf,
+  intersectionSdf,
+  invertSdf,
+  bumpSdf,
+  inflateSdf,
+  fastUnionSdf,
+  fastSubtractionSdf,
+  fastIntersectionSdf
+];
 
 export const featuredLayers: LayerCode[] = [
+  ...featuredSdfs,
+  sdfRayMarchingLayer,
   connnectedPointsLayer,
   glitchLayer,
   chromaticAberrationLayer,

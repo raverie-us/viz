@@ -1,0 +1,319 @@
+import { LayerSDF } from "../core";
+
+export const sphereSdf: LayerSDF = {
+  type: "sdf",
+  name: "sphere",
+  id: "sphere",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+/*{
+  halfExtents: "[radius, radius, radius]",
+}*/
+uniform float radius; // default: 0.5, min: 0, max: 5
+gSdf map(gSdfInputs inputs) {
+  return gSdf(length(inputs.point) - radius, inputs.id);
+}`.trim(),
+};
+
+export const boxSdf: LayerSDF = {
+  type: "sdf",
+  name: "box",
+  id: "box",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+/*{
+  halfExtents: "[bounds[0] / 2, bounds[1] / 2, bounds[2] / 2]",
+}*/
+uniform vec3 bounds; // default: [1,1,1], min: [0,0,0], max: [5,5,5]
+gSdf map(gSdfInputs inputs) {
+  vec3 q = abs(inputs.point) - bounds / 2.0;
+  return gSdf(length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0), inputs.id);
+}`.trim(),
+};
+
+export const cylinderSdf: LayerSDF = {
+  type: "sdf",
+  name: "cylinder",
+  id: "cylinder",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+/*{
+  halfExtents: "[radius, height / 2, radius]",
+}*/
+uniform float height; // default: 1, min: 0, max: 5
+uniform float radius; // default: 0.5, min: 0, max: 5
+uniform float roundingRadius; // default: 0, min: 0, max: 1
+gSdf map(gSdfInputs inputs) {
+  float rr = min(min(roundingRadius, height / 2.0), radius);
+  vec2 d = vec2(length(inputs.point.xz) - radius + rr, abs(inputs.point.y) - height / 2.0 + rr);
+  return gSdf(min(max(d.x, d.y),0.0) + length(max(d, 0.0)) - rr, inputs.id);
+}`.trim(),
+};
+
+export const infiniteCylinderSdf: LayerSDF = {
+  type: "sdf",
+  name: "infinite cylinder",
+  id: "infinite cylinder",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float radius; // default: 0.5, min: 0, max: 5
+gSdf map(gSdfInputs inputs) {
+  return gSdf(length(inputs.point.xz) - radius, inputs.id);
+}`.trim(),
+};
+
+export const torusSdf: LayerSDF = {
+  type: "sdf",
+  name: "torus",
+  id: "torus",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+/*{
+  halfExtents: "[circleRadius + thicknessRadius, thicknessRadius, circleRadius + thicknessRadius]",
+}*/
+uniform float circleRadius; // default: 0.4, min: 0, max: 1
+uniform float thicknessRadius; // default: 0.1, min: 0, max: 1
+gSdf map(gSdfInputs inputs) {
+  vec2 q = vec2(length(inputs.point.xz) - circleRadius, inputs.point.y);
+  return gSdf(length(q) - thicknessRadius, inputs.id);
+}`.trim(),
+};
+
+export const unionSdf: LayerSDF = {
+  type: "sdf",
+  name: "union",
+  id: "union",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float smoothing; // min: 0, max: 1
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float h = clamp(0.5 + 0.5 * (d1.distance - d2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(d1.distance, d2.distance, h) - smoothing * h * (1.0 - h);
+  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+}`.trim(),
+};
+
+export const subtractionSdf: LayerSDF = {
+  type: "sdf",
+  name: "subtraction",
+  id: "subtraction",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float smoothing; // min: 0, max: 1
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float h = clamp(0.5 - 0.5 * (d1.distance + d2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(d1.distance, -d2.distance, h) + smoothing * h * (1.0 - h);
+  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+}`.trim(),
+};
+
+export const intersectionSdf: LayerSDF = {
+  type: "sdf",
+  name: "intersection",
+  id: "intersection",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float smoothing; // min: 0, max: 1
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float h = clamp(0.5 - 0.5 * (d1.distance - d2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(d1.distance, d2.distance, h) + smoothing * h * (1.0 - h);
+  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+}`.trim(),
+};
+
+export const invertSdf: LayerSDF = {
+  type: "sdf",
+  name: "invert",
+  id: "invert",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+gSdf map(gSdfInputs inputs, gSdf arg) {
+  arg.distance = -arg.distance;
+  return arg;
+}`.trim(),
+};
+
+export const bumpSdf: LayerSDF = {
+  type: "sdf",
+  name: "bump",
+  id: "bump",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float amount; // default: 0.1, min: 0, max: 0.2
+uniform float scale; // default: 5, min: 0.1, max: 10
+uniform vec3 direction; // default: [0,1,0]
+uniform float warpingAmount; // default: 1, min: 0, max: 2
+uniform float warpingSpeed; // default: 2, min: 0, max: 5
+
+// CC0 license https://creativecommons.org/share-your-work/public-domain/cc0/
+
+/////////////// K.jpg's Simplex-like Re-oriented 4-Point BCC Noise ///////////////
+//////////////////// Output: vec4(dF/dx, dF/dy, dF/dz, value) ////////////////////
+
+// Inspired by Stefan Gustavson's noise
+vec4 permute(vec4 t) {
+    return t * (t * 34.0 + 133.0);
+}
+
+// Gradient set is a normalized expanded rhombic dodecahedron
+vec3 grad(float hash) {
+    // Random vertex of a cube, +/- 1 each
+    vec3 cube = mod(floor(hash / vec3(1.0, 2.0, 4.0)), 2.0) * 2.0 - 1.0;
+    
+    // Random edge of the three edges connected to that vertex
+    // Also a cuboctahedral vertex
+    // And corresponds to the face of its dual, the rhombic dodecahedron
+    vec3 cuboct = cube;
+    cuboct[int(hash / 16.0)] = cos(gTime * warpingSpeed + hash) * warpingAmount * 0.5;
+    
+    // In a funky way, pick one of the four points on the rhombic face
+    float type = mod(floor(hash / 8.0), 2.0);
+    vec3 rhomb = (1.0 - type) * cube + type * (cuboct + cross(cube, cuboct));
+    
+    // Expand it so that the new edges are the same length
+    // as the existing ones
+    vec3 grad = cuboct * 1.22474487139 + rhomb + sin(gTime * warpingSpeed + hash) * warpingAmount;
+    
+    // To make all gradients the same length, we only need to shorten the
+    // second type of vector. We also put in the whole noise scale constant.
+    // The compiler should reduce it into the existing floats. I think.
+    grad *= (1.0 - 0.042942436724648037 * type) * 32.80201376986577;
+    
+    return grad;
+}
+
+// BCC lattice split up into 2 cube lattices
+vec4 bccNoiseBase(vec3 X) {
+    
+    // First half-lattice, closest edge
+    vec3 v1 = round(X);
+    vec3 d1 = X - v1;
+    vec3 score1 = abs(d1);
+    vec3 dir1 = step(max(score1.yzx, score1.zxy), score1);
+    vec3 v2 = v1 + dir1 * sign(d1);
+    vec3 d2 = X - v2;
+    
+    // Second half-lattice, closest edge
+    vec3 X2 = X + 144.5;
+    vec3 v3 = round(X2);
+    vec3 d3 = X2 - v3;
+    vec3 score2 = abs(d3);
+    vec3 dir2 = step(max(score2.yzx, score2.zxy), score2);
+    vec3 v4 = v3 + dir2 * sign(d3);
+    vec3 d4 = X2 - v4;
+    
+    // Gradient hashes for the four points, two from each half-lattice
+    vec4 hashes = permute(mod(vec4(v1.x, v2.x, v3.x, v4.x), 289.0));
+    hashes = permute(mod(hashes + vec4(v1.y, v2.y, v3.y, v4.y), 289.0));
+    hashes = mod(permute(mod(hashes + vec4(v1.z, v2.z, v3.z, v4.z), 289.0)), 48.0);
+    
+    // Gradient extrapolations & kernel function
+    vec4 a = max(0.5 - vec4(dot(d1, d1), dot(d2, d2), dot(d3, d3), dot(d4, d4)), 0.0);
+    vec4 aa = a * a; vec4 aaaa = aa * aa;
+    vec3 g1 = grad(hashes.x); vec3 g2 = grad(hashes.y);
+    vec3 g3 = grad(hashes.z); vec3 g4 = grad(hashes.w);
+    vec4 extrapolations = vec4(dot(d1, g1), dot(d2, g2), dot(d3, g3), dot(d4, g4));
+    
+    // Derivatives of the noise
+    vec3 derivative = -8.0 * mat4x3(d1, d2, d3, d4) * (aa * a * extrapolations)
+        + mat4x3(g1, g2, g3, g4) * aaaa;
+    
+    // Return it all as a vec4
+    return vec4(derivative, dot(aaaa, extrapolations));
+}
+
+// Use this if you don't want Z to look different from X and Y
+vec4 bccNoiseClassic(vec3 X) {
+    
+    // Rotate around the main diagonal. Not a skew transform.
+    vec4 result = bccNoiseBase(dot(X, vec3(2.0/3.0)) - X);
+    return vec4(dot(result.xyz, vec3(2.0/3.0)) - result.xyz, result.w);
+}
+
+//////////////////////////////// End noise code ////////////////////////////////
+
+
+gSdf map(gSdfInputs inputs, gSdf arg) {
+  vec3 p = inputs.point * scale;
+  float value = bccNoiseClassic(p - direction * gTime).w;
+  arg.distance -= value * amount / scale;
+  return arg;
+}`.trim(),
+};
+
+export const inflateSdf: LayerSDF = {
+  type: "sdf",
+  name: "inflate",
+  id: "inflate",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float radius; // default: 0.1, min: -1, max: 1
+gSdf map(gSdfInputs inputs, gSdf arg) {
+  arg.distance -= radius;
+  return arg;
+}`.trim(),
+};
+
+export const fastUnionSdf: LayerSDF = {
+  type: "sdf",
+  name: "fast union",
+  id: "fast union",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float distance = min(d1.distance, d2.distance);
+  return gSdf(distance, d1.distance < d2.distance ? d1.id : d2.id);
+}`.trim(),
+};
+
+export const fastSubtractionSdf: LayerSDF = {
+  type: "sdf",
+  name: "fast subtraction",
+  id: "fast subtraction",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float distance = max(-d1.distance, d2.distance);
+  return gSdf(distance, -d1.distance > d2.distance ? d1.id : d2.id);
+}`.trim(),
+};
+
+export const fastIntersectionSdf: LayerSDF = {
+  type: "sdf",
+  name: "fast intersection",
+  id: "fast intersection",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
+  float distance = max(d1.distance, d2.distance);
+  return gSdf(distance, d1.distance > d2.distance ? d1.id : d2.id);
+}`.trim(),
+};
