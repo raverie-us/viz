@@ -765,7 +765,13 @@ export const addLayer = (root: LayerWithChildren, layerToAdd: Layer, relativeToI
     return addLayerIfValid(root, layerToAdd);
   }
 
-  return addLayerIfValid(result.parent, layerToAdd, result.layerIndex);
+  // First attempt to add it to the parent, if that does not work
+  // then attempt to add it to the relative target as well
+  if (addLayerIfValid(result.parent, layerToAdd, result.layerIndex)) {
+    return true;
+  }
+
+  return addLayerIfValid(result.layer, layerToAdd);
 };
 
 const expect = <T>(value: T | null | undefined, name: string): T => {
