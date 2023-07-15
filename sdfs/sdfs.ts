@@ -326,11 +326,15 @@ export const fastUnionSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-  gSdfResult r1 = gSdfMap(context, d1);
-  gSdfResult r2 = gSdfMap(context, d2);
-  float distance = min(r1.distance, r2.distance);
-  return gSdfResult(distance, r1.distance < r2.distance ? r1.id : r2.id);
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult result = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult next = gSdfMap(context, variadic.sdfs[i]);
+    if (next.distance < result.distance) {
+      result = next;
+    }
+  }
+  return result;
 }`.trim(),
 };
 
@@ -358,10 +362,14 @@ export const fastIntersectionSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-  gSdfResult r1 = gSdfMap(context, d1);
-  gSdfResult r2 = gSdfMap(context, d2);
-  float distance = max(r1.distance, r2.distance);
-  return gSdfResult(distance, r1.distance > r2.distance ? r1.id : r2.id);
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult result = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult next = gSdfMap(context, variadic.sdfs[i]);
+    if (next.distance > result.distance) {
+      result = next;
+    }
+  }
+  return result;
 }`.trim(),
 };
