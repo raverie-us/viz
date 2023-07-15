@@ -293,7 +293,7 @@ export const twistSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-uniform float twist; // default: 1, min: 0, max: 2
+uniform float twist; // default: 1, min: -2, max: 2
 gSdfResult map(inout gSdfContext context, gSdf arg) {
   float c = cos(twist * context.point.z);
   float s = sin(twist * context.point.z);
