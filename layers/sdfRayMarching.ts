@@ -31,7 +31,7 @@ vec3 calcNormal(vec3 p) {
   return normalize(n);
 }
 
-gSdfResult rayMarch(gSdfContext context, vec3 ro, vec3 rd) {
+gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
   gSdfResult result = gSdfResult(0.0, gSdfNoHitId);
   gSdfResult query = gSdfResult(MAX_MARCHING_DISTANCE, gSdfNoHitId);
 
@@ -98,7 +98,7 @@ vec4 render() {
 
     if (highlightId != gSdfHighlightNone) {
       gSdfResult highlightResult = context.results[highlightId];
-      if (highlightResult.id != gSdfNoHitId) {
+      if (highlightResult.id != gSdfNoHitId && result.id != gSdfNoHitId) {
         bool isOccluded = result.id != highlightResult.id;
         finalColor.rgb += vec3(isOccluded ? 0.15 : 0.35);
       }

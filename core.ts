@@ -2863,6 +2863,7 @@ export class RaverieVisualizer {
     const shaderScene = `
     gSdfResult result;
     ${generateMapCall(treeResult.root)}
+    context.results[gSdfRootId] = result;
     return result;`;
 
     return this.generateSDFShaderHeader(`${shaderFunctions}\n${shaderMaps}`, treeResult.nodeCount, treeResult.root.id, shaderScene);
