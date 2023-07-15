@@ -345,8 +345,8 @@ export const fastSubtractionSdf: LayerSDF = {
 gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
   gSdfResult r1 = gSdfMap(context, d1);
   gSdfResult r2 = gSdfMap(context, d2);
-  float distance = max(-r1.distance, r2.distance);
-  return gSdfResult(distance, -r1.distance > r2.distance ? r1.id : r2.id);
+  float distance = max(r1.distance, -r2.distance);
+  return gSdfResult(distance, r1.distance > -r2.distance ? r1.id : r2.id);
 }`.trim(),
 };
 
