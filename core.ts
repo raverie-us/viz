@@ -533,6 +533,7 @@ export interface CompiledLayerSDF extends CompiledLayerObject {
   attributes: SDFFunctionAttributes;
 
   shaderNodes: SDFShaderNode[];
+  allChildShaderNodes: SDFShaderNode[];
 }
 
 export interface CompiledLayerShader extends CompiledLayerCodeBase {
@@ -1242,9 +1243,11 @@ const sdfUnion: LayerSDF = {
   values: [],
   layers: [],
   code: `
-  gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-    float distance = min(d1.distance, d2.distance);
-    return gSdf(distance, d1.distance < d2.distance ? d1.id : d2.id);
+  gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+    gSdfResult r1 = gSdfMap(context, d1);
+    gSdfResult r2 = gSdfMap(context, d2);
+    float distance = min(r1.distance, r2.distance);
+    return gSdfResult(distance, r1.distance < r2.distance ? r1.id : r2.id);
   }`,
 };
 
@@ -1440,17 +1443,16 @@ const int gSdfNoHitId = ${sdfNoHitId};
 const int gSdfHighlightNone = ${sdfHighlightNone};
 
 struct gSdf {
+  int id;
+};
+
+struct gSdfResult {
   float distance;
   int id;
 };
 
-struct gSdfInputs {
-  vec3 point;
-  int id;
-};
-
-gSdf gNullSdf = gSdf(-1.0, gSdfNoHitId);
-gSdfInputs gNullSdfInputs = gSdfInputs(vec3(0), gSdfNoHitId);
+const gSdf gSdfNull = gSdf(gSdfNoHitId);
+const gSdfResult gSdfResultNull = gSdfResult(-1.0, gSdfNoHitId);
 `;
 
 const countCodeLines = (code: string) => code.split(newlineRegex).length;
@@ -1607,8 +1609,6 @@ export class RaverieVisualizer {
   private readonly customTextureShader: ProcessedLayerShader;
   private readonly customTextureUniform: ProcessedUniformSampler2D;
   private customTexture: WebGLTexture | null = null;
-
-  private readonly unionSdf: CompiledLayerSDF;
 
   private lastTimeStampMs: number = -1;
   private frame: number = -1;
@@ -1782,9 +1782,6 @@ export class RaverieVisualizer {
     const processedVertexShader = this.createShader(vertexShader, gl.VERTEX_SHADER);
     this.vertexShader = expect(processedVertexShader.shader,
       processedVertexShader.error!);
-
-    // This needs to be built first before any layer shaders
-    this.unionSdf = this.compileLayerSDF({}, sdfUnion, null, true);
 
     this.checkerboardShader = this.compileLayerShader({}, {
       ...defaultEmptyLayerShader(),
@@ -2466,9 +2463,9 @@ export class RaverieVisualizer {
       parseErrors.push({ text, line });
     }
 
-    const signatureRegex = /(?:\/\*(\{.*?\})\*\/)?\s*gSdf\s+map\(gSdfInputs\b/gms;
+    const signatureRegex = /(?:\/\*(\{.*?\})\*\/)?\s*gSdfResult\s+map\(inout gSdfContext context\b/gms;
     // Keep in sync with the end of the above regex (should be directly after 'map')
-    const signatureEnding = "(gSdfInputs";
+    const signatureEnding = "(inout gSdfContext context";
     const signatureResult = signatureRegex.exec(code);
 
     let attributes: SDFFunctionAttributes = {};
@@ -2540,11 +2537,12 @@ export class RaverieVisualizer {
       // The footer will call the map function with "null" sdfs
       sdfFooter = `
         vec4 render() {
-          gSdf result = map(gNullSdfInputs${", gNullSdf".repeat(sdfParameters.length)});
+          gSdfContext context = gSdfContextNull;
+          gSdfResult result = map(context${", gSdfNull".repeat(sdfParameters.length)});
           return vec4(result.distance, float(result.id), 0, 1);
         }`;
     } else {
-      addParseError(`Function signature must be 'gSdf map(gSdfInputs inputs, ...)'`);
+      addParseError(`Function signature must be 'gSdfResult map(inout gSdfContext context, ...)'`);
     }
 
     // TODO(trevor): Rebuild - Ignoring passing previousIdToLayer until we know it works
@@ -2580,7 +2578,8 @@ export class RaverieVisualizer {
       attributes,
       sdfParameters,
 
-      shaderNodes: []
+      shaderNodes: [],
+      allChildShaderNodes: []
     };
 
     // Reparent the uniforms to this layer and clear locations
@@ -2618,6 +2617,7 @@ export class RaverieVisualizer {
       const shaderNodesPerObject = objectIdToShaderNodes[ownerSdf.layer.id] || [];
       objectIdToShaderNodes[ownerSdf.layer.id] = shaderNodesPerObject;
       ownerSdf.shaderNodes = shaderNodesPerObject;
+      sdf.allChildShaderNodes.push(...children);
       const node: SDFShaderNode = {
         id,
         children,
@@ -2639,13 +2639,15 @@ export class RaverieVisualizer {
     }
 
     // Special case for unions since they are a built in operation
-    let hasAddedUnionSdf = false;
+    let unionCounter = 0;
     const createUnion = (ownerSdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
-      if (!hasAddedUnionSdf) {
-        allValidSdfs.push(this.unionSdf);
-        hasAddedUnionSdf = true;
-      }
-      return createBinaryChain(ownerSdf, this.unionSdf, children);
+      const sdfUnionNew = {...sdfUnion};
+      sdfUnionNew.id = `union_${unionCounter}`;
+      sdfUnionNew.name = sdfUnionNew.id;
+      ++unionCounter;
+      const unionSdf = this.compileLayerSDF({}, sdfUnionNew, null, true);
+      allValidSdfs.push(unionSdf);
+      return createBinaryChain(ownerSdf, unionSdf, children);
     }
 
     const recurse = (obj: CompiledLayerSDF): SDFShaderNode | null => {
@@ -2720,7 +2722,6 @@ export class RaverieVisualizer {
       const exactChildren = validChildren.slice(0, sdfParameterCount);
       const remainingChildren = validChildren.slice(sdfParameterCount);
       return createUnion(obj, [createNode(obj, obj, exactChildren), ...remainingChildren]);
-
     }
 
     const roots: SDFShaderNode[] = [];
@@ -2745,10 +2746,10 @@ export class RaverieVisualizer {
 
   private buildSDFShader(treeResult: SDFShaderTreeResult) {
     // All sdf leaf objects have the shader signature:
-    // gSdf map(gSdfInputs inputs, ...)
+    // gSdfResult map(inout gSdfContext context, ...)
 
-    let shaderScene = `gSdf s[${treeResult.nodeCount}];\n`;
     let shaderFunctions = '';
+    let shaderMaps = '';
 
     const insertString = (base: string, baseIndex: number, toBeInserted: string) =>
       `${base.substring(0, baseIndex)}${toBeInserted}${base.substring(baseIndex)}`;
@@ -2765,6 +2766,16 @@ export class RaverieVisualizer {
       }
       insertLocations.push(sdf.functionNameMangleIndex);
 
+      // Mangle all calls to gSdfMap
+      const sdfMapRegex = /\bgSdfMap\b/gum;
+      for (; ;) {
+        const result = sdfMapRegex.exec(sdf.code);
+        if (!result) {
+          break;
+        }
+        insertLocations.push(result.index + result[0].length);
+      }
+
       // Sort it from highest to lowest indices so that as we insert which increases the string
       // length we don't need to keep track of how much we've offset the string for the next insert
       insertLocations.sort((a, b) => b - a);
@@ -2775,41 +2786,72 @@ export class RaverieVisualizer {
         mangledCode = insertString(mangledCode, insertLocation, mangleIdPostfix);
       }
 
+      shaderFunctions += `gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf);\n`
       shaderFunctions += `${mangledCode}\n`;
-    }
 
-    const recurse = (node: SDFShaderNode) => {
-      // First recurse over all children so we generate their code prior
-      for (const child of node.children) {
-        recurse(child);
+      shaderMaps += `
+      gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf) {
+        vec3 savedPoint = context.point;
+        gSdfResult result = gSdfResultNull;
+        context.id = sdf.id;
+
+        switch (sdf.id) {`;
+
+      for (const node of sdf.allChildShaderNodes) {
+        let shaderParams = "";
+        for (const child of node.children) {
+          shaderParams += `, gSdf(${child.id})`;
+        }
+
+        shaderMaps += `
+          case ${node.id}: {
+            result = map_${node.sdf.mangledId}(context${shaderParams});
+            break;
+          }`;
       }
 
-      const sdf = node.sdf;
-
-      let shaderParams = "";
-      for (const child of node.children) {
-        shaderParams += `, s[${child.id}]`;
-      }
-
-      // TODO(trevor): Handle transforms
-      //shaderScene += `vec3 p${node.id} = transform(p, ${transformUniformName});\n`;
-      shaderScene += `vec3 p${node.id} = p;\n`;
-      shaderScene += `s[${node.id}] = map_${sdf.mangledId}(gSdfInputs(p${node.id}, ${node.id})${shaderParams});\n`;
-      //shaderScene += `s[${node.id}].distance *= ${minScaleUniformName};\n`;
+      shaderMaps += `
+        }
+        
+        context.point = savedPoint;
+        context.results[sdf.id] = result;
+        return result;
+      }`;
     }
-    recurse(treeResult.root);
-    shaderScene += "return s[renderId];";
 
-    return this.generateSDFShaderHeader(shaderFunctions, treeResult.root.id, shaderScene);
+    let shaderParams = "";
+    for (const child of treeResult.root.children) {
+      shaderParams += `, gSdf(${child.id})`;
+    }
+    const shaderScene = `return map_${treeResult.root.sdf.mangledId}(context${shaderParams});`;
+
+    return this.generateSDFShaderHeader(`${shaderFunctions}\n${shaderMaps}`, treeResult.nodeCount, treeResult.root.id, shaderScene);
   };
 
-  private generateSDFShaderHeader(shaderFunctions: string, rootId: number, shaderScene: string) {
+  private generateSDFShaderHeader(shaderFunctions: string, nodeCount: number, rootId: number, shaderScene: string) {
     return `
-    ${shaderFunctions}
-
+    const int gSdfNodeCount = ${nodeCount};
     const int gSdfRootId = ${rootId};
+
+    struct gSdfContext {
+      vec3 point;
+      int id;
+      gSdfResult results[gSdfNodeCount];
+    };
+
+    const gSdfResult gSdfResultArrayNull[gSdfNodeCount] = gSdfResult[gSdfNodeCount](${new Array(nodeCount).fill("gSdfResultNull").join(",")});
+    const gSdfContext gSdfContextNull = gSdfContext(vec3(0), gSdfNoHitId, gSdfResultArrayNull);
+
+    // Dummy version that never gets called since we mangle all calls to gSdfMap
+    // This is only used when compiling the sdf in isolation
+    gSdfResult gSdfMap(inout gSdfContext context, gSdf sdf) {
+      return gSdfResultNull;
+    }
+
+    ${shaderFunctions}
     
-    gSdf gScene(vec3 p, int renderId) {
+    gSdfResult gSdfScene(inout gSdfContext context) {
+      context.id = gSdfRootId;
       ${shaderScene}
     }`;
   }
@@ -2821,7 +2863,7 @@ export class RaverieVisualizer {
     }
 
     const compiledSdfChildren: CompiledLayerSDF[] = [];
-    let sdfHeader = this.generateSDFShaderHeader("", 0, "return gNullSdf;");
+    let sdfHeader = this.generateSDFShaderHeader("", 1, 0, "return gSdfResultNull;");
     let sdfTreeResult: SDFShaderTreeResult | null = null;
     if (layerShader.layers) {
       for (const sdf of layerShader.layers) {
@@ -2839,6 +2881,7 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const processedProgram = this.createProgram(`${sdfHeader}\n${layerShader.code}`);
 
+    console.log("processedProgram.completeCode", processedProgram.completeCode);
     if (processedProgram.error) {
       const programText = addLineNumbers(processedProgram.completeCode);
       const shaderTreeText = sdfTreeResult ? debugShaderTree(sdfTreeResult.root) : null;

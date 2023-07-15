@@ -34,9 +34,11 @@ import {
   inflateSdf,
   intersectionSdf,
   invertSdf,
+  repeatSdf,
   sphereSdf,
   subtractionSdf,
   torusSdf,
+  twistSdf,
   unionSdf
 } from "./sdfs/sdfs";
 
@@ -52,6 +54,8 @@ export const featuredSdfs: LayerSDF[] = [
   invertSdf,
   bumpSdf,
   inflateSdf,
+  twistSdf,
+  repeatSdf,
   fastUnionSdf,
   fastSubtractionSdf,
   fastIntersectionSdf

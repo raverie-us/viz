@@ -19,23 +19,25 @@ uniform bool shouldRenderIds;
 uniform int highlightId; // default: -1
 uniform int zero;
 
-vec3 calcNormal(vec3 p, int renderId) {
+vec3 calcNormal(vec3 p) {
   const float epsilon = 0.0001;
   vec3 n = vec3(0.0);
+  gSdfContext context = gSdfContextNull;
   for(int i = zero; i < 4; ++i) {
     vec3 e = 0.5773 * (2.0 * vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
-    n += e * gScene(p + e * epsilon, renderId).distance;
+    context.point = p + e * epsilon;
+    n += e * gSdfScene(context).distance;
   }
   return normalize(n);
 }
 
-gSdf rayMarch(vec3 ro, vec3 rd, int renderId) {
-  gSdf result = gSdf(0.0, gSdfNoHitId);
-  gSdf query = gSdf(MAX_MARCHING_DISTANCE, gSdfNoHitId);
+gSdfResult rayMarch(gSdfContext context, vec3 ro, vec3 rd) {
+  gSdfResult result = gSdfResult(0.0, gSdfNoHitId);
+  gSdfResult query = gSdfResult(MAX_MARCHING_DISTANCE, gSdfNoHitId);
 
   for (int i = 0; i < MAX_MARCHING_STEPS; ++i) {
-    vec3 p = ro + result.distance * rd;
-    query = gScene(p, renderId);
+    context.point = ro + result.distance * rd;
+    query = gSdfScene(context);
     result.distance += query.distance;
     // We do this to avoid hitting INF or other bad
     // number cases when the ray shoots off to infinity
@@ -68,7 +70,8 @@ vec4 render() {
   vec2 coord = gPosition;
   coord.y *= gResolution.y / gResolution.x;
   vec3 rd = camera(ro, cameraWorldDirection) * normalize(vec3(coord, -1)); // ray direction
-  gSdf result = rayMarch(ro, rd, gSdfRootId);
+  gSdfContext context = gSdfContextNull;
+  gSdfResult result = rayMarch(context, ro, rd);
 
   if (shouldRenderIds) {
     uint id = uint(result.id);
@@ -85,7 +88,7 @@ vec4 render() {
     vec4 finalColor = vec4(0.0, 0.0, 0.0, 1.0);
     if (result.id != gSdfNoHitId) {
       vec3 p = ro + rd * result.distance;
-      vec3 normal = calcNormal(p, gSdfRootId);
+      vec3 normal = calcNormal(p);
       finalColor = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
       // test ids
@@ -94,7 +97,7 @@ vec4 render() {
     }
 
     if (highlightId != gSdfHighlightNone) {
-      gSdf highlightResult = rayMarch(ro, rd, highlightId);
+      gSdfResult highlightResult = context.results[highlightId];
       if (highlightResult.id != gSdfNoHitId) {
         bool isOccluded = result.id != highlightResult.id;
         finalColor.rgb += vec3(isOccluded ? 0.15 : 0.35);

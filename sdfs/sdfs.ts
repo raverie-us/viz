@@ -12,8 +12,8 @@ export const sphereSdf: LayerSDF = {
   halfExtents: "[radius, radius, radius]",
 }*/
 uniform float radius; // default: 0.5, min: 0, max: 5
-gSdf map(gSdfInputs inputs) {
-  return gSdf(length(inputs.point) - radius, inputs.id);
+gSdfResult map(inout gSdfContext context) {
+  return gSdfResult(length(context.point) - radius, context.id);
 }`.trim(),
 };
 
@@ -29,9 +29,9 @@ export const boxSdf: LayerSDF = {
   halfExtents: "[bounds[0] / 2, bounds[1] / 2, bounds[2] / 2]",
 }*/
 uniform vec3 bounds; // default: [1,1,1], min: [0,0,0], max: [5,5,5]
-gSdf map(gSdfInputs inputs) {
-  vec3 q = abs(inputs.point) - bounds / 2.0;
-  return gSdf(length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0), inputs.id);
+gSdfResult map(inout gSdfContext context) {
+  vec3 q = abs(context.point) - bounds / 2.0;
+  return gSdfResult(length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0), context.id);
 }`.trim(),
 };
 
@@ -49,10 +49,10 @@ export const cylinderSdf: LayerSDF = {
 uniform float height; // default: 1, min: 0, max: 5
 uniform float radius; // default: 0.5, min: 0, max: 5
 uniform float roundingRadius; // default: 0, min: 0, max: 1
-gSdf map(gSdfInputs inputs) {
+gSdfResult map(inout gSdfContext context) {
   float rr = min(min(roundingRadius, height / 2.0), radius);
-  vec2 d = vec2(length(inputs.point.xz) - radius + rr, abs(inputs.point.y) - height / 2.0 + rr);
-  return gSdf(min(max(d.x, d.y),0.0) + length(max(d, 0.0)) - rr, inputs.id);
+  vec2 d = vec2(length(context.point.xz) - radius + rr, abs(context.point.y) - height / 2.0 + rr);
+  return gSdfResult(min(max(d.x, d.y),0.0) + length(max(d, 0.0)) - rr, context.id);
 }`.trim(),
 };
 
@@ -65,8 +65,8 @@ export const infiniteCylinderSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float radius; // default: 0.5, min: 0, max: 5
-gSdf map(gSdfInputs inputs) {
-  return gSdf(length(inputs.point.xz) - radius, inputs.id);
+gSdfResult map(inout gSdfContext context) {
+  return gSdfResult(length(context.point.xz) - radius, context.id);
 }`.trim(),
 };
 
@@ -83,9 +83,9 @@ export const torusSdf: LayerSDF = {
 }*/
 uniform float circleRadius; // default: 0.4, min: 0, max: 1
 uniform float thicknessRadius; // default: 0.1, min: 0, max: 1
-gSdf map(gSdfInputs inputs) {
-  vec2 q = vec2(length(inputs.point.xz) - circleRadius, inputs.point.y);
-  return gSdf(length(q) - thicknessRadius, inputs.id);
+gSdfResult map(inout gSdfContext context) {
+  vec2 q = vec2(length(context.point.xz) - circleRadius, context.point.y);
+  return gSdfResult(length(q) - thicknessRadius, context.id);
 }`.trim(),
 };
 
@@ -98,10 +98,12 @@ export const unionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float h = clamp(0.5 + 0.5 * (d1.distance - d2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(d1.distance, d2.distance, h) - smoothing * h * (1.0 - h);
-  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float h = clamp(0.5 + 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(r1.distance, r2.distance, h) - smoothing * h * (1.0 - h);
+  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
 }`.trim(),
 };
 
@@ -114,10 +116,12 @@ export const subtractionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float h = clamp(0.5 - 0.5 * (d1.distance + d2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(d1.distance, -d2.distance, h) + smoothing * h * (1.0 - h);
-  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float h = clamp(0.5 - 0.5 * (r1.distance + r2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(r1.distance, -r2.distance, h) + smoothing * h * (1.0 - h);
+  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
 }`.trim(),
 };
 
@@ -130,10 +134,12 @@ export const intersectionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float h = clamp(0.5 - 0.5 * (d1.distance - d2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(d1.distance, d2.distance, h) + smoothing * h * (1.0 - h);
-  return gSdf(distance, h >= 0.5 ? d2.id : d1.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float h = clamp(0.5 - 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
+  float distance = mix(r1.distance, r2.distance, h) + smoothing * h * (1.0 - h);
+  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
 }`.trim(),
 };
 
@@ -145,9 +151,10 @@ export const invertSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdf map(gSdfInputs inputs, gSdf arg) {
-  arg.distance = -arg.distance;
-  return arg;
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  gSdfResult result = gSdfMap(context, arg);
+  result.distance = -result.distance;
+  return result;
 }`.trim(),
 };
 
@@ -253,11 +260,12 @@ vec4 bccNoiseClassic(vec3 X) {
 //////////////////////////////// End noise code ////////////////////////////////
 
 
-gSdf map(gSdfInputs inputs, gSdf arg) {
-  vec3 p = inputs.point * scale;
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  gSdfResult result = gSdfMap(context, arg);
+  vec3 p = context.point * scale;
   float value = bccNoiseClassic(p - direction * gTime).w;
-  arg.distance -= value * amount / scale;
-  return arg;
+  result.distance -= value * amount / scale;
+  return result;
 }`.trim(),
 };
 
@@ -270,9 +278,43 @@ export const inflateSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float radius; // default: 0.1, min: -1, max: 1
-gSdf map(gSdfInputs inputs, gSdf arg) {
-  arg.distance -= radius;
-  return arg;
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  gSdfResult result = gSdfMap(context, arg);
+  result.distance -= radius;
+  return result;
+}`.trim(),
+};
+
+export const twistSdf: LayerSDF = {
+  type: "sdf",
+  name: "twist",
+  id: "twist",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float twist; // default: 1, min: 0, max: 2
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  float c = cos(twist * context.point.z);
+  float s = sin(twist * context.point.z);
+  mat2  m = mat2(c, -s, s, c);
+  context.point = vec3(m * context.point.xy, context.point.z);
+  return gSdfMap(context, arg);
+}`.trim(),
+};
+
+export const repeatSdf: LayerSDF = {
+  type: "sdf",
+  name: "repeat",
+  id: "repeat",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform vec3 repeat; // default: [1,1,1], min: [0.1,0.1,0.1], max: [5,5,5]
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  context.point = mod(context.point + 0.5 * repeat, repeat) - 0.5 * repeat;
+  return gSdfMap(context, arg);
 }`.trim(),
 };
 
@@ -284,9 +326,11 @@ export const fastUnionSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float distance = min(d1.distance, d2.distance);
-  return gSdf(distance, d1.distance < d2.distance ? d1.id : d2.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float distance = min(r1.distance, r2.distance);
+  return gSdfResult(distance, r1.distance < r2.distance ? r1.id : r2.id);
 }`.trim(),
 };
 
@@ -298,9 +342,11 @@ export const fastSubtractionSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float distance = max(-d1.distance, d2.distance);
-  return gSdf(distance, -d1.distance > d2.distance ? d1.id : d2.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float distance = max(-r1.distance, r2.distance);
+  return gSdfResult(distance, -r1.distance > r2.distance ? r1.id : r2.id);
 }`.trim(),
 };
 
@@ -312,8 +358,10 @@ export const fastIntersectionSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-gSdf map(gSdfInputs inputs, gSdf d1, gSdf d2) {
-  float distance = max(d1.distance, d2.distance);
-  return gSdf(distance, d1.distance > d2.distance ? d1.id : d2.id);
+gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
+  gSdfResult r1 = gSdfMap(context, d1);
+  gSdfResult r2 = gSdfMap(context, d2);
+  float distance = max(r1.distance, r2.distance);
+  return gSdfResult(distance, r1.distance > r2.distance ? r1.id : r2.id);
 }`.trim(),
 };
