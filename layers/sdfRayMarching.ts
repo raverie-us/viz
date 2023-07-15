@@ -6,10 +6,12 @@ export const sdfRayMarchingLayer: LayerShader = {
   id: "sdf ray marching",
   visible: true,
   code: `
-const int MAX_MARCHING_STEPS = 64;
-const float MAX_MARCHING_DISTANCE = 10000.0;
-const float HIT_PRECISION = 0.001;
-const float NEAR_PRECISION = 0.01;
+const int MAX_MARCHING_STEPS = 96;
+const float MAX_MARCHING_DISTANCE = 100.0;
+const float HIT_PRECISION = 0.002;
+const float NEAR_PRECISION = 0.5;
+const float MIN_MARCHING_DISTANCE_NEAR = 0.02;
+const float MIN_MARCHING_DISTANCE_FAR = 0.2;
 
 uniform vec3 cameraWorldPosition; // default: [0, 0, -1]
 uniform vec3 cameraWorldDirection; // default: [0, 0, 1]
@@ -20,7 +22,7 @@ uniform int highlightId; // default: -1
 uniform int zero;
 
 vec3 calcNormal(vec3 p) {
-  const float epsilon = 0.0001;
+  const float epsilon = 0.001;
   vec3 n = vec3(0.0);
   gSdfContext context = gSdfContextNull;
   for(int i = zero; i < 4; ++i) {
@@ -38,7 +40,10 @@ gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
   for (int i = 0; i < MAX_MARCHING_STEPS; ++i) {
     context.point = ro + result.distance * rd;
     query = gSdfScene(context);
-    result.distance += query.distance;
+
+    float z = result.distance / MAX_MARCHING_DISTANCE;
+    float minMarchingDistance = mix(MIN_MARCHING_DISTANCE_NEAR, MIN_MARCHING_DISTANCE_FAR, z);
+    result.distance += max(query.distance, minMarchingDistance);
     // We do this to avoid hitting INF or other bad
     // number cases when the ray shoots off to infinity
     if (result.distance >= MAX_MARCHING_DISTANCE) {
@@ -85,7 +90,7 @@ vec4 render() {
     float a = float(au) / 255.0;
     return vec4(r, g, b, a);
   } else {
-    vec4 finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 finalColor = vec4(0.0, 0.0, 0.0, 0.0);
     if (result.id != gSdfNoHitId) {
       vec3 p = ro + rd * result.distance;
       vec3 normal = calcNormal(p);
