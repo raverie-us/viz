@@ -1286,6 +1286,7 @@ const fragmentShaderHeader = `#version 300 es
 precision highp float;
 const float gPI = acos(-1.0);
 const float gPI2 = gPI * 2.0;
+const float gFloatMax = ${Number.MAX_VALUE};
 in vec2 gPosition;
 in vec2 gUV;
 out vec4 gFragColor;
@@ -1464,7 +1465,7 @@ struct gSdfVariadic {
 };
 
 const gSdf gSdfNull = gSdf(gSdfNoHitId);
-const gSdfResult gSdfResultNull = gSdfResult(-1.0, gSdfNoHitId);
+const gSdfResult gSdfResultNull = gSdfResult(gFloatMax, gSdfNoHitId);
 const gSdfVariadic gSdfVariadicNull = gSdfVariadic(0, gSdf[gSdfVariadicMax](${new Array(sdfVariadicMax).fill("gSdfNull").join(",")}));
 `;
 
