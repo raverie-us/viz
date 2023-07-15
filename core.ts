@@ -530,6 +530,7 @@ export interface CompiledLayerSDF extends CompiledLayerObject {
   mangledId: string;
 
   sdfParameters: SDFParam[];
+  variadicSdf: boolean;
   attributes: SDFFunctionAttributes;
 
   shaderNodes: SDFShaderNode[];
@@ -1232,6 +1233,7 @@ interface SDFShaderTreeResult {
   objectIdToShaderNodes: Record<string, SDFShaderNode[]>;
 };
 
+const sdfVariadicMax = 64;
 const sdfNoHitId = 0xffffffff;
 const sdfHighlightNone = 0xffffffff;
 
@@ -1441,6 +1443,8 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
 
 const int gSdfNoHitId = ${sdfNoHitId};
 const int gSdfHighlightNone = ${sdfHighlightNone};
+const int gSdfVariadicMax = ${sdfVariadicMax};
+#define VARIADIC_SDF gSdf sdfArray[gSdfVariadicMax], int sdfCount
 
 struct gSdf {
   int id;
@@ -1453,6 +1457,7 @@ struct gSdfResult {
 
 const gSdf gSdfNull = gSdf(gSdfNoHitId);
 const gSdfResult gSdfResultNull = gSdfResult(-1.0, gSdfNoHitId);
+gSdf gSdfNullArray[gSdfVariadicMax] = gSdf[gSdfVariadicMax](${new Array(sdfVariadicMax).fill("gSdfNull").join(",")});
 `;
 
 const countCodeLines = (code: string) => code.split(newlineRegex).length;
@@ -2470,6 +2475,7 @@ export class RaverieVisualizer {
 
     let attributes: SDFFunctionAttributes = {};
     let sdfParameters: SDFParam[] = [];
+    let variadicSdf = false;
     let sdfFooter = `
       vec4 render() {
         return vec4(1, 0, 0, 1);
@@ -2518,27 +2524,38 @@ export class RaverieVisualizer {
 
       const signature = code.substring(signatureStart, signatureEnd);
 
-      const paramRegex = /gSdf\s+([a-zA-Z_][a-zA-Z0-9_]*)/gm;
+      const paramRegex = /(?:gSdf\s+([a-zA-Z_][a-zA-Z0-9_]*)|(VARIADIC_SDF))/gm;
       for (; ;) {
         const paramResult = paramRegex.exec(signature);
         if (!paramResult) {
           break;
         }
 
-        const paramName = paramResult[1];
-        sdfParameters.push({
-          name: paramName
-        });
+        if (paramResult[2] === "VARIADIC_SDF") {
+          if (sdfParameters.length) {
+            addParseError("Cannot take sdf parameters and use VARIADIC at the same time");
+          }
+          variadicSdf = true;
+        } else {
+          const paramName = paramResult[1];
+          sdfParameters.push({
+            name: paramName
+          });
+        }
       }
 
       // Ultimately all sdf children are swept up and added to a generated root shader
       // However it is useful to see compiler errors, as well as gather uniforms
       // so we treat the sdf as if it's a LayerShader temporarily with a special footer
-      // The footer will call the map function with "null" sdfs
+
+      // The footer will call the map function with "null" sdfs or an empty sdf array for variadics
+      const sdfArgs = variadicSdf
+        ? ", gSdfNullArray, 0"
+        : ", gSdfNull".repeat(sdfParameters.length);
       sdfFooter = `
         vec4 render() {
           gSdfContext context = gSdfContextNull;
-          gSdfResult result = map(context${", gSdfNull".repeat(sdfParameters.length)});
+          gSdfResult result = map(context${sdfArgs});
           return vec4(result.distance, float(result.id), 0, 1);
         }`;
     } else {
@@ -2577,6 +2594,7 @@ export class RaverieVisualizer {
 
       attributes,
       sdfParameters,
+      variadicSdf,
 
       shaderNodes: [],
       allChildShaderNodes: []
@@ -2669,59 +2687,64 @@ export class RaverieVisualizer {
 
       const sdfParameterCount = obj.sdfParameters.length;
 
-      // If we have the exact number of children then just return our node
-      if (sdfParameterCount === validChildren.length) {
+      if (obj.variadicSdf) {
+        // Easy case since it doesn't matter how many children we have
         return createNode(obj, obj, validChildren);
-      }
-
-      // If we don't have enough children to make this valid, then early out
-      if (validChildren.length < sdfParameterCount) {
-        // If we have no children, then we can't validly display anything
-        if (validChildren.length === 0) {
-          return null;
-        }
-        // If we only have one valid child, promote it to be in our place
-        if (validChildren.length === 1) {
-          return validChildren[0];
+      } else {
+        // If we have the exact number of children then just return our node
+        if (sdfParameterCount === validChildren.length) {
+          return createNode(obj, obj, validChildren);
         }
 
-        // Otherwise, create a union for all the children in our place
-        return createUnion(obj, validChildren);
-      }
+        // If we don't have enough children to make this valid, then early out
+        if (validChildren.length < sdfParameterCount) {
+          // If we have no children, then we can't validly display anything
+          if (validChildren.length === 0) {
+            return null;
+          }
+          // If we only have one valid child, promote it to be in our place
+          if (validChildren.length === 1) {
+            return validChildren[0];
+          }
 
-      if (sdfParameterCount === 0 && validChildren.length !== 0) {
-        // Generate a union and place all children and this node under that union
-        return createUnion(obj, [...validChildren, createNode(obj, obj, [])]);
-      }
-
-      // Unary operation
-      if (sdfParameterCount === 1) {
-        // At this point we already handled having 0 or 1 parameters above
-        // This means we need to create a union for all children and have that union as our single input
-        return createNode(obj, obj, [createUnion(obj, validChildren)]);
-      }
-
-      // Binary operation
-      if (sdfParameterCount === 2) {
-        // At this point we already handled 0, 1, or 2 parameters above
-        // Binary operations are special and can be chained
-        let lhs = validChildren[0];
-        for (let i = 1; i < validChildren.length; ++i) {
-          lhs = createNode(obj, obj, [lhs, validChildren[i]]);
+          // Otherwise, create a union for all the children in our place
+          return createUnion(obj, validChildren);
         }
-        return lhs;
-      }
 
-      // At this point we've handled all 0, 1, and 2 sdf parameter shaders, meaning the shader has more
-      // We've also handled all cases where we have less children than expected, or the exact number of children
-      // That means here we have more children than were expected, so we make a union for the node itself and
-      // the remaining children
-      if (validChildren.length <= sdfParameterCount) {
-        throw new Error("Should have had more children than expected parameters since we got to this case");
+        if (sdfParameterCount === 0 && validChildren.length !== 0) {
+          // Generate a union and place all children and this node under that union
+          return createUnion(obj, [...validChildren, createNode(obj, obj, [])]);
+        }
+
+        // Unary operation
+        if (sdfParameterCount === 1) {
+          // At this point we already handled having 0 or 1 parameters above
+          // This means we need to create a union for all children and have that union as our single input
+          return createNode(obj, obj, [createUnion(obj, validChildren)]);
+        }
+
+        // Binary operation
+        if (sdfParameterCount === 2) {
+          // At this point we already handled 0, 1, or 2 parameters above
+          // Binary operations are special and can be chained
+          let lhs = validChildren[0];
+          for (let i = 1; i < validChildren.length; ++i) {
+            lhs = createNode(obj, obj, [lhs, validChildren[i]]);
+          }
+          return lhs;
+        }
+
+        // At this point we've handled all 0, 1, and 2 sdf parameter shaders, meaning the shader has more
+        // We've also handled all cases where we have less children than expected, or the exact number of children
+        // That means here we have more children than were expected, so we make a union for the node itself and
+        // the remaining children
+        if (validChildren.length <= sdfParameterCount) {
+          throw new Error("Should have had more children than expected parameters since we got to this case");
+        }
+        const exactChildren = validChildren.slice(0, sdfParameterCount);
+        const remainingChildren = validChildren.slice(sdfParameterCount);
+        return createUnion(obj, [createNode(obj, obj, exactChildren), ...remainingChildren]);
       }
-      const exactChildren = validChildren.slice(0, sdfParameterCount);
-      const remainingChildren = validChildren.slice(sdfParameterCount);
-      return createUnion(obj, [createNode(obj, obj, exactChildren), ...remainingChildren]);
     }
 
     const roots: SDFShaderNode[] = [];
