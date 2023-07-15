@@ -2803,12 +2803,14 @@ export class RaverieVisualizer {
       insertLocations.push(sdf.functionNameMangleIndex);
 
       // Mangle all calls to gSdfMap
+      let hadSdfMapCalls = false;
       const sdfMapRegex = /\bgSdfMap\b/gum;
       for (; ;) {
         const result = sdfMapRegex.exec(sdf.code);
         if (!result) {
           break;
         }
+        hadSdfMapCalls = true;
         insertLocations.push(result.index + result[0].length);
       }
 
@@ -2822,32 +2824,36 @@ export class RaverieVisualizer {
         mangledCode = insertString(mangledCode, insertLocation, mangleIdPostfix);
       }
 
-      shaderFunctions += `gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf);\n`
+      if (hadSdfMapCalls) {
+        shaderFunctions += `gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf);\n`
+      }
       shaderFunctions += `${mangledCode}\n`;
 
-      shaderMaps += `
-      gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf) {
-        vec3 savedPoint = context.point;
-        gSdfResult result = gSdfResultNull;
-        context.id = sdf.id;
-
-        switch (sdf.id) {`;
-
-      for (const node of sdf.allChildShaderNodes) {
+      if (hadSdfMapCalls) {
         shaderMaps += `
-          case ${node.id}: {
-            ${generateMapCall(node)}
-            break;
-          }`;
-      }
+        gSdfResult gSdfMap_${sdf.mangledId}(inout gSdfContext context, gSdf sdf) {
+          vec3 savedPoint = context.point;
+          gSdfResult result = gSdfResultNull;
+          context.id = sdf.id;
 
-      shaderMaps += `
+          switch (sdf.id) {`;
+
+        for (const node of sdf.allChildShaderNodes) {
+          shaderMaps += `
+            case ${node.id}: {
+              ${generateMapCall(node)}
+              break;
+            }`;
         }
-        
-        context.point = savedPoint;
-        context.results[sdf.id] = result;
-        return result;
-      }`;
+
+        shaderMaps += `
+          }
+          
+          context.point = savedPoint;
+          context.results[sdf.id] = result;
+          return result;
+        }`;
+      }
     }
 
     let shaderParams = "";
