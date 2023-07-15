@@ -98,12 +98,15 @@ export const unionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-  gSdfResult r1 = gSdfMap(context, d1);
-  gSdfResult r2 = gSdfMap(context, d2);
-  float h = clamp(0.5 + 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(r1.distance, r2.distance, h) - smoothing * h * (1.0 - h);
-  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult r1 = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult r2 = gSdfMap(context, variadic.sdfs[i]);
+    float h = clamp(0.5 + 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
+    float distance = mix(r1.distance, r2.distance, h) - smoothing * h * (1.0 - h);
+    r1 = gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+  }
+  return r1;
 }`.trim(),
 };
 
@@ -116,12 +119,15 @@ export const subtractionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-  gSdfResult r1 = gSdfMap(context, d1);
-  gSdfResult r2 = gSdfMap(context, d2);
-  float h = clamp(0.5 - 0.5 * (r1.distance + r2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(r1.distance, -r2.distance, h) + smoothing * h * (1.0 - h);
-  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult r1 = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult r2 = gSdfMap(context, variadic.sdfs[i]);
+    float h = clamp(0.5 - 0.5 * (r1.distance + r2.distance) / smoothing, 0.0, 1.0);
+    float distance = mix(r1.distance, -r2.distance, h) + smoothing * h * (1.0 - h);
+    r1 = gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+  }
+  return r1;
 }`.trim(),
 };
 
@@ -134,12 +140,15 @@ export const intersectionSdf: LayerSDF = {
   layers: [],
   code: `
 uniform float smoothing; // min: 0, max: 1
-gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-  gSdfResult r1 = gSdfMap(context, d1);
-  gSdfResult r2 = gSdfMap(context, d2);
-  float h = clamp(0.5 - 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
-  float distance = mix(r1.distance, r2.distance, h) + smoothing * h * (1.0 - h);
-  return gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult r1 = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult r2 = gSdfMap(context, variadic.sdfs[i]);
+    float h = clamp(0.5 - 0.5 * (r1.distance - r2.distance) / smoothing, 0.0, 1.0);
+    float distance = mix(r1.distance, r2.distance, h) + smoothing * h * (1.0 - h);
+    r1 = gSdfResult(distance, h >= 0.5 ? r2.id : r1.id);
+  }
+  return r1;
 }`.trim(),
 };
 
