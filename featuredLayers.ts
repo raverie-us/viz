@@ -26,6 +26,7 @@ import { sdfRayMarchingLayer } from "./layers/sdfRayMarching";
 import {
   boxSdf,
   bumpSdf,
+  caveSdf,
   cylinderSdf,
   fastIntersectionSdf,
   fastSubtractionSdf,
@@ -48,6 +49,7 @@ export const featuredSdfs: LayerSDF[] = [
   cylinderSdf,
   infiniteCylinderSdf,
   torusSdf,
+  caveSdf,
   unionSdf,
   subtractionSdf,
   intersectionSdf,

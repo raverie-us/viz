@@ -89,6 +89,26 @@ gSdfResult map(inout gSdfContext context) {
 }`.trim(),
 };
 
+export const caveSdf: LayerSDF = {
+  type: "sdf",
+  name: "cave",
+  id: "cave",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float thickness; // default: 0.5, min: 0, max: 1
+uniform float warping; // default: 0.5, min: 0, max: 1
+
+gSdfResult map(inout gSdfContext context) {
+  vec3 p = context.point;
+  p.z = mod(p.z, 80.) - 40.;
+  float cut = dot(cos(p * 3.14159265 / 8.), sin(p.yzx * 3.14159265 / 8.)) + 2.2 - mix(0.7, 1.0, thickness);
+  cut += sin(p.z * (0.5 + gAudioReactiveScalar * 0.05) + gAudioReactiveScalar * 0.5 + gTime + dot(abs(gPosition), vec2(1))) * warping * 0.5;
+  return gSdfResult(cut, context.id);
+}`.trim(),
+};
+
 export const unionSdf: LayerSDF = {
   type: "sdf",
   name: "union",
