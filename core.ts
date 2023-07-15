@@ -1245,12 +1245,16 @@ const sdfUnion: LayerSDF = {
   values: [],
   layers: [],
   code: `
-  gSdfResult map(inout gSdfContext context, gSdf d1, gSdf d2) {
-    gSdfResult r1 = gSdfMap(context, d1);
-    gSdfResult r2 = gSdfMap(context, d2);
-    float distance = min(r1.distance, r2.distance);
-    return gSdfResult(distance, r1.distance < r2.distance ? r1.id : r2.id);
-  }`,
+gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
+  gSdfResult result = gSdfMap(context, variadic.sdfs[0]);
+  for (int i = 1; i < variadic.count; ++i) {
+    gSdfResult next = gSdfMap(context, variadic.sdfs[i]);
+    if (next.distance < result.distance) {
+      result = next;
+    }
+  }
+  return result;
+}`.trim(),
 };
 
 const idToMangleId = (name: string) =>
@@ -1444,7 +1448,6 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
 const int gSdfNoHitId = ${sdfNoHitId};
 const int gSdfHighlightNone = ${sdfHighlightNone};
 const int gSdfVariadicMax = ${sdfVariadicMax};
-#define VARIADIC_SDF gSdf sdfArray[gSdfVariadicMax], int sdfCount
 
 struct gSdf {
   int id;
@@ -1455,9 +1458,14 @@ struct gSdfResult {
   int id;
 };
 
+struct gSdfVariadic {
+  int count;
+  gSdf sdfs[gSdfVariadicMax];
+};
+
 const gSdf gSdfNull = gSdf(gSdfNoHitId);
 const gSdfResult gSdfResultNull = gSdfResult(-1.0, gSdfNoHitId);
-gSdf gSdfNullArray[gSdfVariadicMax] = gSdf[gSdfVariadicMax](${new Array(sdfVariadicMax).fill("gSdfNull").join(",")});
+const gSdfVariadic gSdfVariadicNull = gSdfVariadic(0, gSdf[gSdfVariadicMax](${new Array(sdfVariadicMax).fill("gSdfNull").join(",")}));
 `;
 
 const countCodeLines = (code: string) => code.split(newlineRegex).length;
@@ -2524,19 +2532,22 @@ export class RaverieVisualizer {
 
       const signature = code.substring(signatureStart, signatureEnd);
 
-      const paramRegex = /(?:gSdf\s+([a-zA-Z_][a-zA-Z0-9_]*)|(VARIADIC_SDF))/gm;
+      const paramRegex = /(?:gSdf\s+([a-zA-Z_][a-zA-Z0-9_]*))|(?:gSdfVariadic\s+([a-zA-Z_][a-zA-Z0-9_]*))/gm;
       for (; ;) {
         const paramResult = paramRegex.exec(signature);
         if (!paramResult) {
           break;
         }
 
-        if (paramResult[2] === "VARIADIC_SDF") {
+        if (paramResult[2]) {
           if (sdfParameters.length) {
-            addParseError("Cannot take sdf parameters and use VARIADIC at the same time");
+            addParseError("Cannot take gSdf parameters and use gSdfVariadic at the same time");
           }
           variadicSdf = true;
         } else {
+          if (variadicSdf) {
+            addParseError("Cannot take gSdf parameters and use gSdfVariadic at the same time");
+          }
           const paramName = paramResult[1];
           sdfParameters.push({
             name: paramName
@@ -2550,7 +2561,7 @@ export class RaverieVisualizer {
 
       // The footer will call the map function with "null" sdfs or an empty sdf array for variadics
       const sdfArgs = variadicSdf
-        ? ", gSdfNullArray, 0"
+        ? ", gSdfVariadicNull"
         : ", gSdfNull".repeat(sdfParameters.length);
       sdfFooter = `
         vec4 render() {
@@ -2645,27 +2656,16 @@ export class RaverieVisualizer {
       return node;
     };
 
-    const createBinaryChain = (ownerSdf: CompiledLayerSDF, sdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
-      if (children.length < 2) {
-        throw new Error("Expected at least 2 children for a binary chain");
-      }
-      let lhs = children[0];
-      for (let i = 1; i < children.length; ++i) {
-        lhs = createNode(ownerSdf, sdf, [lhs, children[i]]);
-      }
-      return lhs;
-    }
-
     // Special case for unions since they are a built in operation
     let unionCounter = 0;
     const createUnion = (ownerSdf: CompiledLayerSDF, children: SDFShaderNode[]): SDFShaderNode => {
-      const sdfUnionNew = {...sdfUnion};
+      const sdfUnionNew = { ...sdfUnion };
       sdfUnionNew.id = `union_${unionCounter}`;
       sdfUnionNew.name = sdfUnionNew.id;
       ++unionCounter;
       const unionSdf = this.compileLayerSDF({}, sdfUnionNew, null, true);
       allValidSdfs.push(unionSdf);
-      return createBinaryChain(ownerSdf, unionSdf, children);
+      return createNode(ownerSdf, unionSdf, children);
     }
 
     const recurse = (obj: CompiledLayerSDF): SDFShaderNode | null => {
@@ -2725,13 +2725,9 @@ export class RaverieVisualizer {
 
         // Binary operation
         if (sdfParameterCount === 2) {
-          // At this point we already handled 0, 1, or 2 parameters above
-          // Binary operations are special and can be chained
-          let lhs = validChildren[0];
-          for (let i = 1; i < validChildren.length; ++i) {
-            lhs = createNode(obj, obj, [lhs, validChildren[i]]);
-          }
-          return lhs;
+          // At this point we already handled 0, 1, or 2 parameters above, so we have more than 2 here
+          // We always apply the binary operation between the first parameter and the rest as a union
+          return createNode(obj, obj, [validChildren[0], createUnion(obj, validChildren.slice(1))]);
         }
 
         // At this point we've handled all 0, 1, and 2 sdf parameter shaders, meaning the shader has more
@@ -2777,6 +2773,23 @@ export class RaverieVisualizer {
     const insertString = (base: string, baseIndex: number, toBeInserted: string) =>
       `${base.substring(0, baseIndex)}${toBeInserted}${base.substring(baseIndex)}`;
 
+    const generateMapCall = (node: SDFShaderNode) => {
+      if (node.sdf.variadicSdf) {
+        return `
+          gSdfVariadic variadic = gSdfVariadicNull;
+          variadic.count = ${node.children.length};
+          ${node.children.map((child, index) => `variadic.sdfs[${index}] = gSdf(${child.id});`).join("")}
+          result = map_${node.sdf.mangledId}(context, variadic);`;
+      }
+
+      let shaderParams = "";
+      for (const child of node.children) {
+        shaderParams += `, gSdf(${child.id})`;
+      }
+
+      return `result = map_${node.sdf.mangledId}(context${shaderParams});`;
+    }
+
     for (const sdf of treeResult.allValidSdfs) {
       if (sdf.errors.length !== 0 || sdf.functionNameMangleIndex === -1) {
         console.error(sdf);
@@ -2821,14 +2834,9 @@ export class RaverieVisualizer {
         switch (sdf.id) {`;
 
       for (const node of sdf.allChildShaderNodes) {
-        let shaderParams = "";
-        for (const child of node.children) {
-          shaderParams += `, gSdf(${child.id})`;
-        }
-
         shaderMaps += `
           case ${node.id}: {
-            result = map_${node.sdf.mangledId}(context${shaderParams});
+            ${generateMapCall(node)}
             break;
           }`;
       }
@@ -2846,7 +2854,10 @@ export class RaverieVisualizer {
     for (const child of treeResult.root.children) {
       shaderParams += `, gSdf(${child.id})`;
     }
-    const shaderScene = `return map_${treeResult.root.sdf.mangledId}(context${shaderParams});`;
+    const shaderScene = `
+    gSdfResult result;
+    ${generateMapCall(treeResult.root)}
+    return result;`;
 
     return this.generateSDFShaderHeader(`${shaderFunctions}\n${shaderMaps}`, treeResult.nodeCount, treeResult.root.id, shaderScene);
   };
@@ -2904,7 +2915,6 @@ export class RaverieVisualizer {
     const gl = this.gl;
     const processedProgram = this.createProgram(`${sdfHeader}\n${layerShader.code}`);
 
-    console.log("processedProgram.completeCode", processedProgram.completeCode);
     if (processedProgram.error) {
       const programText = addLineNumbers(processedProgram.completeCode);
       const shaderTreeText = sdfTreeResult ? debugShaderTree(sdfTreeResult.root) : null;
