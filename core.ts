@@ -1323,6 +1323,19 @@ mat2 gRotateMatrix2D(float radians) {
   return mat2(c, s, -s, c);
 }
 
+mat3 gRotateMatrix3D(float radians, vec3 axis) {
+  axis = normalize(axis);
+  float c = cos(radians);
+  float s = sin(radians);
+  float oc = 1.0 - c;
+
+  return mat3(
+    oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+    oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
+    oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c
+  );
+}
+
 struct gGradientStop {
   float t;
   vec4 color;
