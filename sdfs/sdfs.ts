@@ -70,6 +70,36 @@ gSdfResult map(inout gSdfContext context) {
 }`.trim(),
 };
 
+export const coneSdf: LayerSDF = {
+  type: "sdf",
+  name: "cone",
+  id: "cone",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float angleDegrees; // default: 53.14, min: 0, max: 90
+uniform float height; // default: 1, min: 0, max: 5
+gSdfResult map(inout gSdfContext context) {
+  float radians = gDegreesToRadians(angleDegrees / 2.0);
+  vec2 c = vec2(sin(radians), cos(radians));
+
+  // c is the sin/cos of the angle, h is height
+  // Alternatively pass q instead of (c,h),
+  // which is the point at the base in 2D
+  vec2 q = height * vec2(c.x/c.y,-1.0);
+  vec3 p = context.point - vec3(0,height/2.0,0);
+  vec2 w = vec2( length(p.xz), p.y );
+  vec2 a = w - q*clamp( dot(w,q)/dot(q,q), 0.0, 1.0 );
+  vec2 b = w - q*vec2( clamp( w.x/q.x, 0.0, 1.0 ), 1.0 );
+  float k = sign( q.y );
+  float d = min(dot( a, a ),dot(b, b));
+  float s = max( k*(w.x*q.y-w.y*q.x),k*(w.y-q.y)  );
+
+  return gSdfResult(sqrt(d)*sign(s), context.id);
+}`.trim(),
+};
+
 export const torusSdf: LayerSDF = {
   type: "sdf",
   name: "torus",
