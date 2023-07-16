@@ -377,6 +377,36 @@ gSdfResult map(inout gSdfContext context, gSdf arg) {
 }`.trim(),
 };
 
+export const transformSdf: LayerSDF = {
+  type: "sdf",
+  name: "transform",
+  id: "transform",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform vec3 translation;
+uniform vec3 rotation;
+uniform float scale; // default: 1, min: 0.1, max: 2
+uniform vec3 translationSpeed;
+uniform vec3 rotationSpeed;
+
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  context.point += translation + translationSpeed * gTime;
+
+  vec3 rot = rotation + rotationSpeed * gTime;
+  context.point *= gRotateMatrix3D(gDegreesToRadians(rot.y), vec3(0,1,0));
+  context.point *= gRotateMatrix3D(gDegreesToRadians(rot.x), vec3(1,0,0));
+  context.point *= gRotateMatrix3D(gDegreesToRadians(rot.z), vec3(0,0,1));
+
+  context.point /= scale;
+
+  gSdfResult result = gSdfMap(context, arg);
+  result.distance *= scale;
+  return result;
+}`.trim(),
+};
+
 export const fastUnionSdf: LayerSDF = {
   type: "sdf",
   name: "fast union",
