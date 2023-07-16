@@ -10,8 +10,8 @@ const int MAX_MARCHING_STEPS = 96;
 const float MAX_MARCHING_DISTANCE = 100.0;
 const float HIT_PRECISION = 0.002;
 const float NEAR_PRECISION = 0.5;
-const float MIN_MARCHING_DISTANCE_NEAR = 0.02;
-const float MIN_MARCHING_DISTANCE_FAR = 0.2;
+const float MIN_MARCHING_DISTANCE_NEAR = 0.001;
+const float MIN_MARCHING_DISTANCE_FAR = 0.1;
 
 uniform vec3 cameraWorldPosition; // default: [0, 0, -1]
 uniform vec3 cameraWorldDirection; // default: [0, 0, 1]
