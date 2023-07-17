@@ -370,9 +370,11 @@ export const repeatSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-uniform vec3 repeat; // default: [1,1,1], min: [0.1,0.1,0.1], max: [5,5,5]
+uniform vec3 repeat; // default: [2,2,2], min: [0.1,0.1,0.1], max: [5,5,5]
+uniform vec3 limits; // default: [10,10,10], min: [1,1,1], max: [100, 100, 100]
 gSdfResult map(inout gSdfContext context, gSdf arg) {
-  context.point = mod(context.point + 0.5 * repeat, repeat) - 0.5 * repeat;
+  vec3 offset = repeat * clamp(round(context.point / repeat), -limits, limits);
+  context.point -= offset;
   return gSdfMap(context, arg);
 }`.trim(),
 };
