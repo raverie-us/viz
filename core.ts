@@ -535,6 +535,7 @@ export interface CompiledLayerSDF extends CompiledLayerObject {
 
   shaderNodes: SDFShaderNode[];
   allChildShaderNodes: SDFShaderNode[];
+  sdfId: number;
 }
 
 export interface CompiledLayerShader extends CompiledLayerCodeBase {
@@ -895,6 +896,8 @@ interface ProcessedLayerShader extends CompiledLayerShader {
   gPreviousLayer: WebGLUniformLocation | null;
   gBlendMode: WebGLUniformLocation | null;
   gFlipY: WebGLUniformLocation | null;
+  gZero: WebGLUniformLocation | null;
+  gSdfHighlightId: WebGLUniformLocation | null;
 
   gAudioFrequencies: WebGLUniformLocation | null;
   gAudioSamples: WebGLUniformLocation | null;
@@ -1286,7 +1289,7 @@ const fragmentShaderHeader = `#version 300 es
 precision highp float;
 const float gPI = acos(-1.0);
 const float gPI2 = gPI * 2.0;
-const float gFloatMax = ${Number.MAX_VALUE};
+const float gPositiveInfinity = intBitsToFloat(0x7F800000);
 in vec2 gPosition;
 in vec2 gUV;
 out vec4 gFragColor;
@@ -1296,6 +1299,7 @@ uniform vec2 gResolution;
 uniform float gTime;
 uniform int gFrame;
 uniform int gBlendMode;
+uniform int gZero;
 
 uniform sampler2D gAudioFrequencies;
 uniform sampler2D gAudioSamples;
@@ -1462,6 +1466,7 @@ vec4 gApplyBlendMode(int blendMode, float opacity, vec4 source, vec4 dest) {
 const int gSdfNoHitId = ${sdfNoHitId};
 const int gSdfHighlightNone = ${sdfHighlightNone};
 const int gSdfVariadicMax = ${sdfVariadicMax};
+uniform int gSdfHighlightId;
 
 struct gSdf {
   int id;
@@ -1478,7 +1483,7 @@ struct gSdfVariadic {
 };
 
 const gSdf gSdfNull = gSdf(gSdfNoHitId);
-const gSdfResult gSdfResultNull = gSdfResult(gFloatMax, gSdfNoHitId);
+const gSdfResult gSdfResultNull = gSdfResult(gPositiveInfinity, gSdfNoHitId);
 const gSdfVariadic gSdfVariadicNull = gSdfVariadic(0, gSdf[gSdfVariadicMax](${new Array(sdfVariadicMax).fill("gSdfNull").join(",")}));
 `;
 
@@ -1640,6 +1645,7 @@ export class RaverieVisualizer {
   private lastTimeStampMs: number = -1;
   private frame: number = -1;
   private isRenderingInternal = false;
+  private sdfHighlightId: number = sdfNoHitId;
 
   private buttonStates: Record<string, ShaderButtonState | undefined> = {};
   private axisStates: Record<string, ShaderAxisState | undefined> = {};
@@ -2622,7 +2628,8 @@ export class RaverieVisualizer {
       variadicSdf,
 
       shaderNodes: [],
-      allChildShaderNodes: []
+      allChildShaderNodes: [],
+      sdfId: sdfNoHitId
     };
 
     // Reparent the uniforms to this layer and clear locations
@@ -2667,6 +2674,9 @@ export class RaverieVisualizer {
         sdf,
       };
       shaderNodesPerObject.push(node);
+      if (ownerSdf.sdfId === sdfNoHitId) {
+        ownerSdf.sdfId = id;
+      }
       return node;
     };
 
@@ -2864,7 +2874,9 @@ export class RaverieVisualizer {
           }
           
           context.point = savedPoint;
-          context.results[sdf.id] = result;
+          if (context.renderId == sdf.id) {
+            context.result = result;
+          }
           return result;
         }`;
       }
@@ -2877,8 +2889,10 @@ export class RaverieVisualizer {
     const shaderScene = `
     gSdfResult result;
     ${generateMapCall(treeResult.root)}
-    context.results[gSdfRootId] = result;
-    return result;`;
+    if (context.renderId == gSdfRootId) {
+      context.result = result;
+    }
+    return context.result;`;
 
     return this.generateSDFShaderHeader(`${shaderFunctions}\n${shaderMaps}`, treeResult.nodeCount, treeResult.root.id, shaderScene);
   };
@@ -2891,11 +2905,11 @@ export class RaverieVisualizer {
     struct gSdfContext {
       vec3 point;
       int id;
-      gSdfResult results[gSdfNodeCount];
+      int renderId;
+      gSdfResult result;
     };
 
-    const gSdfResult gSdfResultArrayNull[gSdfNodeCount] = gSdfResult[gSdfNodeCount](${new Array(nodeCount).fill("gSdfResultNull").join(",")});
-    const gSdfContext gSdfContextNull = gSdfContext(vec3(0), gSdfNoHitId, gSdfResultArrayNull);
+    const gSdfContext gSdfContextNull = gSdfContext(vec3(0), gSdfNoHitId, gSdfRootId, gSdfResultNull);
 
     // Dummy version that never gets called since we mangle all calls to gSdfMap
     // This is only used when compiling the sdf in isolation
@@ -3001,6 +3015,8 @@ export class RaverieVisualizer {
       gPreviousLayer: getUniformLocation("gPreviousLayer"),
       gBlendMode: getUniformLocation("gBlendMode"),
       gFlipY: getUniformLocation("gFlipY"),
+      gZero: getUniformLocation("gZero"),
+      gSdfHighlightId: getUniformLocation("gSdfHighlightId"),
       gAudioFrequencies: getUniformLocation("gAudioFrequencies"),
       gAudioSamples: getUniformLocation("gAudioSamples"),
       gAudioVolume: getUniformLocation("gAudioVolume"),
@@ -3253,6 +3269,10 @@ export class RaverieVisualizer {
     return this.evaluateCurve(curve, `${uniformKey}_curve`, timeSeconds);
   }
 
+  public highlightSdf(sdf: CompiledLayerSDF | null) {
+    this.sdfHighlightId = sdf ? sdf.sdfId : sdfNoHitId;
+  }
+
   private checkErrors() {
     const errorCode = this.gl.getError();
     switch (errorCode) {
@@ -3291,6 +3311,8 @@ export class RaverieVisualizer {
       gl.uniform1f(processedLayerShader.gTime, timeSeconds);
       gl.uniform1i(processedLayerShader.gFrame, this.frame);
       gl.uniform1i(processedLayerShader.gFlipY, Number(flipY));
+      gl.uniform1i(processedLayerShader.gZero, 0);
+      gl.uniform1i(processedLayerShader.gSdfHighlightId, this.sdfHighlightId);
 
       const blendModeIndex = blendModeToIndex[processedLayerShader.layer.blendMode];
       gl.uniform1i(processedLayerShader.gBlendMode, blendModeIndex);
