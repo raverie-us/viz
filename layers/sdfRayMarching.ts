@@ -16,16 +16,16 @@ const float MIN_MARCHING_DISTANCE_FAR = 0.1;
 uniform vec3 cameraWorldPosition; // default: [0, 0, -1]
 uniform vec3 cameraWorldDirection; // default: [0, 0, 1]
 
+uniform vec4 highlightColor; // default: [0.3, 1, 0.3, 0.5], type: "color"
+uniform vec4 highlightBorderColor; // default: [0,0,0,1], type: "color"
+
 // TODO(trevor): Move these into built-ins
 uniform bool shouldRenderIds;
-uniform int highlightId; // default: -1
-uniform int zero;
 
-vec3 calcNormal(vec3 p) {
+vec3 calcNormal(inout gSdfContext context, vec3 p) {
   const float epsilon = 0.001;
   vec3 n = vec3(0.0);
-  gSdfContext context = gSdfContextNull;
-  for(int i = zero; i < 4; ++i) {
+  for(int i = gZero; i < 4; ++i) {
     vec3 e = 0.5773 * (2.0 * vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
     context.point = p + e * epsilon;
     n += e * gSdfScene(context).distance;
@@ -93,7 +93,7 @@ vec4 render() {
     vec4 finalColor = vec4(0.0, 0.0, 0.0, 0.0);
     if (result.id != gSdfNoHitId) {
       vec3 p = ro + rd * result.distance;
-      vec3 normal = calcNormal(p);
+      vec3 normal = calcNormal(context, p);
       finalColor = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
       // test ids
@@ -101,11 +101,27 @@ vec4 render() {
       //return vec4(color, 1.0);
     }
 
-    if (highlightId != gSdfHighlightNone) {
-      gSdfResult highlightResult = context.results[highlightId];
-      if (highlightResult.id != gSdfNoHitId && result.id != gSdfNoHitId) {
-        bool isOccluded = result.id != highlightResult.id;
-        finalColor.rgb += vec3(isOccluded ? 0.15 : 0.35);
+    if (gSdfHighlightId != gSdfHighlightNone) {
+      gSdfContext highlightContext = gSdfContextNull;
+      highlightContext.renderId = gSdfHighlightId;
+      gSdfResult highlightResult = rayMarch(highlightContext, ro, rd);
+      float check = float(highlightResult.id);
+      if (dFdx(check) != 0.0 || dFdy(check) != 0.0) {
+        return highlightBorderColor;
+      }
+      if (highlightResult.id != gSdfNoHitId) {
+        vec3 highlightPoint = ro + rd * highlightResult.distance;
+        vec3 highlightNormal = calcNormal(highlightContext, highlightPoint);
+        vec4 highlight = vec4(highlightColor.rgb, max(finalColor.a, highlightColor.a)) + vec4(highlightNormal * 0.5, 0);
+        if (result.id == gSdfNoHitId) {
+          finalColor = highlight;
+        } else if (highlightResult.id == gSdfHighlightId) {
+          finalColor = mix(finalColor, highlight, 0.35);
+        } else if (result.id == highlightResult.id) {
+          finalColor = mix(finalColor, highlight, 0.15);
+        } else {
+          finalColor = mix(finalColor, highlight, 0.15);
+        }
       }
     }
     return finalColor;
