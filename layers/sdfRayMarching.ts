@@ -6,7 +6,7 @@ export const sdfRayMarchingLayer: LayerShader = {
   id: "sdf ray marching",
   visible: true,
   code: `
-const int MAX_MARCHING_STEPS = 96;
+const int MAX_MARCHING_STEPS = 100;
 const float MAX_MARCHING_DISTANCE = 100.0;
 const float HIT_PRECISION = 0.002;
 const float NEAR_PRECISION = 0.5;
@@ -34,32 +34,31 @@ vec3 calcNormal(inout gSdfContext context, vec3 p) {
 }
 
 gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
-  gSdfResult result = gSdfResult(0.0, gSdfNoHitId);
-  gSdfResult query = gSdfResult(MAX_MARCHING_DISTANCE, gSdfNoHitId);
+  float distance = 0.0;
+  gSdfResult query;
 
   for (int i = 0; i < MAX_MARCHING_STEPS; ++i) {
-    context.point = ro + result.distance * rd;
+    context.point = ro + distance * rd;
     query = gSdfScene(context);
 
-    float z = result.distance / MAX_MARCHING_DISTANCE;
+    float z = distance / MAX_MARCHING_DISTANCE;
     float minMarchingDistance = mix(MIN_MARCHING_DISTANCE_NEAR, MIN_MARCHING_DISTANCE_FAR, z);
-    result.distance += max(query.distance, minMarchingDistance);
+    distance += max(query.distance, minMarchingDistance);
     // We do this to avoid hitting INF or other bad
     // number cases when the ray shoots off to infinity
-    if (result.distance >= MAX_MARCHING_DISTANCE) {
-      return result;
+    if (distance >= MAX_MARCHING_DISTANCE) {
+      return gSdfResultNull;
     }
     if (query.distance < HIT_PRECISION) {
-      result.id = query.id;
-      return result;
+      return gSdfResult(distance, query.id);
     }
   }
   // If we missed everything above, improve the result by just 
   // using whatever was closest (misses usually go very far)
   if (query.distance < NEAR_PRECISION) {
-    result.id = query.id;
+    return gSdfResult(distance, query.id);
   }
-  return result;
+  return gSdfResultNull;
 }
 
 mat3 camera(vec3 cameraPos, vec3 cameraDirection) {
