@@ -61,7 +61,7 @@ gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
   return gSdfResultNull;
 }
 
-mat3 camera(vec3 cameraPos, vec3 cameraDirection) {
+mat3 camera(vec3 cameraDirection) {
   vec3 cd = normalize(cameraDirection);
   vec3 cr = normalize(cross(vec3(0, 1, 0), cd));
   vec3 cu = normalize(cross(cd, cr));
@@ -73,7 +73,7 @@ vec4 render() {
   vec3 ro = cameraWorldPosition;
   vec2 coord = gPosition;
   coord.y *= gResolution.y / gResolution.x;
-  vec3 rd = camera(ro, cameraWorldDirection) * normalize(vec3(coord, -1)); // ray direction
+  vec3 rd = camera(cameraWorldDirection) * normalize(vec3(coord, -1));
   gSdfContext context = gSdfContextNull;
   gSdfResult result = rayMarch(context, ro, rd);
 
