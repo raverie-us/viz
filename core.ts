@@ -1340,6 +1340,13 @@ mat3 gRotateMatrix3D(float radians, vec3 axis) {
   );
 }
 
+mat3 gRotateEulerMatrix3D(vec3 radians) {
+  return
+    gRotateMatrix3D(gDegreesToRadians(radians.y), vec3(0,1,0)) *
+    gRotateMatrix3D(gDegreesToRadians(radians.x), vec3(1,0,0)) *
+    gRotateMatrix3D(gDegreesToRadians(radians.z), vec3(0,0,1));
+}
+
 struct gGradientStop {
   float t;
   vec4 color;
