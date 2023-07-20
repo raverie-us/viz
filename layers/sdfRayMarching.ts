@@ -69,11 +69,15 @@ mat3 camera(vec3 cameraDirection) {
   return mat3(-cr, cu, -cd);
 }
 
+vec3 cameraDirection(vec2 offset) {
+  vec2 coord = gPosition + offset * (1.0 / gResolution);
+  coord.y *= gResolution.y / gResolution.x;
+  return camera(cameraWorldDirection) * normalize(vec3(coord, -1));
+}
+
 vec4 render() {
   vec3 ro = cameraWorldPosition;
-  vec2 coord = gPosition;
-  coord.y *= gResolution.y / gResolution.x;
-  vec3 rd = camera(cameraWorldDirection) * normalize(vec3(coord, -1));
+  vec3 rd = cameraDirection(vec2(0));
   gSdfContext context = gSdfContextNull;
   gSdfResult result = rayMarch(context, ro, rd);
 
@@ -104,10 +108,13 @@ vec4 render() {
       gSdfContext highlightContext = gSdfContextNull;
       highlightContext.renderId = gSdfHighlightId;
       gSdfResult highlightResult = rayMarch(highlightContext, ro, rd);
-      float check = float(highlightResult.id);
-      if (dFdx(check) != 0.0 || dFdy(check) != 0.0) {
-        return highlightBorderColor;
-      }
+      int differentIdCount = 0;
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(-1, +0))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+1, +0))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+0, -1))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+0, +1))).id);
+      float border = float(differentIdCount) / 4.0;
+
       if (highlightResult.id != gSdfNoHitId) {
         vec3 highlightPoint = ro + rd * highlightResult.distance;
         vec3 highlightNormal = calcNormal(highlightContext, highlightPoint);
@@ -122,6 +129,8 @@ vec4 render() {
           finalColor = mix(finalColor, highlight, 0.15);
         }
       }
+
+      finalColor = mix(finalColor, highlightBorderColor, border);
     }
     return finalColor;
   }
