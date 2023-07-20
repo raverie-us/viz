@@ -13,8 +13,9 @@ const float NEAR_PRECISION = 0.5;
 const float MIN_MARCHING_DISTANCE_NEAR = 0.001;
 const float MIN_MARCHING_DISTANCE_FAR = 0.1;
 
-uniform vec3 cameraWorldPosition; // default: [0, 0, -1]
+uniform vec3 cameraWorldPosition; // default: [0, 0, -2]
 uniform vec3 cameraWorldDirection; // default: [0, 0, 1]
+uniform float cameraFov; // default: 90, min: 60, max: 120
 
 uniform vec4 highlightColor; // default: [0.3, 1, 0.3, 0.5], type: "color"
 uniform vec4 highlightBorderColor; // default: [0,0,0,1], type: "color"
@@ -72,7 +73,7 @@ mat3 camera(vec3 cameraDirection) {
 vec3 cameraDirection(vec2 offset) {
   vec2 coord = gPosition + offset * (1.0 / gResolution);
   coord.y *= gResolution.y / gResolution.x;
-  return camera(cameraWorldDirection) * normalize(vec3(coord, -1));
+  return camera(cameraWorldDirection) * normalize(vec3(coord, -1.0 / tan(gDegreesToRadians(cameraFov / 2.0))));
 }
 
 vec4 render() {
