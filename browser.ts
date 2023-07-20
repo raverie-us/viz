@@ -10,7 +10,9 @@ import {
   LoadTextureFunction,
   UserTexture,
   RaverieVisualizer,
-  UpdateTextureFunction
+  UpdateTextureFunction,
+  lerp,
+  defaultMaxDecibels
 } from "./core";
 
 interface RenderMessage {
@@ -231,6 +233,14 @@ class RaverieAudioAnalyserCore {
       throw new Error(`Mismatched frequencyBinCount, got ${this.frequencyAnalyser.frequencyBinCount}, expected ${defaultAudioSampleCount}`);
     }
   }
+
+  public destroy() {
+    this.frequencyAnalyser.disconnect();
+    this.samplesAnalyser.disconnect();
+    if (this.audioContextBase instanceof AudioContext) {
+      this.audioContextBase.close();
+    }
+  }
 }
 
 export abstract class RaverieAudioAnalyserBase {
@@ -238,6 +248,10 @@ export abstract class RaverieAudioAnalyserBase {
 
   protected frequencies = new Float32Array(defaultAudioSampleCount);
   protected samples = new Float32Array(defaultAudioSampleCount);
+
+  // When we have no input, we simulate a sine wave that bounces to this BPM
+  // Set this to 0 to disable
+  public noInputSimulatedBPM = 128;
 
   protected abstract initialize(): void;
 
@@ -260,9 +274,23 @@ export abstract class RaverieAudioAnalyserBase {
     if (this.core) {
       this.core.frequencyAnalyser.getFloatFrequencyData(this.frequencies);
       this.core.samplesAnalyser.getFloatTimeDomainData(this.samples);
-    } else {
+    } else if (this.noInputSimulatedBPM === 0) {
       this.frequencies.fill(defaultMinDecibels);
       this.samples.fill(0);
+    } else {
+      // By default, when we have no audio we just simulate sine waves at a given BPM
+      const hz = this.noInputSimulatedBPM / 60;
+      const timeSeconds = timeStampMs / 1000;
+      const overallVolume = Math.sin(timeSeconds * Math.PI * hz) * 0.5 + 0.5;
+      for (let i = 0; i < this.frequencies.length; ++i) {
+        const t = i / this.frequencies.length;
+        const decibelInterpolant = (Math.sin((t + timeSeconds) * Math.PI * 2) * 0.5 + 0.5) * overallVolume;
+        this.frequencies[i] = lerp(defaultMinDecibels, defaultMaxDecibels, decibelInterpolant);
+      }
+      for (let i = 0; i < this.samples.length; ++i) {
+        const t = i / this.samples.length;
+        this.samples[i] = Math.sin((t + timeSeconds) * Math.PI * 2) * overallVolume;
+      }
     }
 
     visualizer.updateAudioSamples(this.frequencies, this.samples, timeStampMs);
@@ -299,8 +327,6 @@ export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
   }
 
   public connectAudioSource(input: AudioInputType) {
-    const core = this.getCore();
-
     if (this.inputNode) {
       this.inputNode.disconnect();
       this.inputNode.disconnect();
@@ -308,6 +334,7 @@ export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
     }
 
     if (input) {
+      const core = this.getCore();
       if (input instanceof MediaStream) {
         if (!(core.audioContextBase instanceof AudioContext)) {
           throw new Error("Cannot use a MediaStream with an OfflineAudioContext");
@@ -325,6 +352,9 @@ export class RaverieAudioAnalyserLive extends RaverieAudioAnalyserBase {
 
       this.inputNode.connect(core.frequencyAnalyser);
       this.inputNode.connect(core.samplesAnalyser);
+    } else if (this.core) {
+      this.core.destroy();
+      this.core = null;
     }
 
     this.input = input;
