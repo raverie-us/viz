@@ -7,7 +7,7 @@ export const kaleidoscopeLayer: LayerShader = {
   visible: true,
   code: `
 uniform vec2 position; // type: "position"
-uniform int divisions; // default: 10, min: 3, max: 50
+uniform int divisions; // default: 5, min: 3, max: 50
 // Speed of the rotation where 1 is an entire rotation per second
 uniform float rotationsPerSecond; // default: 0.1, min: -2, max: 2
 uniform vec2 scrollSpeed; // default: [0.05, 0.05], min: [-1, -1], max: [1, 1]
