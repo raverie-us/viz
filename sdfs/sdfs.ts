@@ -339,10 +339,11 @@ export const twistSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-uniform float twist; // default: 1, min: -2, max: 2
+uniform float twistDegrees; // default: 1, min: -10, max: 10
 gSdfResult map(inout gSdfContext context, gSdf arg) {
-  float c = cos(twist * context.point.z);
-  float s = sin(twist * context.point.z);
+  float radians = gDegreesToRadians(twistDegrees);
+  float c = cos(radians * context.point.z);
+  float s = sin(radians * context.point.z);
   mat2  m = mat2(c, -s, s, c);
   context.point = vec3(m * context.point.xy, context.point.z);
   return gSdfMap(context, arg);
