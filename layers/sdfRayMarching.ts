@@ -13,9 +13,14 @@ const float NEAR_PRECISION = 0.5;
 const float MIN_MARCHING_DISTANCE_NEAR = 0.001;
 const float MIN_MARCHING_DISTANCE_FAR = 0.1;
 
-uniform vec3 cameraWorldPosition; // default: [0, 0, -2]
-uniform vec3 cameraWorldDirection; // default: [0, 0, 1]
-uniform float cameraFov; // default: 90, min: 60, max: 120
+uniform vec3 cameraPosition; // default: [0, 0, -2], min: [-10,-10,-10], max: [10,10,10]
+uniform vec3 cameraRotationDegrees; // default: [0, 0, 0], min: [-180,-180,-180], max: [180,180,180]
+uniform float cameraFovDegrees; // default: 80, min: 60, max: 100
+
+uniform axis xAxis; // default: {"gamepad": 0}
+uniform axis yAxis; // default: {"gamepad": 1}
+uniform float yAxisDegrees; // default: 45, min: 0, max: 90
+uniform float xAxisDegrees; // default: 45, min: 0, max: 90
 
 uniform vec4 highlightColor; // default: [0.3, 1, 0.3, 0.5], type: "color"
 uniform vec4 highlightBorderColor; // default: [0,0,0,1], type: "color"
@@ -62,23 +67,17 @@ gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
   return gSdfResultNull;
 }
 
-mat3 camera(vec3 cameraDirection) {
-  vec3 cd = normalize(cameraDirection);
-  vec3 cr = normalize(cross(vec3(0, 1, 0), cd));
-  vec3 cu = normalize(cross(cd, cr));
-  
-  return mat3(-cr, cu, -cd);
-}
-
-vec3 cameraDirection(vec2 offset) {
+vec3 cameraRayDirection(vec2 offset) {
   vec2 coord = gPosition + offset * (1.0 / gResolution);
   coord.y *= gResolution.y / gResolution.x;
-  return camera(cameraWorldDirection) * normalize(vec3(coord, -1.0 / tan(gDegreesToRadians(cameraFov / 2.0))));
+  vec3 ray = normalize(vec3(coord, -1.0 / tan(gDegreesToRadians(cameraFovDegrees / 2.0))));
+  vec3 degrees = cameraRotationDegrees + vec3(yAxis.value * yAxisDegrees, xAxis.value * yAxisDegrees, 0);
+  return gRotateEulerMatrix3D(gDegreesToRadians(degrees)) * ray;
 }
 
 vec4 render() {
-  vec3 ro = cameraWorldPosition;
-  vec3 rd = cameraDirection(vec2(0));
+  vec3 ro = cameraPosition;
+  vec3 rd = cameraRayDirection(vec2(0));
   gSdfContext context = gSdfContextNull;
   gSdfResult result = rayMarch(context, ro, rd);
 
@@ -110,10 +109,10 @@ vec4 render() {
       highlightContext.renderId = gSdfHighlightId;
       gSdfResult highlightResult = rayMarch(highlightContext, ro, rd);
       int differentIdCount = 0;
-      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(-1, +0))).id);
-      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+1, +0))).id);
-      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+0, -1))).id);
-      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraDirection(vec2(+0, +1))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraRayDirection(vec2(-1, +0))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraRayDirection(vec2(+1, +0))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraRayDirection(vec2(+0, -1))).id);
+      differentIdCount += int(highlightResult.id != rayMarch(highlightContext, ro, cameraRayDirection(vec2(+0, +1))).id);
       float border = float(differentIdCount) / 4.0;
 
       if (highlightResult.id != gSdfNoHitId) {
