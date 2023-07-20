@@ -375,7 +375,7 @@ export const transformSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-uniform vec3 translation;
+uniform vec3 translation; // min: [-10,-10,-10], max: [10,10,10]
 uniform vec3 rotationDegrees; // min: [-180,-180,-180], max: [180,180,180]
 uniform float scale; // default: 1, min: 0, max: 2
 uniform vec3 translationSpeed; // min: [-1,-1,-1], max: [1,1,1]
