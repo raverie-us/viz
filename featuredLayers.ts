@@ -23,6 +23,8 @@ import { fractalFlowLayer } from "./layers/fractalFlow";
 import { fractalCircuitLayer } from "./layers/fractalCircuit";
 import { fxaaLayer } from "./layers/fxaa";
 import { sdfRayMarchingLayer } from "./layers/sdfRayMarching";
+import { stageLayer } from "./layers/stage";
+import { perspective3DLayer } from "./layers/perspective3d";
 import {
   boxSdf,
   bumpSdf,
@@ -90,6 +92,8 @@ export const featuredLayers: LayerCode[] = [
   audioInputLayer,
   audioWaveformLayer,
   fxaaLayer,
+  perspective3DLayer,
+  stageLayer,
   textureLayer,
   emptyJavaScriptLayer,
   emptyShaderLayer,
