@@ -13,7 +13,7 @@ const float NEAR_PRECISION = 0.5;
 const float MIN_MARCHING_DISTANCE_NEAR = 0.001;
 const float MIN_MARCHING_DISTANCE_FAR = 0.1;
 
-uniform vec3 cameraPosition; // default: [0, 0, -2], min: [-10,-10,-10], max: [10,10,10]
+uniform vec3 cameraPosition; // default: [0, 0, 2], min: [-10,-10,-10], max: [10,10,10]
 uniform vec3 cameraRotationDegrees; // default: [0, 0, 0], min: [-180,-180,-180], max: [180,180,180]
 uniform float cameraFovDegrees; // default: 80, min: 60, max: 100
 
