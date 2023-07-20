@@ -1321,6 +1321,14 @@ float gDegreesToRadians(float degrees) {
   return degrees / 180.0 * gPI;
 }
 
+vec2 gDegreesToRadians(vec2 degrees) {
+  return vec2(gDegreesToRadians(degrees.x), gDegreesToRadians(degrees.y));
+}
+
+vec3 gDegreesToRadians(vec3 degrees) {
+  return vec3(gDegreesToRadians(degrees.x), gDegreesToRadians(degrees.y), gDegreesToRadians(degrees.z));
+}
+
 mat2 gRotateMatrix2D(float radians) {
   float c = cos(radians);
   float s = sin(radians);
@@ -1342,9 +1350,9 @@ mat3 gRotateMatrix3D(float radians, vec3 axis) {
 
 mat3 gRotateEulerMatrix3D(vec3 radians) {
   return
-    gRotateMatrix3D(gDegreesToRadians(radians.y), vec3(0,1,0)) *
-    gRotateMatrix3D(gDegreesToRadians(radians.x), vec3(1,0,0)) *
-    gRotateMatrix3D(gDegreesToRadians(radians.z), vec3(0,0,1));
+    gRotateMatrix3D(radians.y, vec3(0,1,0)) *
+    gRotateMatrix3D(radians.x, vec3(1,0,0)) *
+    gRotateMatrix3D(radians.z, vec3(0,0,1));
 }
 
 struct gGradientStop {
