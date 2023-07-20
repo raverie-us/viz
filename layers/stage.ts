@@ -7,9 +7,9 @@ export const stageLayer: LayerShader = {
   visible: true,
   code: `
 uniform gradient colorsBlue; // default: {stops:[{"t":0,"color":[1,1,1,1]},{"t":1,"color":[1,1,1,1]},{"t":0.3,"color":[0.1,0,0.725,1]},{"t":0.82,"color":[0,0.94,1,1]},{"t":0.2,"color":[1,0,0,1]},{"t":0.12,"color":[1,0.84,0,1]}]}
-uniform gradient colorsYellow; // default: {stops:[{"t":0,"color":[0.96,0,0.5,1]},{"t":0.97,"color":[0.7,0.54,0,1]},{"t":0.5,"color":[0.89,0.73,0.14,1]},{"t":0.21,"color":[0.46,0.12,0.56,1]},{"t":0.75,"color":[1,0.1,0.9,1]},{"t":1,"color":[0.96,0,0.5,1]}]}
+uniform gradient colorsYellow; // default: {stops:[{"t":0,"color":[0.96,0,0.5,1]},{"t":0.95,"color":[0.9,0.7,0,1]},{"t":0.4,"color":[1,0.73,0.14,1]},{"t":0.55,"color":[1,1,0,1]},{"t":0.21,"color":[0.46,0.12,0.56,1]},{"t":0.75,"color":[1,0.1,0.9,1]},{"t":1,"color":[0.96,0,0.5,1]}]}
 uniform gradient colorsGreen; // default: {stops:[{"t":0.09,"color":[1,0.98,0.38,1]},{"t":0.2,"color":[1,1,1,1]},{"t":0.45,"color":[0.6,0.19,0.87,1]},{"t":0.8,"color":[0.33,1,0.72,1]},{"t":1,"color":[1,0.98,0.38,1]},{"t":0.3,"color":[0.97,0.58,1,1]},{"t":0.59,"color":[0.44,0.1,0.81,1]},{"t":0.71,"color":[0.22,1,0.47,1]}]}
-uniform gradient colorsRed; // default: {stops:[{"t":0,"color":[1,0.8,0,1]},{"t":0.66,"color":[0.35,0.22,0.67,1]},{"t":0.3,"color":[1,0,0.17,1]},{"t":0.14,"color":[0.98,0.39,0.18,1]},{"t":0.44,"color":[0.5,0.08,0.49,1]},{"t":0.53,"color":[0.31,0,0.39,1]},{"t":0.91,"color":[1,0.68,0,1]},{"t":0.8,"color":[0.93,0.07,0.43,1]},{"t":1,"color":[1,1,0.63,1]}]}
+uniform gradient colorsRed; // default: {stops:[{"t":0,"color":[1,0.8,0,1]},{"t":0.66,"color":[0.35,0.22,0.67,1]},{"t":0.26,"color":[1,0,0,1]},{"t":0.34,"color":[1,0,0.17,1]},{"t":0.14,"color":[0.98,0.39,0.18,1]},{"t":0.44,"color":[0.5,0.08,0.49,1]},{"t":0.53,"color":[0.31,0,0.39,1]},{"t":0.91,"color":[1,0.68,0,1]},{"t":0.8,"color":[0.93,0.07,0.43,1]},{"t":1,"color":[1,0.8,0,1]}]}
 uniform button buttonBlue; // default: {"gamepad": 2}
 uniform button buttonYellow; // default: {"gamepad": 3}
 uniform button buttonGreen; // default: {"gamepad": 0}
