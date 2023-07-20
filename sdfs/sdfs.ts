@@ -389,13 +389,13 @@ export const transformSdf: LayerSDF = {
   layers: [],
   code: `
 uniform vec3 translation;
-uniform vec3 rotation; // min: [-180,-180,-180], max: [180,180,180]
+uniform vec3 rotationDegrees; // min: [-180,-180,-180], max: [180,180,180]
 uniform float scale; // default: 1, min: 0, max: 2
 uniform vec3 translationSpeed; // min: [-1,-1,-1], max: [1,1,1]
 uniform vec3 translationSine; // min: [-1,-1,-1], max: [1,1,1]
 uniform vec3 translationSineSpeed; // default: [5,5,5], min: [0,0,0], max: [10,10,10]
-uniform vec3 rotationSpeed; // min: [-180,-180,-180], max: [180,180,180]
-uniform vec3 rotationSine; // min: [-180,-180,-180], max: [180,180,180]
+uniform vec3 rotationSpeedDegrees; // min: [-180,-180,-180], max: [180,180,180]
+uniform vec3 rotationSineDegrees; // min: [-180,-180,-180], max: [180,180,180]
 uniform vec3 rotationSineSpeed; // default: [5,5,5], min: [0,0,0], max: [10,10,10]
 
 gSdfResult map(inout gSdfContext context, gSdf arg) {
@@ -404,7 +404,7 @@ gSdfResult map(inout gSdfContext context, gSdf arg) {
   }
   context.point -= translation + translationSpeed * gTime + sin(translationSineSpeed * gTime) * translationSine;
 
-  vec3 rot = rotation + rotationSpeed * gTime + sin(rotationSineSpeed * gTime) * rotationSine;
+  vec3 rot = rotationDegrees + rotationSpeedDegrees * gTime + sin(rotationSineSpeed * gTime) * rotationSineDegrees;
   context.point *= gRotateEulerMatrix3D(rot);
 
   context.point /= scale;
