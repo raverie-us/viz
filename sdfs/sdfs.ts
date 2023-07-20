@@ -8,9 +8,6 @@ export const sphereSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-/*{
-  halfExtents: "[radius, radius, radius]",
-}*/
 uniform float radius; // default: 0.5, min: 0, max: 5
 gSdfResult map(inout gSdfContext context) {
   return gSdfResult(length(context.point) - radius, context.id);
@@ -25,9 +22,6 @@ export const boxSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-/*{
-  halfExtents: "[bounds[0] / 2, bounds[1] / 2, bounds[2] / 2]",
-}*/
 uniform vec3 bounds; // default: [1,1,1], min: [0,0,0], max: [5,5,5]
 gSdfResult map(inout gSdfContext context) {
   vec3 q = abs(context.point) - bounds / 2.0;
@@ -43,9 +37,6 @@ export const cylinderSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-/*{
-  halfExtents: "[radius, height / 2, radius]",
-}*/
 uniform float height; // default: 1, min: 0, max: 5
 uniform float radius; // default: 0.5, min: 0, max: 5
 uniform float roundingRadius; // default: 0, min: 0, max: 1
@@ -108,9 +99,6 @@ export const torusSdf: LayerSDF = {
   values: [],
   layers: [],
   code: `
-/*{
-  halfExtents: "[circleRadius + thicknessRadius, thicknessRadius, circleRadius + thicknessRadius]",
-}*/
 uniform float circleRadius; // default: 0.4, min: 0, max: 1
 uniform float thicknessRadius; // default: 0.1, min: 0, max: 1
 gSdfResult map(inout gSdfContext context) {
