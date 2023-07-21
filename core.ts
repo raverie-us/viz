@@ -838,24 +838,32 @@ interface ProcessedUniformGradient extends ProcessedUniformBase, CompiledUniform
   location: ProcessedGradientLocation[] | null;
 }
 
+interface ProcessedButtonLocation {
+  buttonHeld: WebGLUniformLocation | null;
+  buttonTriggered: WebGLUniformLocation | null;
+  buttonReleased: WebGLUniformLocation | null;
+  buttonTriggeredTimestamp: WebGLUniformLocation | null;
+  buttonReleasedTimestamp: WebGLUniformLocation | null;
+  touchHeld: WebGLUniformLocation | null;
+  touchTriggered: WebGLUniformLocation | null;
+  touchReleased: WebGLUniformLocation | null;
+  touchTriggeredTimestamp: WebGLUniformLocation | null;
+  touchReleasedTimestamp: WebGLUniformLocation | null;
+  value: WebGLUniformLocation | null;
+}
+
 interface ProcessedUniformButton extends ProcessedUniformBase, CompiledUniformButton {
   parent: ProcessedLayerCode;
-  locationButtonHeld: WebGLUniformLocation | null;
-  locationButtonTriggered: WebGLUniformLocation | null;
-  locationButtonReleased: WebGLUniformLocation | null;
-  locationButtonTriggeredTimestamp: WebGLUniformLocation | null;
-  locationButtonReleasedTimestamp: WebGLUniformLocation | null;
-  locationTouchHeld: WebGLUniformLocation | null;
-  locationTouchTriggered: WebGLUniformLocation | null;
-  locationTouchReleased: WebGLUniformLocation | null;
-  locationTouchTriggeredTimestamp: WebGLUniformLocation | null;
-  locationTouchReleasedTimestamp: WebGLUniformLocation | null;
-  locationValue: WebGLUniformLocation | null;
+  location: ProcessedButtonLocation;
+}
+
+interface ProcessedAxisLocation {
+  value: WebGLUniformLocation | null;
 }
 
 interface ProcessedUniformAxis extends ProcessedUniformBase, CompiledUniformAxis {
   parent: ProcessedLayerCode;
-  locationValue: WebGLUniformLocation | null;
+  location: ProcessedAxisLocation;
 }
 
 // tags: <types>
@@ -2391,36 +2399,37 @@ export class RaverieVisualizer {
         }
         case "button": {
           const defaultValue = validateGLSLButton(type, parsedComment.default);
-          const locationButtonHeld = getUniformLocation(`${name}.buttonHeld`);
-          const locationButtonTriggered = getUniformLocation(`${name}.buttonTriggered`);
-          const locationButtonReleased = getUniformLocation(`${name}.buttonReleased`);
-          const locationButtonTriggeredTimestamp = getUniformLocation(`${name}.buttonTriggeredTimestamp`);
-          const locationButtonReleasedTimestamp = getUniformLocation(`${name}.buttonReleasedTimestamp`);
-          const locationTouchHeld = getUniformLocation(`${name}.touchHeld`);
-          const locationTouchTriggered = getUniformLocation(`${name}.touchTriggered`);
-          const locationTouchReleased = getUniformLocation(`${name}.touchReleased`);
-          const locationTouchTriggeredTimestamp = getUniformLocation(`${name}.touchTriggeredTimestamp`);
-          const locationTouchReleasedTimestamp = getUniformLocation(`${name}.touchReleasedTimestamp`);
-          const locationValue = getUniformLocation(`${name}.value`);
+          const buttonHeld = getUniformLocation(`${name}.buttonHeld`);
+          const buttonTriggered = getUniformLocation(`${name}.buttonTriggered`);
+          const buttonReleased = getUniformLocation(`${name}.buttonReleased`);
+          const buttonTriggeredTimestamp = getUniformLocation(`${name}.buttonTriggeredTimestamp`);
+          const buttonReleasedTimestamp = getUniformLocation(`${name}.buttonReleasedTimestamp`);
+          const touchHeld = getUniformLocation(`${name}.touchHeld`);
+          const touchTriggered = getUniformLocation(`${name}.touchTriggered`);
+          const touchReleased = getUniformLocation(`${name}.touchReleased`);
+          const touchTriggeredTimestamp = getUniformLocation(`${name}.touchTriggeredTimestamp`);
+          const touchReleasedTimestamp = getUniformLocation(`${name}.touchReleasedTimestamp`);
+          const value = getUniformLocation(`${name}.value`);
 
           return pass<ProcessedUniformButton>({
             type,
-            location: true,
+            location: {
+              buttonHeld,
+              buttonTriggered,
+              buttonReleased,
+              buttonTriggeredTimestamp,
+              buttonReleasedTimestamp,
+              touchHeld,
+              touchTriggered,
+              touchReleased,
+              touchTriggeredTimestamp,
+              touchReleasedTimestamp,
+              value,
+            },
             name,
             nameMangleIndices,
             parent,
             parsedComment,
-            locationButtonHeld,
-            locationButtonTriggered,
-            locationButtonReleased,
-            locationButtonTriggeredTimestamp,
-            locationButtonReleasedTimestamp,
-            locationTouchHeld,
-            locationTouchTriggered,
-            locationTouchReleased,
-            locationTouchTriggeredTimestamp,
-            locationTouchReleasedTimestamp,
-            locationValue,
             shaderValue: {
               name,
               type,
@@ -2431,16 +2440,17 @@ export class RaverieVisualizer {
         }
         case "axis": {
           const defaultValue = validateGLSLAxis(type, parsedComment.default);
-          const locationValue = getUniformLocation(`${name}.value`);
+          const value = getUniformLocation(`${name}.value`);
 
           return pass<ProcessedUniformAxis>({
             type,
-            location: true,
+            location: {
+              value
+            },
             name,
             nameMangleIndices,
             parent,
             parsedComment,
-            locationValue,
             shaderValue: {
               name,
               type,
@@ -3518,23 +3528,23 @@ export class RaverieVisualizer {
           case "button": {
             const uniformKey = getUniformKey(processedUniform);
             const state = this.evaluateButton(uniformKey, processedUniform.shaderValue.value);
-            gl.uniform1i(processedUniform.locationButtonHeld, Number(state.buttonHeld));
-            gl.uniform1i(processedUniform.locationButtonTriggered, Number(state.buttonTriggered));
-            gl.uniform1i(processedUniform.locationButtonReleased, Number(state.buttonReleased));
-            gl.uniform1f(processedUniform.locationButtonTriggeredTimestamp, state.buttonTriggeredTimestamp);
-            gl.uniform1f(processedUniform.locationButtonReleasedTimestamp, state.buttonReleasedTimestamp);
-            gl.uniform1i(processedUniform.locationTouchHeld, Number(state.touchHeld));
-            gl.uniform1i(processedUniform.locationTouchTriggered, Number(state.touchTriggered));
-            gl.uniform1i(processedUniform.locationTouchReleased, Number(state.touchReleased));
-            gl.uniform1f(processedUniform.locationTouchTriggeredTimestamp, state.touchTriggeredTimestamp);
-            gl.uniform1f(processedUniform.locationTouchReleasedTimestamp, state.touchReleasedTimestamp);
-            gl.uniform1f(processedUniform.locationValue, state.value);
+            gl.uniform1i(processedUniform.location.buttonHeld, Number(state.buttonHeld));
+            gl.uniform1i(processedUniform.location.buttonTriggered, Number(state.buttonTriggered));
+            gl.uniform1i(processedUniform.location.buttonReleased, Number(state.buttonReleased));
+            gl.uniform1f(processedUniform.location.buttonTriggeredTimestamp, state.buttonTriggeredTimestamp);
+            gl.uniform1f(processedUniform.location.buttonReleasedTimestamp, state.buttonReleasedTimestamp);
+            gl.uniform1i(processedUniform.location.touchHeld, Number(state.touchHeld));
+            gl.uniform1i(processedUniform.location.touchTriggered, Number(state.touchTriggered));
+            gl.uniform1i(processedUniform.location.touchReleased, Number(state.touchReleased));
+            gl.uniform1f(processedUniform.location.touchTriggeredTimestamp, state.touchTriggeredTimestamp);
+            gl.uniform1f(processedUniform.location.touchReleasedTimestamp, state.touchReleasedTimestamp);
+            gl.uniform1f(processedUniform.location.value, state.value);
             break;
           }
           case "axis": {
             const uniformKey = getUniformKey(processedUniform);
             const state = this.evaluateAxis(uniformKey, processedUniform.shaderValue.value);
-            gl.uniform1f(processedUniform.locationValue, state.value);
+            gl.uniform1f(processedUniform.location.value, state.value);
             break;
           }
 
