@@ -1637,6 +1637,8 @@ const getRequiredUniform = <T extends ProcessedUniform>(processedLayerShader: Pr
 
 const getUniformKey = (uniform: CompiledUniform): string => `${uniform.parent.layer.id}\0${uniform.name}`;
 
+type UniformLocationCallback = (name: string) => WebGLUniformLocation | null;
+
 const clearObject = (obj: any) => {
   for (const prop in obj) {
     delete obj[prop];
@@ -2137,7 +2139,42 @@ export class RaverieVisualizer {
     return processedLayerRoot;
   }
 
-  private parseUniforms(parent: ProcessedLayerCode, getUniformLocation: (name: string) => WebGLUniformLocation | null) {
+  private getUniformLocationGradient(name: string, getUniformLocation: UniformLocationCallback): ProcessedGradientLocation[] | null {
+    const location: ProcessedGradientLocation[] = [];
+    for (let i = 0; i < maxGradientStops; ++i) {
+      const t = getUniformLocation(`${name}[${i}].t`);
+      const color = getUniformLocation(`${name}[${i}].color`);
+      if (!t || !color) {
+        return null;
+      }
+      location.push({ t, color });
+    }
+    return location;
+  }
+
+  private getUniformLocationButton(name: string, getUniformLocation: UniformLocationCallback): ProcessedButtonLocation {
+    return {
+      buttonHeld: getUniformLocation(`${name}.buttonHeld`),
+      buttonTriggered: getUniformLocation(`${name}.buttonTriggered`),
+      buttonReleased: getUniformLocation(`${name}.buttonReleased`),
+      buttonTriggeredTimestamp: getUniformLocation(`${name}.buttonTriggeredTimestamp`),
+      buttonReleasedTimestamp: getUniformLocation(`${name}.buttonReleasedTimestamp`),
+      touchHeld: getUniformLocation(`${name}.touchHeld`),
+      touchTriggered: getUniformLocation(`${name}.touchTriggered`),
+      touchReleased: getUniformLocation(`${name}.touchReleased`),
+      touchTriggeredTimestamp: getUniformLocation(`${name}.touchTriggeredTimestamp`),
+      touchReleasedTimestamp: getUniformLocation(`${name}.touchReleasedTimestamp`),
+      value: getUniformLocation(`${name}.value`)
+    };
+  }
+
+  private getUniformLocationAxis(name: string, getUniformLocation: UniformLocationCallback): ProcessedAxisLocation {
+    return {
+      value: getUniformLocation(`${name}.value`)
+    };
+  }
+
+  private parseUniforms(parent: ProcessedLayerCode, getUniformLocation: UniformLocationCallback) {
     const layerCode = parent.layer;
 
     // tags: <types>
@@ -2372,16 +2409,7 @@ export class RaverieVisualizer {
         }
         case "gradient": {
           const defaultValue = validateGLSLGradient(type, parsedComment.default);
-          let location: ProcessedGradientLocation[] | null = [];
-          for (let i = 0; i < maxGradientStops; ++i) {
-            const t = getUniformLocation(`${name}[${i}].t`);
-            const color = getUniformLocation(`${name}[${i}].color`);
-            if (!t || !color) {
-              location = null;
-              break;
-            }
-            location.push({ t, color });
-          }
+          const location = this.getUniformLocationGradient(name, getUniformLocation);
           return pass<ProcessedUniformGradient>({
             type,
             location,
@@ -2399,33 +2427,11 @@ export class RaverieVisualizer {
         }
         case "button": {
           const defaultValue = validateGLSLButton(type, parsedComment.default);
-          const buttonHeld = getUniformLocation(`${name}.buttonHeld`);
-          const buttonTriggered = getUniformLocation(`${name}.buttonTriggered`);
-          const buttonReleased = getUniformLocation(`${name}.buttonReleased`);
-          const buttonTriggeredTimestamp = getUniformLocation(`${name}.buttonTriggeredTimestamp`);
-          const buttonReleasedTimestamp = getUniformLocation(`${name}.buttonReleasedTimestamp`);
-          const touchHeld = getUniformLocation(`${name}.touchHeld`);
-          const touchTriggered = getUniformLocation(`${name}.touchTriggered`);
-          const touchReleased = getUniformLocation(`${name}.touchReleased`);
-          const touchTriggeredTimestamp = getUniformLocation(`${name}.touchTriggeredTimestamp`);
-          const touchReleasedTimestamp = getUniformLocation(`${name}.touchReleasedTimestamp`);
-          const value = getUniformLocation(`${name}.value`);
+          const location = this.getUniformLocationButton(name, getUniformLocation);
 
           return pass<ProcessedUniformButton>({
             type,
-            location: {
-              buttonHeld,
-              buttonTriggered,
-              buttonReleased,
-              buttonTriggeredTimestamp,
-              buttonReleasedTimestamp,
-              touchHeld,
-              touchTriggered,
-              touchReleased,
-              touchTriggeredTimestamp,
-              touchReleasedTimestamp,
-              value,
-            },
+            location,
             name,
             nameMangleIndices,
             parent,
@@ -2440,13 +2446,11 @@ export class RaverieVisualizer {
         }
         case "axis": {
           const defaultValue = validateGLSLAxis(type, parsedComment.default);
-          const value = getUniformLocation(`${name}.value`);
+          const location = this.getUniformLocationAxis(name, getUniformLocation);
 
           return pass<ProcessedUniformAxis>({
             type,
-            location: {
-              value
-            },
+            location,
             name,
             nameMangleIndices,
             parent,
