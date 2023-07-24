@@ -61,6 +61,24 @@ gSdfResult map(inout gSdfContext context) {
 }`.trim(),
 };
 
+export const capsuleSdf: LayerSDF = {
+  type: "sdf",
+  name: "capsule",
+  id: "capsule",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform float height; // default: 1, min: 0, max: 5
+uniform float radius; // default: 0.5, min: 0, max: 5
+gSdfResult map(inout gSdfContext context) {
+  vec3 p = context.point;
+  float halfHeight = (height - radius * 2.0) / 2.0;
+  p.y -= clamp(p.y, -halfHeight, halfHeight);
+  return gSdfResult(length(p) - radius, context.id);
+}`.trim(),
+};
+
 export const coneSdf: LayerSDF = {
   type: "sdf",
   name: "cone",
