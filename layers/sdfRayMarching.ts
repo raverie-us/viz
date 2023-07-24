@@ -17,11 +17,15 @@ uniform vec3 cameraPosition; // default: [0, 0, 2], min: [-10,-10,-10], max: [10
 uniform vec3 cameraRotationDegrees; // default: [0, 0, 0], min: [-180,-180,-180], max: [180,180,180]
 uniform float cameraFovDegrees; // default: 80, min: 60, max: 100
 
-uniform axis xAxis; // default: {"gamepad": 0}
-uniform axis yAxis; // default: {"gamepad": 1}
-uniform float yAxisDegrees; // default: 45, min: 0, max: 90
-uniform float xAxisDegrees; // default: 45, min: 0, max: 90
+uniform int cameraMode; // default: "firstPerson", enum: ["firstPerson", "orbit"]
+const int CAMERA_MODE_FIRST_PERSON = 0;
+const int CAMERA_MODE_ORBIT = 1;
+uniform axis cameraXAxis; // default: {"gamepad": 0}
+uniform axis cameraYAxis; // default: {"gamepad": 1}
+uniform float cameraXAxisDegrees; // default: 45, min: 0, max: 90
+uniform float cameraYAxisDegrees; // default: 45, min: 0, max: 90
 
+uniform bool enableHighlighting; // default: true
 uniform vec4 highlightColor; // default: [0.3, 1, 0.3, 0.5], type: "color"
 uniform vec4 highlightBorderColor; // default: [0,0,0,1], type: "color"
 
@@ -67,16 +71,25 @@ gSdfResult rayMarch(inout gSdfContext context, vec3 ro, vec3 rd) {
   return gSdfResultNull;
 }
 
+mat3 cameraRotationMatrix() {
+  return gRotateEulerMatrix3D(gDegreesToRadians(cameraRotationDegrees +
+    vec3(cameraYAxis.value * cameraYAxisDegrees, cameraXAxis.value * cameraXAxisDegrees, 0)));
+}
+
 vec3 cameraRayDirection(vec2 offset) {
   vec2 coord = gPosition + offset * (1.0 / gResolution);
   coord.y *= gResolution.y / gResolution.x;
   vec3 ray = normalize(vec3(coord, -1.0 / tan(gDegreesToRadians(cameraFovDegrees / 2.0))));
-  vec3 degrees = cameraRotationDegrees + vec3(yAxis.value * yAxisDegrees, xAxis.value * yAxisDegrees, 0);
-  return gRotateEulerMatrix3D(gDegreesToRadians(degrees)) * ray;
+  mat3 cameraRotation = cameraRotationMatrix();
+  return cameraRotation * ray;
 }
 
 vec4 render() {
   vec3 ro = cameraPosition;
+  if (cameraMode == CAMERA_MODE_ORBIT) {
+    ro = cameraRotationMatrix() * ro;
+  }
+  
   vec3 rd = cameraRayDirection(vec2(0));
   gSdfContext context = gSdfContextNull;
   gSdfResult result = rayMarch(context, ro, rd);
@@ -104,7 +117,7 @@ vec4 render() {
       //return vec4(color, 1.0);
     }
 
-    if (gSdfHighlightId != gSdfHighlightNone) {
+    if (enableHighlighting && gSdfHighlightId != gSdfHighlightNone) {
       gSdfContext highlightContext = gSdfContextNull;
       highlightContext.renderId = gSdfHighlightId;
       gSdfResult highlightResult = rayMarch(highlightContext, ro, rd);
