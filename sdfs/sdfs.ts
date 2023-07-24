@@ -393,7 +393,7 @@ gSdfResult map(inout gSdfContext context, gSdf arg) {
   context.point -= translation + translationSpeed * gTime + sin(translationSineSpeed * gTime) * translationSine;
 
   vec3 rot = rotationDegrees + rotationSpeedDegrees * gTime + sin(rotationSineSpeed * gTime) * rotationSineDegrees;
-  context.point *= gRotateEulerMatrix3D(rot);
+  context.point *= gRotateEulerMatrix3D(gDegreesToRadians(rot));
 
   context.point /= scale;
   gSdfResult result = gSdfMap(context, arg);
