@@ -2174,6 +2174,19 @@ export class RaverieVisualizer {
     };
   }
 
+  private getUniformLocationGeneric(name: string, getUniformLocation: UniformLocationCallback, type: GLSLType): ProcessedUniform["location"] {
+    switch (type) {
+      case "gradient":
+        return this.getUniformLocationGradient(name, getUniformLocation);
+      case "button":
+        return this.getUniformLocationButton(name, getUniformLocation);
+      case "axis":
+        return this.getUniformLocationAxis(name, getUniformLocation);
+      default:
+        return getUniformLocation(name);
+    }
+  }
+
   private parseUniforms(parent: ProcessedLayerCode, getUniformLocation: UniformLocationCallback) {
     const layerCode = parent.layer;
 
@@ -3062,7 +3075,8 @@ export class RaverieVisualizer {
       for (const compiledSdf of sdfTreeResult.allValidSdfs) {
         const processedSdf = compiledSdf as ProcessedLayerSDF;
         for (const uniform of processedSdf.uniforms) {
-          uniform.location = getUniformLocation(`${uniform.name}_${processedSdf.mangledId}`);
+          uniform.location = this.getUniformLocationGeneric(
+            `${uniform.name}_${processedSdf.mangledId}`, getUniformLocation, uniform.type);
           processedLayerShader.sdfUniforms.push(uniform);
         }
       }
