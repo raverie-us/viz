@@ -349,6 +349,53 @@ gSdfResult map(inout gSdfContext context, gSdf arg) {
 }`.trim(),
 };
 
+export const dripSdf: LayerSDF = {
+  type: "sdf",
+  name: "drip",
+  id: "drip",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform vec3 direction; // default: [0,-1,0], min: [-1,-1,-1], max: [1,1,1]
+uniform float intensity; // default: 0.1, min: 0, max: 1
+uniform int iterations; // default: 10, min: 5, max: 20
+uniform float noiseInterval1; // default: 10, min: 1, max: 20
+uniform float noiseInterval2; // default: 5, min: 1, max: 20
+uniform float deflate; // default: 0.15, min: 0, max: 0.5
+uniform float speed; // default: 5, min: 0, max: 10
+uniform float dripLength; // default: 0.3, min: 0, max: 2
+uniform float smoothing; // default: 0.1, min: 0, max: 0.5
+
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  vec3 movement = direction;
+  if (length(movement) > 1.0) {
+    movement = normalize(movement);
+  }
+  
+  gSdfResult result = gSdfMap(context, arg);
+  vec3 p = context.point;
+  for (int i = 1; i <= iterations; ++i) {
+    float t = float(i) / float(iterations);
+    context.point = p - movement * t * dripLength;
+    gSdfResult query = gSdfMap(context, arg);
+    float queryNoise =
+      sin(noiseInterval1 * p.x + noiseInterval2 * context.point.x - movement.x * gTime * speed) *
+      sin(noiseInterval1 * p.y + noiseInterval2 * context.point.y - movement.y * gTime * speed) *
+      sin(noiseInterval1 * p.z + noiseInterval2 * context.point.z - movement.z * gTime * speed) * intensity * length(movement) * t;
+
+    query.distance += queryNoise + deflate * t;
+    
+    float h = clamp(0.5 + 0.5 * (result.distance - query.distance) / smoothing, 0.0, 1.0);
+    result.distance = mix(result.distance, query.distance, h) - smoothing * h * (1.0 - h);
+    if (result.id == gSdfNoHitId) {
+      result.id = query.id;
+    }
+  }
+  return result;
+}`.trim(),
+};
+
 export const twistSdf: LayerSDF = {
   type: "sdf",
   name: "twist",
@@ -472,6 +519,129 @@ gSdfResult map(inout gSdfContext context, gSdfVariadic variadic) {
       result = next;
     }
   }
+  return result;
+}`.trim(),
+};
+
+export const stageSdf: LayerSDF = {
+  type: "sdf",
+  name: "stage",
+  id: "stage",
+  visible: true,
+  values: [],
+  layers: [],
+  code: `
+uniform button buttonWaves; // default: {"gamepad": 2}
+uniform float wavesSpeed; // default: 2, min: 0, max: 5
+uniform float wavesPeriod; // default: 6, min: 1, max: 10
+uniform float wavesAmount; // default: 0.2, min: 0, max: 2
+uniform button buttonCompress; // default: {"gamepad": 3}
+uniform float compression; // default: 0.2, min: 0.1, max: 2
+uniform button buttonNoise; // default: {"gamepad": 0}
+uniform float noiseInterval; // default: 10, min: 1, max: 20
+uniform float noiseAmount; // default: 0.1, min: 0, max: 1
+uniform button buttonRepeat; // default: {"gamepad": 1}
+uniform vec3 repeat; // default: [4,4,4], min: [0.1,0.1,0.1], max: [10,10,10]
+
+uniform button buttonRotateLeft; // default: {"gamepad": 6}
+uniform button buttonRotateRight; // default: {"gamepad": 7}
+uniform float rotationDegrees; // default: 40, min: 0, max: 90
+uniform float twistDegrees; // default: 5, min: 0, max: 90
+
+uniform button strobe8th; // default: {"gamepad": 11}
+uniform button strobe16th; // default: {"gamepad": 10}
+uniform button blackout; // default: {"gamepad": 9}
+uniform float blackoutDeflate; // default: 0.25, min: 0, max: 1
+uniform button invert; // default: {"gamepad": 8}
+
+uniform button moveLeft; // default: {"gamepad": 14}
+uniform button moveRight; // default: {"gamepad": 15}
+uniform button moveUp; // default: {"gamepad": 12}
+uniform button moveDown; // default: {"gamepad": 13}
+uniform axis moveX; // default: {"gamepad": 2}
+uniform axis moveY; // default: {"gamepad": 3}
+uniform float moveButtonOffset; // default: 0.1, min: 0, max: 0.5
+uniform float moveAxisOffset; // default: 0.1, min: 0, max: 0.5
+
+uniform button scanlineLeft; // default: {"gamepad": 4}
+uniform button scanlineRight; // default: {"gamepad": 5}
+uniform float scanlineAmount; // default: 0.15, min: 0, max: 0.5
+uniform float scanlineSize; // default: 0.03, min: 0, max: 0.2
+uniform float scanlineNoise; // default: 0.5, min: 0, max: 1
+
+uniform button zoomButton; // default: {"gamepad": 16}
+uniform float zoomAmount; // default: 0.65, min: 0, max: 1
+
+gSdfResult map(inout gSdfContext context, gSdf arg) {
+  vec3 originalPoint = context.point;
+  vec2 buttonMovement = vec2(0);
+  buttonMovement.x -= moveLeft.value;
+  buttonMovement.x += moveRight.value;
+  buttonMovement.y += moveDown.value;
+  buttonMovement.y -= moveUp.value;
+
+  vec2 axisMovement = vec2(moveX.value, moveY.value);
+
+  vec2 movement = buttonMovement * moveButtonOffset + axisMovement * moveAxisOffset;
+
+  context.point.xz += movement;
+
+  float buttonRotate = (buttonRotateLeft.value - buttonRotateRight.value) * 0.5;
+  float twistRadians = -gDegreesToRadians(buttonRotate * twistDegrees);
+  float c = cos(twistRadians * context.point.z * 0.5);
+  float s = sin(twistRadians * context.point.z * 0.5);
+  mat2  m = mat2(c, -s, s, c);
+  context.point = vec3(m * context.point.xy, context.point.z);
+  float rotationRadians = -gDegreesToRadians(buttonRotate * rotationDegrees);
+  context.point *= gRotateMatrix3D(rotationRadians, vec3(0,0,1));
+  
+  vec2 uv = gPosition;
+  float halfScanlineSize = 0.5 * scanlineSize;
+  float scanline = gNoise2D(uv + vec2(gTime * 0.01)) * scanlineNoise * halfScanlineSize;
+  context.point.x += mod(uv.y + scanline, scanlineSize) < halfScanlineSize ? scanlineLeft.value * scanlineAmount : 0.0;
+  context.point.x += mod(uv.y + scanline + halfScanlineSize * 0.5, scanlineSize) < halfScanlineSize ? scanlineRight.value * -scanlineAmount : 0.0;
+  
+  float strobe = 0.0;
+  if (strobe16th.buttonHeld) {
+    const float beat = 1.0 / 16.0;
+    strobe = mod(gTime - strobe16th.buttonTriggeredTimestamp, beat) / beat;
+  } else if (strobe8th.buttonHeld) {
+    const float beat = 1.0 / 8.0;
+    strobe = mod(gTime - strobe16th.buttonTriggeredTimestamp, beat) / beat;
+  }
+
+  if (zoomButton.buttonHeld) {
+    context.point *= zoomAmount;
+  }
+
+  if (buttonRepeat.buttonHeld) {
+    vec3 offset = repeat * round(context.point / repeat);
+    context.point -= offset;
+  }
+  if (buttonWaves.buttonHeld) {
+    context.point.x += sin(context.point.y * wavesPeriod + gTime * wavesSpeed) * wavesAmount;
+  }
+
+  gSdfResult result = gSdfMap(context, arg);
+
+  result.distance += strobe;
+
+  if (buttonCompress.buttonHeld) {
+    result.distance *= compression;
+  }
+  if (buttonNoise.buttonHeld) {
+    vec3 p = context.point;
+    result.distance += sin(noiseInterval * p.x) * sin(noiseInterval * p.y) * sin(noiseInterval * p.z) * noiseAmount - 0.07;
+  }
+
+  if (blackout.buttonHeld) {
+    result.distance += blackoutDeflate;
+  }
+
+  if (invert.buttonHeld) {
+    result.distance = -result.distance;
+  }
+
   return result;
 }`.trim(),
 };

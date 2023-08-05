@@ -31,6 +31,7 @@ import {
   caveSdf,
   coneSdf,
   cylinderSdf,
+  dripSdf,
   fastIntersectionSdf,
   fastSubtractionSdf,
   fastUnionSdf,
@@ -40,6 +41,7 @@ import {
   invertSdf,
   repeatSdf,
   sphereSdf,
+  stageSdf,
   subtractionSdf,
   torusSdf,
   transformSdf,
@@ -61,12 +63,14 @@ export const featuredSdfs: LayerSDF[] = [
   invertSdf,
   bumpSdf,
   inflateSdf,
+  dripSdf,
   twistSdf,
   repeatSdf,
   transformSdf,
   fastUnionSdf,
   fastSubtractionSdf,
-  fastIntersectionSdf
+  fastIntersectionSdf,
+  stageSdf
 ];
 
 export const featuredLayers: LayerCode[] = [
