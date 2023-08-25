@@ -3677,6 +3677,7 @@ export class RaverieVisualizer {
 
   private evaluateCurveInput(curveInput: CurveInput | undefined, uniqueKey: string, timeSeconds: number): number {
     if (!curveInput) {
+      // TODO(trevor): This becomes curve either clip time or transition overlap time
       return timeSeconds % 1.0;
     }
     switch (curveInput.type) {
