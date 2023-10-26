@@ -1,4 +1,4 @@
-import { LayerCode, LayerSDF } from "./core";
+import { LayerCode, LayerSDF, LayerShader } from "./core";
 import { connnectedPointsLayer } from "./layers/connectedPoints";
 import { emptyShaderLayer } from "./layers/emptyShader";
 import { emptyJavaScriptLayer } from "./layers/emptyJavaScript";
@@ -103,7 +103,7 @@ export const featuredLayers: LayerCode[] = [
   emptyShaderLayer,
 ]
 
-export const visualLayers: LayerCode[] = [
+export const visualLayers: LayerShader[] = [
   connnectedPointsLayer,
   glitchLayer,
   chromaticAberrationLayer,
