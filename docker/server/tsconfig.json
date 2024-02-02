@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "module": "es2022",
+        "target": "es2022",
+        "moduleResolution": "node",
+        "declaration": true,
+        "typeRoots": ["./node_modules/@types"],
+    },
+    "files": ["index.ts", "node_modules/essentia.js/dist/core_api.d.ts"]
+}
