@@ -6,7 +6,7 @@ import {
   CompiledUniform,
   defaultEmptyLayerShader,
   defaultEmptyLayerRoot
-} from "./core/core.js";
+} from "./core.js";
 
 // Note: This must be a 'function' https://github.com/microsoft/TypeScript/issues/34523
 function assert(value: unknown): asserts value {
