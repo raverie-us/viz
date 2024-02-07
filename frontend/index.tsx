@@ -18,36 +18,7 @@ const App: React.FC = () => {
   const [spinnerVisible, setSpinnerVisible] = React.useState(false);
   const [spinnerText, setSpinnerText] = React.useState("");
 
-  //const isDroppable = (mimeType: string) => supportedImageTypes.includes(mimeType);
-
   React.useEffect(() => {
-    //const onDrop = (event: DragEvent) => {
-    //  if (!event.dataTransfer) {
-    //    return;
-    //  }
-    //  const files = [...event.dataTransfer.files].
-    //    filter((file) => isDroppable(file.type) && file.size !== 0).
-    //    sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: "base"}));
-    //  if (files.length !== 0) {
-    //    window.dispatchEvent(new TypedEvent<File[]>(EVENT_FILE_DROP, files));
-    //    event.preventDefault();
-    //  }
-    //};
-    //window.addEventListener("drop", onDrop, true);
-    //const onDragOver = (event: DragEvent) => {
-    //  if (!event.dataTransfer) {
-    //    return;
-    //  }
-    //  event.preventDefault();
-    //  const item = event.dataTransfer.items[0];
-    //  if (item) {
-    //    if (item.kind !== "file" || !isDroppable(item.type)) {
-    //      event.dataTransfer.dropEffect = "none";
-    //    }
-    //  }
-    //};
-    //window.addEventListener("dragover", onDragOver, true);
-
     const onSpinnerChanged = (e: Event) => {
       const event = e as TypedEvent<SpinnerInfo>;
       setSpinnerVisible(event.value.visible);
@@ -56,8 +27,6 @@ const App: React.FC = () => {
     window.addEventListener(EVENT_SPINNER_CHANGED, onSpinnerChanged);
     return () => {
       window.removeEventListener(EVENT_SPINNER_CHANGED, onSpinnerChanged);
-      //window.removeEventListener("drop", onDrop, true);
-      //window.removeEventListener("dragover", onDragOver, true);
     };
   }, []);
 

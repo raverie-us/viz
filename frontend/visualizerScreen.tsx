@@ -238,6 +238,64 @@ export const VisualizerScreen: React.FC = () => {
     compileLayerGroup(visualizer, compiledLayerRoot.layer);
   };
 
+  const fileTypeAccept = ".rvis, .viz, .psd, image/vnd.adobe.photoshop, image/*";
+  const canImport = (file?: File | null | undefined) => {
+    if (!file || file.size === 0) {
+      return false;
+    }
+    return file.type === "image/vnd.adobe.photoshop" ||
+      file.type.startsWith("image/") ||
+      file.name.endsWith(".viz") || 
+      file.name.endsWith(".rvis");
+  }
+
+  const doImport = async (file: File) => {
+    if (file.type === "image/vnd.adobe.photoshop") {
+      const newRoot = convertPSDToLayers(await file.arrayBuffer());
+      compileLayerGroup(visualizer, newRoot);
+    } else if (file.type.startsWith("image/")) {
+      const newRoot = await convertImageToLayers(file);
+      compileLayerGroup(visualizer, newRoot);
+    } else {
+      const json = await file.text();
+      const newRoot = JSON.parse(json) as LayerRoot;
+      compileLayerGroup(visualizer, newRoot);
+    }
+  };
+
+  React.useEffect(() => {
+    const onDrop = async (event: DragEvent) => {
+      if (!event.dataTransfer) {
+        return;
+      }
+      const files = [...event.dataTransfer.files].
+        filter(canImport).
+        sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: "base"}));
+
+      if (files.length !== 0) {
+        event.preventDefault();
+
+        for (const file of files) {
+          await doImport(file);
+        }
+      }
+    };
+    window.addEventListener("drop", onDrop, true);
+    const onDragOver = (event: DragEvent) => {
+      if (!event.dataTransfer) {
+        return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("dragover", onDragOver, true);
+
+    return () => {
+      window.removeEventListener("drop", onDrop, true);
+      window.removeEventListener("dragover", onDragOver, true);
+    };
+  }, []);
+
+
   return <Box display="contents">
     <AppMenu sx={{height: APP_BAR_HEIGHT}} menus={[
       {
@@ -246,19 +304,9 @@ export const VisualizerScreen: React.FC = () => {
           {
             name: "Open",
             onClick: async () => {
-              const file = await openFile(`.rvis, .viz, .psd, image/vnd.adobe.photoshop, image/*`);
+              const file = await openFile(fileTypeAccept);
               if (file) {
-                if (file.type === "image/vnd.adobe.photoshop") {
-                  const newRoot = convertPSDToLayers(await file.arrayBuffer());
-                  compileLayerGroup(visualizer, newRoot);
-                } else if (file.type.startsWith("image/")) {
-                  const newRoot = await convertImageToLayers(file);
-                  compileLayerGroup(visualizer, newRoot);
-                } else {
-                  const json = await file.text();
-                  const newRoot = JSON.parse(json) as LayerRoot;
-                  compileLayerGroup(visualizer, newRoot);
-                }
+                await doImport(file);
               }
             }
           },
