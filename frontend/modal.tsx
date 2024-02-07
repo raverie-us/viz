@@ -127,7 +127,7 @@ export const ModalComponent: React.FC<ModalProps> = (props) => {
             sx={{
               position: "absolute",
               right: "0px",
-              marginRight: `${theme.spacing(-1)} !important`,
+              marginRight: `${theme.spacing(2)} !important`,
               float: "right",
               color: theme.palette.grey[500]
             }}
