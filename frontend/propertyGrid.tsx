@@ -12,7 +12,6 @@ import {
   vectorNumberScalarConstructor,
   WrapMode
 } from "../core/core";
-import {capitalCase} from "capital-case";
 import {MediaChooser} from "./mediaChooser";
 import {ColorPicker} from "./colorPicker";
 import {GradientPicker} from "./gradientPicker";
@@ -27,6 +26,7 @@ import {CurveEditor} from "./curveEditor";
 import {TooltipIconButton} from "./tooltipIconButton";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import {Expander} from "./expander";
+import { capCase } from "./textTransforms";
 
 export interface PropertyBase {
   name: string;
@@ -351,7 +351,7 @@ const propertyToReactNode = (property: PropertyGeneric, onChanged: () => void): 
         }}
       >
         {property.enumValues.map((enumValue) =>
-          <MenuItem key={enumValue} value={enumValue}>{capitalCase(enumValue)}</MenuItem>)}
+          <MenuItem key={enumValue} value={enumValue}>{capCase(enumValue)}</MenuItem>)}
       </Select>;
     }
     case "button": {
@@ -400,7 +400,7 @@ export const PropertyGrid: React.FC<PropertyGridProps> = (props) => <Box>
             backgroundColor: "rgba(255,255,255,0.05)"
           }
         }}>
-        <Box width="30%">{capitalCase(property.name)}</Box>
+        <Box width="30%">{capCase(property.name)}</Box>
         <Box width="70%">{propertyToReactNode(property, props.onChanged)}</Box>
       </Box>)
   }

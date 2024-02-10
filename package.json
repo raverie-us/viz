@@ -34,7 +34,7 @@
     "@uiw/codemirror-theme-darcula": "^4.21.21",
     "@uiw/react-codemirror": "^4.21.21",
     "ag-psd": "^19.0.1",
-    "capital-case": "^1.0.4",
+    "change-case": "^5.4.2",
     "clean-webpack-plugin": "^4.0.0",
     "css-loader": "^6.9.0",
     "debounce": "^2.0.0",

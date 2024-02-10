@@ -33,7 +33,7 @@ import FolderIcon from "@mui/icons-material/Folder";
 import {v4 as uuidv4} from "uuid";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import {capitalCase} from "capital-case";
+import { capCase } from "./textTransforms";
 import Select from "@mui/material/Select";
 import Divider from "@mui/material/Divider";
 import {NumberInput} from "./numberInput";
@@ -402,7 +402,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
         >
           {blendModeOptions.map((blendMode, index) => blendMode === null
             ? <Divider key={index}/>
-            : <MenuItem key={index} value={blendMode}>{capitalCase(blendMode)}</MenuItem>)}
+            : <MenuItem key={index} value={blendMode}>{capCase(blendMode)}</MenuItem>)}
         </Select>
         <Box ml={1} mr="2px">Opacity:</Box>
         <NumberInput

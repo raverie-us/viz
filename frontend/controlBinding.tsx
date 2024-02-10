@@ -1,13 +1,13 @@
 import React from "react";
 import {DeviceIdentifier, InputIdentifier, ShaderAxisBindings, ShaderButtonBindings} from "../core/core";
 import Box from "@mui/material/Box";
-import {capitalCase} from "capital-case";
 import {TooltipIconButton} from "./tooltipIconButton";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddIcon from "@mui/icons-material/Add";
 import {Modal} from "./modal";
 import {listenForInput} from "../core/browser";
 import {useStyles} from "./style";
+import { capCase } from "./textTransforms";
 
 export interface ControlBindingsProps<Bindings extends ShaderButtonBindings | ShaderAxisBindings> {
   type: "axis" | "button";
@@ -45,7 +45,7 @@ const AddControlBinding: React.FC<AddControlBindingProps> = (props) => {
 
   return <Box>
     <Box display="flex" alignItems="center" mb={1}>
-      <Box flexBasis="15%" mr={1}>{capitalCase(displayDeviceId)}:</Box>
+      <Box flexBasis="15%" mr={1}>{capCase(displayDeviceId)}:</Box>
       <Box flexBasis="85%">'{displayInputId}'</Box>
     </Box>
     <Box
@@ -69,7 +69,7 @@ export const ControlBindings = <Bindings extends ShaderButtonBindings | ShaderAx
   const rows = Object.keys(props.binding).map((deviceId) => {
     const inputId = props.binding[deviceId];
     return <Box key={deviceId} display="flex" alignItems="center">
-      <Box flexBasis="100%">{capitalCase(deviceId)}</Box>
+      <Box flexBasis="100%">{capCase(deviceId)}</Box>
       <Box flexBasis="50%">'{inputId.toString()}'</Box>
       <TooltipIconButton size="small" tooltip="Delete Control Binding" tooltipPlacement="left" onClick={() => {
         const newBinding = {...props.binding};
