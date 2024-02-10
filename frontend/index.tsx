@@ -13,6 +13,9 @@ import {DndProvider} from "react-dnd";
 import {HTML5Backend} from "react-dnd-html5-backend";
 import {VisualizerScreen} from "./visualizerScreen";
 import "./reactTransform.css";
+import GlobalStyles from "@mui/material/GlobalStyles";
+
+const SCROLLBAR_WIDTH = "10px";
 
 const App: React.FC = () => {
   const [spinnerVisible, setSpinnerVisible] = React.useState(false);
@@ -33,6 +36,28 @@ const App: React.FC = () => {
   return <ThemeProvider theme={theme}>
   <DndProvider backend={HTML5Backend}>
     <CssBaseline />
+    <GlobalStyles
+      styles={{body: {
+        "@supports not selector(::-webkit-scrollbar)": {
+          "& .viz": {
+            scrollbarWidth: SCROLLBAR_WIDTH,
+            scrollbarColor: "#333 #999"
+          }
+        },
+        "& .viz *::-webkit-scrollbar": {
+          width: SCROLLBAR_WIDTH
+        },
+        "& .viz *::-webkit-scrollbar-button": {
+          display: "none"
+        },
+        "& .viz *::-webkit-scrollbar-track": {
+          background: "#333"
+        },
+        "& .viz *::-webkit-scrollbar-thumb": {
+          background: "#999"
+        }
+      }}}
+    />
     <ModalContainer/>
     {spinnerVisible
       ? <Box sx={{

@@ -39,6 +39,16 @@ export const theme = createTheme({
         }
       }
     },
+    MuiPopper: {
+      defaultProps: {
+        className: "viz"
+      }
+    },
+    MuiDialog: {
+      defaultProps: {
+        className: "viz"
+      }
+    },
     MuiMenu: {
       styleOverrides: {
         paper: {
