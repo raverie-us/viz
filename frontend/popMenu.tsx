@@ -67,6 +67,10 @@ const PopMenuItem: React.FC<PopMenuItemProps> =
     </Box>
     <Box ref={ref} position="absolute" top="50%" sx={{[horizontalDir]: "0"}}/>
     <MenuItem
+      sx={{
+        pl: horizontalDir === "left" ? 3 : 1.5,
+        pr: horizontalDir === "right" ? 3 : 1.5
+      }}
       onClick={(e) => {
         if (menuElement.menuElements) {
           onAttemptOpen();
