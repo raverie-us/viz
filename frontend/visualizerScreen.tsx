@@ -154,6 +154,7 @@ export const VisualizerScreen: React.FC = () => {
 
   const visualizerComponents = useVisualizer();
   const visualizer = visualizerComponents.visualizer;
+  const generator = visualizerComponents.generator;
 
   const [compiledLayerRoot, setCompiledLayerRootInternal] =
     React.useState<CompiledLayerRoot>(visualizerComponents.defaultCompiledLayerRoot);
@@ -526,7 +527,25 @@ export const VisualizerScreen: React.FC = () => {
                 }
               });
             }
-          }
+          },
+          {
+            name: "Random",
+            menuElements: [
+              {
+                name: "Generate Random",
+                onClick: () => {
+                  compileLayerGroup(visualizer, generator.generateRandom().layer);
+                }
+              },
+              {
+                name: "Randomize Layers",
+                onClick: () => {
+                  generator.randomizeCompiledLayers(compiledLayerRoot);
+                  refresh();
+                }
+              }
+            ]
+          },
         ]
       },
       {

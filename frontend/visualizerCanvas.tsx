@@ -14,11 +14,13 @@ import Badge from "@mui/material/Badge";
 import {RaverieVisualizerCustom} from "./visualizerCustom";
 import {RaverieAudioAnalyserLive} from "../core/browser";
 import {VisualizerTime} from "./visualizerTime";
+import { VisualGenerator } from "../core/generate";
 
 export type PositionCallback = (xNormalized: number, yNormalized: number) => void;
 
 export interface VisualizerComponents {
   visualizer: RaverieVisualizerCustom;
+  generator: VisualGenerator;
   audioAnalyser: RaverieAudioAnalyserLive;
   canvas: HTMLCanvasElement;
   gl: WebGL2RenderingContext;
@@ -49,6 +51,7 @@ export const useVisualizer = (): VisualizerComponents => {
   const [internals] = React.useState(() => {
     const canvas = document.createElement("canvas");
     const visualizer = new RaverieVisualizerCustom(canvas);
+    const generator = new VisualGenerator(visualizer);
     const audioAnalyser = new RaverieAudioAnalyserLive();
     const renderTargets = visualizer.createRenderTargets(canvas.width, canvas.height);
     canvas.className = classes.focusOutline;
@@ -73,6 +76,7 @@ export const useVisualizer = (): VisualizerComponents => {
 
     return {
       visualizer,
+      generator,
       audioAnalyser,
       canvas,
       gl: visualizer.gl,
