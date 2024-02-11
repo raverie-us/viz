@@ -10,7 +10,7 @@ import { capCase } from "./textTransforms";
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-export interface PopSubMenuProps {
+interface PopSharedMenuProps {
   anchorEl: HTMLElement | null;
   menuElements: MenuElement[];
   onClose: () => void;
@@ -18,7 +18,11 @@ export interface PopSubMenuProps {
   verticalDir: "up" | "down";
 }
 
-export interface PopMenuProps extends PopSubMenuProps {
+interface PopSubMenuProps extends PopSharedMenuProps {
+  popMenuUid: number;
+}
+
+export interface PopMenuProps extends PopSharedMenuProps {
   open: boolean;
 }
 
@@ -29,10 +33,11 @@ interface PopMenuItemProps {
   open: boolean;
   horizontalDir: "left" | "right";
   verticalDir: "up" | "down";
+  popMenuUid: number;
 }
 
 const PopMenuItem: React.FC<PopMenuItemProps> =
-({menuElement, onAttemptOpen, onClose, open, horizontalDir, verticalDir}) => {
+({menuElement, onAttemptOpen, onClose, open, horizontalDir, verticalDir, popMenuUid}) => {
   const ref = React.useRef<HTMLElement>(null);
   const [pointerOver, setPointerOver] = useDebounce(false, 200);
 
@@ -62,7 +67,7 @@ const PopMenuItem: React.FC<PopMenuItemProps> =
     </Box>
     <Box ref={ref} position="absolute" top="50%" sx={{[horizontalDir]: "0"}}/>
     <MenuItem
-      onPointerDown={() => {
+      onClick={(e) => {
         if (menuElement.menuElements) {
           onAttemptOpen();
         }
@@ -83,6 +88,7 @@ const PopMenuItem: React.FC<PopMenuItemProps> =
           onClose={onClose}
           horizontalDir={horizontalDir}
           verticalDir={verticalDir}
+          popMenuUid={popMenuUid}
         />}
         {capCase(menuElement.name)}
       </MenuItem>
@@ -96,19 +102,26 @@ enum FocusState {
 }
 
 const PopSubMenu: React.FC<PopSubMenuProps> =
-({anchorEl, menuElements, onClose, horizontalDir, verticalDir, ...menuProps}) => {
+({anchorEl, menuElements, onClose, horizontalDir, verticalDir, popMenuUid, ...menuProps}) => {
   const [subMenuOpenIndex, setSubMenuOpenIndex] = React.useState(-1);
   const [firstAutoFocus, setFirstAutoFocus] = React.useState(false);
   const [focusState, setFocusState] = useDebounce(FocusState.WaitingForFirstFocus, 10);
-
+  const ourId = `popSubMenu_${popMenuUid}`;
   // For some reason, when we click a root menu item if the app bar already has focus it temporarily
   // loses it and gains it back almost immediately (not sure what in MUI is stealing focus)
   // We 'useDebounce' to ignore the rapid lose/gain so we can reliably close on blur.
   React.useEffect(() => {
     if (focusState === FocusState.LostFocus) {
+      // Check if any of the parents of the selected have the same root id as us
+      for (let node: Element | null = document.activeElement; node; node = node.parentElement) {
+        if (node.id === ourId) {
+          return;
+        }
+      }
+
       onClose();
     }
-  }, [focusState]);
+  }, [focusState, ourId]);
 
   if (!anchorEl) {
     return null;
@@ -132,6 +145,7 @@ const PopSubMenu: React.FC<PopSubMenuProps> =
 
   return <Popper
     open={true}
+    id={ourId}
     anchorEl={anchorEl}
     placement={placement}
     // Above tooltips
@@ -169,14 +183,22 @@ const PopSubMenu: React.FC<PopSubMenuProps> =
         open={subMenuOpenIndex === index}
         horizontalDir={horizontalDir}
         verticalDir={verticalDir}
+        popMenuUid={popMenuUid}
       />)}
     </Paper>
   </Popper>;
 }
 
+let popMenuUidCounter = 0;
+
 export const PopMenu: React.FC<PopMenuProps> = (props) => {
+  const [popMenuUid] = React.useState(() => {
+    const uid = popMenuUidCounter++;
+    return uid;
+  });
+
   if (!props.anchorEl || !props.open) {
     return null;
   }
-  return <PopSubMenu {...props} onClose={once(props.onClose)} />;
+  return <PopSubMenu {...props} popMenuUid={popMenuUid} onClose={once(props.onClose)} />;
 }
