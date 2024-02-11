@@ -48,6 +48,13 @@ export const theme = createTheme({
       defaultProps: {
         className: "viz"
       }
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        root: {
+          minHeight: "auto"
+        }
+      }
     }
   },
   palette: {

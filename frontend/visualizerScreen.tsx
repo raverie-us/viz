@@ -18,7 +18,6 @@ import {LayoutBase, DockLayout, TabData} from "rc-dock";
 import "./visualizerDockPanelTheme.less";
 import {useVisualizer, VisualizerCanvas, VisualizerCanvasInterations} from "./visualizerCanvas";
 import {AppMenu} from "./appMenu";
-import useSize from "@react-hook/size";
 import {modalPropertyGrid} from "./modalPropertyGrid";
 import {spinner} from "./spinner";
 import {openFile, saveFile, saveFileUrl, cloneObject, sleep} from "./utility";
@@ -59,57 +58,99 @@ const exportImageSettings: VisualizerExportImageSettings = {
   antiAliasLevel: 2
 };
 
+const desktopLayout: LayoutBase = {
+  dockbox: {
+    id: "main",
+    mode: "horizontal",
+    children: [
+      {
+        id: "canvasBox",
+        size: 500,
+        mode: "vertical",
+        children: [
+          {
+            id: "canvasPanel",
+            tabs: [
+              {
+                id: TAB_ID_CANVAS
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: "layerAndPropertiesBox",
+        size: 200,
+        mode: "vertical",
+        children: [
+          {
+            id: "propertiesBox",
+            size: 200,
+            tabs: [
+              {
+                id: TAB_ID_PROPERTIES
+              }
+            ]
+          },
+          {
+            id: "layersPanel",
+            size: 200,
+            tabs: [
+              {
+                id: TAB_ID_LAYERS
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+};
+
+const mobileLayout: LayoutBase = {
+  dockbox: {
+    id: "main",
+    mode: "vertical",
+    children: [
+      {
+        id: "canvasBox",
+        size: 400,
+        mode: "vertical",
+        children: [
+          {
+            id: "canvasPanel",
+            tabs: [
+              {
+                id: TAB_ID_CANVAS
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: "layerAndPropertiesBox",
+        size: 200,
+        tabs: [
+          {
+            id: TAB_ID_LAYERS
+          },
+          {
+            id: TAB_ID_PROPERTIES
+          }
+        ]
+      },
+    ]
+  }
+};
+
 export const VisualizerScreen: React.FC = () => {
   const canvasInteractions = React.useRef<VisualizerCanvasInterations>();
   const dockLayout = React.useRef<DockLayout>(null);
-  const [layout, setLayout] = React.useState<LayoutBase>({
-    dockbox: {
-      id: "main",
-      mode: "horizontal",
-      children: [
-        {
-          id: "canvasBox",
-          size: 500,
-          mode: "vertical",
-          children: [
-            {
-              id: "canvasPanel",
-              tabs: [
-                {
-                  id: TAB_ID_CANVAS
-                }
-              ]
-            }
-          ]
-        },
-        {
-          id: "layerAndPropertiesBox",
-          size: 200,
-          mode: "vertical",
-          children: [
-            {
-              id: "propertiesBox",
-              size: 200,
-              tabs: [
-                {
-                  id: TAB_ID_PROPERTIES
-                }
-              ]
-            },
-            {
-              id: "layersPanel",
-              size: 200,
-              tabs: [
-                {
-                  id: TAB_ID_LAYERS
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  });
+  const aspectRatio = window.innerWidth / window.innerHeight;
+  const [layout, setLayout] = React.useState<LayoutBase>(() => cloneObject(
+    aspectRatio > 1.0
+      ? desktopLayout
+      : mobileLayout));
 
   const visualizerComponents = useVisualizer();
   const visualizer = visualizerComponents.visualizer;
@@ -530,6 +571,23 @@ export const VisualizerScreen: React.FC = () => {
           {
             name: "Pixel to Pixel",
             onClick: () => canvasInteractions.current?.pixelToPixel()
+          },
+          {
+            name: "Editor Layout",
+            menuElements: [
+              {
+                name: "Reset to Desktop Layout",
+                onClick: () => {
+                  setLayout(cloneObject(desktopLayout));
+                }
+              },
+              {
+                name: "Reset to Mobile Layout",
+                onClick: () => {
+                  setLayout(cloneObject(mobileLayout));
+                }
+              },
+            ]
           }
         ]
       }
