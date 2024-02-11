@@ -49,33 +49,66 @@ import {
   unionSdf
 } from "./sdfs/sdfs";
 
-export const featuredSdfs: LayerSDF[] = [
+export const sdfShapes: LayerSDF[] = [
   sphereSdf,
   boxSdf,
   cylinderSdf,
   infiniteCylinderSdf,
   coneSdf,
   torusSdf,
-  caveSdf,
-  unionSdf,
-  subtractionSdf,
-  intersectionSdf,
+  caveSdf
+];
+
+export const sdfModifiers: LayerSDF[] = [
+  transformSdf,
   invertSdf,
   bumpSdf,
   inflateSdf,
   dripSdf,
   twistSdf,
   repeatSdf,
-  transformSdf,
-  fastUnionSdf,
-  fastSubtractionSdf,
-  fastIntersectionSdf,
   stageSdf
 ];
 
+export const sdfBooleanOperations: LayerSDF[] = [
+  unionSdf,
+  subtractionSdf,
+  intersectionSdf,
+  fastUnionSdf,
+  fastSubtractionSdf,
+  fastIntersectionSdf,
+];
+
+export const generatorLayers: LayerCode[] = [
+  textureLayer,
+  connnectedPointsLayer,
+  gradientLayer,
+  fractalFlowLayer,
+  fractalCircuitLayer,
+  spiralLayer,
+  infiniteCaveLayer,
+  audioInputLayer,
+  audioWaveformLayer,
+];
+
+export const effectLayers: LayerCode[] = [
+  glitchLayer,
+  chromaticAberrationLayer,
+  boxBlurLayer,
+  godRaysLayer,
+  gradientColorizeLayer,
+  pixelatedPalette,
+  kaleidoscopeLayer,
+  repeaterLayer,
+  liquidLayer,
+  swirlLayer,
+  tunnelLayer,
+  fxaaLayer,
+  perspective3DLayer,
+  stageLayer,
+];
+
 export const featuredLayers: LayerCode[] = [
-  ...featuredSdfs,
-  sdfRayMarchingLayer,
   connnectedPointsLayer,
   glitchLayer,
   chromaticAberrationLayer,
@@ -99,9 +132,7 @@ export const featuredLayers: LayerCode[] = [
   perspective3DLayer,
   stageLayer,
   textureLayer,
-  emptyJavaScriptLayer,
-  emptyShaderLayer,
-]
+];
 
 export const visualLayers: LayerShader[] = [
   connnectedPointsLayer,

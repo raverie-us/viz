@@ -297,10 +297,10 @@ export const VisualizerScreen: React.FC = () => {
 
 
   return <Box display="contents">
-    <AppMenu sx={{height: APP_BAR_HEIGHT}} menus={[
+    <AppMenu sx={{height: APP_BAR_HEIGHT}} menuElements={[
       {
         name: "File",
-        children: [
+        menuElements: [
           {
             name: "Open",
             onClick: async () => {
@@ -458,7 +458,7 @@ export const VisualizerScreen: React.FC = () => {
       },
       {
         name: "Image",
-        children: [
+        menuElements: [
           {
             name: "Canvas Size...",
             onClick: () => {
@@ -484,7 +484,7 @@ export const VisualizerScreen: React.FC = () => {
       },
       {
         name: "Layer",
-        children: [
+        menuElements: [
           {
             name: "Duplicate Layer",
             onClick: () => {
@@ -514,7 +514,7 @@ export const VisualizerScreen: React.FC = () => {
       },
       {
         name: "View",
-        children: [
+        menuElements: [
           {
             name: "Zoom In",
             onClick: () => canvasInteractions.current?.zoomIn()

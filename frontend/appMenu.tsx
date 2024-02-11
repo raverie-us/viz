@@ -2,54 +2,34 @@ import React from "react";
 import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import {SxProps, Theme, useTheme} from "@mui/material/styles";
-import Popper from "@mui/material/Popper";
-import Paper from "@mui/material/Paper";
 import {useDebounce} from "@react-hook/debounce";
-
-export interface AppMenuOption {
-  name: string;
-  onClick?: () => void;
-  children?: AppMenuOption[];
-}
+import { MenuElement } from "./menuElement";
+import { PopMenu } from "./popMenu";
 
 export interface AppMenuProps {
-  menus: AppMenuOption[];
+  menuElements: MenuElement[];
   sx?: SxProps<Theme>;
 }
 
 interface AppMenuRootProps extends React.DOMAttributes<HTMLLIElement> {
   open: boolean;
-  menu: AppMenuOption;
+  menu: MenuElement;
   onClose: () => void;
 }
 
-const AppMenuRoot: React.FC<AppMenuRootProps> = (props) => {
-  const {open, menu, onClose, ...menuItemProps} = props;
+const AppMenuRoot: React.FC<AppMenuRootProps> = ({open, menu, onClose, ...menuItemProps}) => {
   const ref = React.useRef<HTMLLIElement>(null);
 
   return <>
     <MenuItem ref={ref} onClick={menu.onClick} {...menuItemProps}>{menu.name}</MenuItem>
-    <Popper
+    {menu.menuElements && <PopMenu
       anchorEl={ref.current}
-      placement="bottom-start"
+      horizontalDir="right"
+      verticalDir="down"
+      onClose={onClose}
       open={open}
-    >
-      <Paper>
-        {
-          menu.children?.map((child, index) =>
-            <MenuItem key={index} onClick={() => {
-              if (child.onClick) {
-                child.onClick();
-                onClose();
-              }
-            }}>
-              <Box pl={2} pr={2}>
-                {child.name}
-              </Box>
-            </MenuItem>)
-        }
-      </Paper>
-    </Popper>
+      menuElements={menu.menuElements}
+    />}
   </>;
 };
 
@@ -71,7 +51,7 @@ export const AppMenu: React.FC<AppMenuProps> = (props) => {
   }, [hasFocus]);
 
   const theme = useTheme();
-  const menus = props.menus.map((menu, index) =>
+  const menus = props.menuElements.map((menu, index) =>
     <AppMenuRoot
       key={index}
       menu={menu}

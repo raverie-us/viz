@@ -17,7 +17,6 @@ import {
   LayerShader,
   canParentLayer
 } from "../core/core";
-import {featuredLayers} from "../core/featuredLayers";
 import {TreeView, TreeItem} from "@mui/x-tree-view";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -31,7 +30,6 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddBoxIcon from "@mui/icons-material/AddBox";
 import FolderIcon from "@mui/icons-material/Folder";
 import {v4 as uuidv4} from "uuid";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { capCase } from "./textTransforms";
 import Select from "@mui/material/Select";
@@ -45,6 +43,18 @@ import {modalPropertyGrid} from "./modalPropertyGrid";
 import {generateGLSL, generateImage} from "./aiGeneration";
 import {spinner} from "./spinner";
 import {textureLayer} from "../core/layers/texture";
+import { PopMenu } from "./popMenu";
+import { MenuElement } from "./menuElement";
+import {
+  effectLayers,
+  generatorLayers,
+  sdfBooleanOperations,
+  sdfModifiers,
+  sdfShapes
+} from "../core/featuredLayers";
+import { sdfRayMarchingLayer } from "../core/layers/sdfRayMarching";
+import { emptyJavaScriptLayer } from "../core/layers/emptyJavaScript";
+import { emptyShaderLayer } from "../core/layers/emptyShader";
 
 export interface VisualizerLayersProps {
   visualizer: RaverieVisualizerCustom;
@@ -210,10 +220,10 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
 let hasPrinted = false;
 export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
   const [previewContexts] = React.useState<Record<string, CanvasRenderingContext2D>>({});
-  const [addLayerMenuAnchor, setAddLayerMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const addLayerMenuAnchor = React.useRef<HTMLElement>(null);
+  const [addLayerMenuOpen, setAddLayerMenuOpen] = React.useState(false);
   const [expandedIds, setExpandedIds] = React.useState<Record<string, boolean>>({});
   const [opacitySliderAnchor, setOpacitySliderAnchor] = React.useState<null | HTMLElement>(null);
-
   // Must be a layout effect or the animation frame could happen before the root is updated (using a bad deleted root)
   React.useLayoutEffect(() => {
     const visualizer = props.visualizer;
@@ -268,7 +278,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
   }, [props.compiledLayerRoot]);
 
   const closeAddLayerMenu = () => {
-    setAddLayerMenuAnchor(null);
+    setAddLayerMenuOpen(false);
   };
 
   const closeOpacitySlider = () => {
@@ -385,6 +395,142 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
   const blendModeOptions = props.selectedLayer?.type === "group"
     ? blendModeDisplayGroup
     : blendModeDisplay;
+  
+  const layerToMenuElement = (layer: LayerCode): MenuElement => ({
+    name: layer.name,
+    onClick: () => {
+      const newLayer: LayerCode = {
+        ...layer,
+        id: uuidv4(),
+        name: `${capCase(layer.type)} (${capCase(layer.name)})`
+      };
+      addNewLayer(newLayer, layer.name === "empty shader code" || layer.name === "empty javascript code");
+      closeAddLayerMenu();
+    }
+  });
+
+  const addLayerMenuElements: MenuElement[] = [
+    {
+      name: "AI",
+      menuElements: [
+        {
+          name: "AI Generated Shader",
+          onClick: async () => {
+            closeAddLayerMenu();
+    
+            const result = await modalPropertyGrid({
+              name: "Generate Shader From AI",
+              object: {
+                prompt: ""
+              }
+            });
+    
+            if (result.success) {
+              spinner.show("AI Generating GLSL Shader...");
+              try {
+                const newLayer: LayerShader = {
+                  ...defaultEmptyLayerShader(),
+                  id: uuidv4(),
+                  name: "AI Generated Shader",
+                  code: await generateGLSL(result.value.prompt)
+                };
+                addNewLayer(newLayer, true);
+              } finally {
+                spinner.hide();
+              }
+            }
+          }
+        },
+        {
+          name: "AI Generated Image",
+          onClick: async () => {
+            closeAddLayerMenu();
+    
+            const result = await modalPropertyGrid({
+              name: "Generate Image From AI",
+              object: {
+                prompt: ""
+              }
+            });
+    
+            if (result.success) {
+              spinner.show("AI Generating Image...");
+              try {
+                const newLayer: LayerShader = {
+                  ...textureLayer,
+                  id: uuidv4(),
+                  name: "AI Generated Image",
+                  values: [
+                    {
+                      name: "textureInput",
+                      type: "sampler2D",
+                      value: {
+                        url: await generateImage(result.value.prompt),
+                        wrapHorizontal: "mirrored",
+                        wrapVertical: "mirrored",
+                        filter: "mipmap"
+                      }
+                    },
+                    {
+                      name: "verticalBackground",
+                      type: "bool",
+                      value: false
+                    },
+                    {
+                      name: "horizontalBackground",
+                      type: "bool",
+                      value: false
+                    }
+                  ]
+                };
+                addNewLayer(newLayer, false);
+              } finally {
+                spinner.hide();
+              }
+            }
+          }
+        },
+      ]
+    },
+    {
+      name: "3d Signed Distance Fields",
+      menuElements: [
+        {
+          name: "Renderer Shader Layers",
+          menuElements: [
+            layerToMenuElement(sdfRayMarchingLayer)
+          ]
+        },
+        {
+          name: "Shapes",
+          menuElements: sdfShapes.map(layerToMenuElement)
+        },
+        {
+          name: "Boolean Operations",
+          menuElements: sdfBooleanOperations.map(layerToMenuElement)
+        },
+        {
+          name: "Modifiers",
+          menuElements: sdfModifiers.map(layerToMenuElement)
+        },
+      ]
+    },
+    {
+      name: "Generators",
+      menuElements: generatorLayers.map(layerToMenuElement)
+    },
+    {
+      name: "Effects",
+      menuElements: effectLayers.map(layerToMenuElement)
+    },
+    {
+      name: "Code",
+      menuElements: [
+        layerToMenuElement(emptyJavaScriptLayer),
+        layerToMenuElement(emptyShaderLayer),
+      ]
+    },
+  ];
 
   return <>
     <Box display="flex" flexDirection="column" height="100%" p={1}>
@@ -455,8 +601,8 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
         }}>
           <DeleteIcon/>
         </TooltipIconButton>
-        <TooltipIconButton tooltip="New Layer" size="small" onClick={(e) => {
-          setAddLayerMenuAnchor(e.target as HTMLElement);
+        <TooltipIconButton tooltip="New Layer" size="small" ref={addLayerMenuAnchor} onClick={(e) => {
+          setAddLayerMenuOpen(true);
         }}>
           <AddBoxIcon/>
         </TooltipIconButton>
@@ -473,102 +619,13 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
         <Box flexGrow={1}/>
       </Box>
     </Box>
-    <Menu
-      anchorEl={addLayerMenuAnchor}
-      open={Boolean(addLayerMenuAnchor)}
+    <PopMenu
+      anchorEl={addLayerMenuAnchor.current}
+      open={addLayerMenuOpen}
       onClose={closeAddLayerMenu}
-      anchorOrigin={{vertical: "top", horizontal: "right"}}
-      transformOrigin={{vertical: "bottom", horizontal: "right"}}
-    >
-      <MenuItem key="ai_shader" onClick={async () => {
-        closeAddLayerMenu();
-
-        const result = await modalPropertyGrid({
-          name: "Generate Shader From AI",
-          object: {
-            prompt: ""
-          }
-        });
-
-        if (result.success) {
-          spinner.show("AI Generating GLSL Shader...");
-          try {
-            const newLayer: LayerShader = {
-              ...defaultEmptyLayerShader(),
-              id: uuidv4(),
-              name: "AI Generated Shader",
-              code: await generateGLSL(result.value.prompt)
-            };
-            addNewLayer(newLayer, true);
-          } finally {
-            spinner.hide();
-          }
-        }
-      }}>
-        AI Generated Shader
-      </MenuItem>
-      <MenuItem key="ai_image" onClick={async () => {
-        closeAddLayerMenu();
-
-        const result = await modalPropertyGrid({
-          name: "Generate Image From AI",
-          object: {
-            prompt: ""
-          }
-        });
-
-        if (result.success) {
-          spinner.show("AI Generating Image...");
-          try {
-            const newLayer: LayerShader = {
-              ...textureLayer,
-              id: uuidv4(),
-              name: "AI Generated Image",
-              values: [
-                {
-                  name: "textureInput",
-                  type: "sampler2D",
-                  value: {
-                    url: await generateImage(result.value.prompt),
-                    wrapHorizontal: "mirrored",
-                    wrapVertical: "mirrored",
-                    filter: "mipmap"
-                  }
-                },
-                {
-                  name: "verticalBackground",
-                  type: "bool",
-                  value: false
-                },
-                {
-                  name: "horizontalBackground",
-                  type: "bool",
-                  value: false
-                }
-              ]
-            };
-            addNewLayer(newLayer, false);
-          } finally {
-            spinner.hide();
-          }
-        }
-      }}>
-        AI Generated Image
-      </MenuItem>
-      {
-        featuredLayers.map((layer, index) =>
-          <MenuItem key={index} onClick={() => {
-            const newLayer: LayerCode = {
-              ...layer,
-              id: uuidv4(),
-              name: `${capitalCase(layer.type)} (${capitalCase(layer.name)})`
-            };
-            addNewLayer(newLayer, layer.name === "empty shader code" || layer.name === "empty javascript code");
-            closeAddLayerMenu();
-          }}>
-            {capitalCase(layer.name)}
-          </MenuItem>)
-      }
-    </Menu>
+      menuElements={addLayerMenuElements}
+      horizontalDir="left"
+      verticalDir="up"
+    />
   </>;
 };
