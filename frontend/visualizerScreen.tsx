@@ -291,12 +291,18 @@ export const VisualizerScreen: React.FC = () => {
   }
 
   const doImport = async (file: File) => {
+    if (!canImport(file)) {
+      throw new Error(`Unable to import file: ${file.name}`);
+    }
+
     if (file.type === "image/vnd.adobe.photoshop") {
       const newRoot = convertPSDToLayers(await file.arrayBuffer());
-      compileLayerGroup(visualizer, newRoot);
+      compiledLayerRoot.layer.layers.push(...newRoot.layers);
+      recompile();
     } else if (file.type.startsWith("image/")) {
       const newRoot = await convertImageToLayers(file);
-      compileLayerGroup(visualizer, newRoot);
+      compiledLayerRoot.layer.layers.push(...newRoot.layers);
+      recompile();
     } else {
       const json = await file.text();
       const newRoot = JSON.parse(json) as LayerRoot;
