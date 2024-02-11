@@ -33,8 +33,8 @@ RUN wget -q -O- https://deb.nodesource.com/setup_21.x | bash
 RUN apt-get update && apt-get install -y nodejs && \
     npm i -g npm
 
-COPY v1-5-pruned-emaonly.ckpt /v1-5-pruned-emaonly.ckpt
-COPY v1-inference.yaml /v1-inference.yaml
+COPY server/models/structure/v1-5-pruned-emaonly.ckpt /v1-5-pruned-emaonly.ckpt
+COPY server/models/structure/v1-inference.yaml /v1-inference.yaml
 
 RUN groupadd -g 1000 group && useradd -g 1000 -u 1000 -ms /bin/bash user
 USER user
