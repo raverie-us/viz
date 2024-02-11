@@ -1970,6 +1970,8 @@ export class RaverieVisualizer {
     for (const target of targetsInternal.allTargets) {
       gl.bindTexture(gl.TEXTURE_2D, target.texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      target.width = width;
+      target.height = height;
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
@@ -1993,6 +1995,9 @@ export class RaverieVisualizer {
       ? this.createRenderTarget(targets)
       : targetsInternal.unusedTargets.pop() as RenderTarget;
 
+    if (newTarget.width !== targets.width || newTarget.height !== targets.height) {
+      throw new Error("Expected new target to match RenderTargets dimensions");
+    }
     ++newTarget.useCount;
     return newTarget;
   }
