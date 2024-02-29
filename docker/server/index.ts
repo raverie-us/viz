@@ -11,6 +11,14 @@ import * as childProcess from "node:child_process";
 import * as util from "node:util";
 import { NodeFileSystem } from "@tensorflow/tfjs-node/dist/io/file_system.js";
 const exec = util.promisify(childProcess.exec);
+import { mkdirp } from "mkdirp";
+import { rimraf } from "rimraf";
+
+rimraf("/tmp/viz/parts");
+rimraf("/tmp/viz/analyzed");
+mkdirp("/tmp/viz");
+mkdirp("/tmp/viz/parts");
+mkdirp("/tmp/viz/analyzed");
 
 //allin1 --out-dir /tmp/viz /tmp/viz/song.mp3
 

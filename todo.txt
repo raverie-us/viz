@@ -243,3 +243,129 @@ Ability to bind:
 Make this whole thing use the shadertoy globals
  - change all g to i
    - #define iChannel0/4 as iPreviousLayer
+
+We can eventually make a "3d" scene as a layer
+ - Create objects and organize them hierarchichally
+
+Is it a photoshop 2d scene, or a 3d scene?
+ - Do we have the checkerboard background?
+ - Use assimp, or whatever threejs uses for importing
+
+Do we use a separate editor for the 3d scene?
+ - Obviously share property grid and stuff, buuut
+ - Some of the menu options would make no sense unless we stayed in the layer editor too
+
+It sort of doesn't make sense to have the layers and stuff
+ - But maybe we use the same windows, the layer editor and the property grid
+ - But we store which one was last selected, like context or something
+ - menus can change, maybe
+
+Or maybe ultimately it's all layers
+But we have a 3d editor too
+All we really need for a 3d scene is some basic game scripting
+
+I think the viz editor should support multiple open things, and project names!
+
+The 3d editor will use the same layer / heirarchy editor
+
+We can create triangle meshes, or create hulls from points
+ - extrude 2d sh
+all grouping operations areapes (closed)
+
+All shapes must be closed?
+
+export scene or selection to 
+
+I really like the "hole" concept in tinkercad, but I think boolean subtraction is easy enough
+ - Hole basically just always does subtraction and sorts to the end
+
+We basically already have a 3d editor with sdfs
+ - sdfs can't easily do arbirary triangle geometry...
+ - And need dual contours to create a printable geometry
+ - But the visual indications are much stronger
+
+When you group something, our default is to union?
+Also shaders are slow to compile and can crash, perf can be worse...
+ - All groups or layers can be modifiers
+ - All shapes are code, just like our layers
+ - We can demand that operations happen on the same frame (stall) or allow async
+ - Most by default are async, but we can change that to do realtime stuff
+
+We support a ton of operations that we can do in code (tesselation, union, csg, etc)
+ - We can generate a ton of primitive shapes
+ - We can also generate 2D shapes, I want a "csg" style operations for 2d too
+   - And extrude
+ - Operations for textures (pixels) to vector, etc
+ - 2D vector editor too
+
+For making the container, the flow would look like:
+ - declare a 2d vector shape import
+ - import the file to our code
+ - use the 2d to extrude to a 3d shape
+ - create a bunch of parameters for wall thickness, etc (all magic numbers)
+ - Contract the 2d shape (using 2d operation contract/inflate, do same ones as photoshop selection if possible)
+ - Create the divider, match the height but include offset inward from top and bottom
+ - The coolest demo would be to edit the curves and watch it rebuild the container
+
+TinkerCad is almost what we want, but their code editor thing is annoying
+ - And have to edit shapes separately, can't just do it inline with my scene
+
+We should officially support typescript, maybe as a wasm module just to ensure sandboxing
+
+Top layer of 3d scene should be the renderer code
+ - Must define order, what's rendered, etc
+
+Use curv for inspiration on operations
+ - possibly borrowing library if it can do 
+
+We should be able to "call" other shapes
+ - Basically create a shape definition and use it as a function
+
+Use libfive if possible, run it in a wasm worker
+
+Make it so if we wanted, we could separate this to command line
+
+viz myfile.viz --export test.obj
+
+Maybe we can find a more performant way to compile shaders with SDFs
+ - Would be pretty in line with viz...
+ - But libfive seems to go pretty fast (and support dual contours!)
+
+Start with TinkerCad style, just login and allow personal stuff only (maintained in the cloud)
+
+We've got a good code editor, property grid, hierarchy/layer tree
+ - The layers need to be simplified, the "normal" and opacity should only show up on selected layers
+ - When you open a scene, the root of the scene knows the primary editor is
+
+Maybe not, maybe we can have a 2d canvas scene, and it can refer to 3d in the same file
+ - and maybe visa versa
+ - This would enable the design of "sub-projects"
+
+Ok, so we can add a 3d scene to 2d
+ - Or we can just have a 3d scene on the top level
+
+When you start a viz project, you pick what kind of project you're doing
+ - but in reality, a project can have many parts
+ - Is there like a project view
+ - Since this is just going to be a flat list of subprojects
+   - Maybe we pick which one we edit inside the canvas window?
+   - Or inside the layers?
+ - A project can have multiple windows unlike photoshop
+   - How do we edit a project if it's not referenced within the file
+   - Maybe we just have a project menu, and you can select the current editing sub-project
+     - By default it's just by clicking the window (context) but if you close it, this will re-open it
+   - And it's dependent upon which current window you have open, if you close it you lose it all
+
+Same kind of a problem we had, they can't import a mesh and start from there
+ - to be fair, 99% of tinkercad things I don't import
+ - but we still want a way to do that
+
+Hmmmm, libfive uses some weird shit, they basically wrote a language
+ - I wonder if we can expose the meshing algorithm
+
+Or maybe compile GLSL to a minified version of that...
+
+I think at that point, we might as well just parse GLSL > Vulkan opcode > libfive assembly
+
+Libfive game engine, heh
+

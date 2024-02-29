@@ -51,8 +51,7 @@ RUN python3 stablediffusion/scripts/txt2img.py --prompt "test" --ckpt /v1-5-prun
 
 #CMD python3 stablediffusion/scripts/txt2img.py --outdir /tmp/viz --prompt "a professional photograph of an astronaut riding a horse" --ckpt /v1-5-pruned-emaonly.ckpt --config /v1-inference.yaml --n_samples 1 --H 512 --W 512 --device cuda
 
-#COPY song.mp3 /song.mp3
-#CMD allin1 --keep-byproducts --out-dir /tmp/viz /song.mp3
+CMD allin1 --keep-byproducts --out-dir /tmp/viz /tmp/viz/song.mp3
 
 #ENTRYPOINT [ "allin1", "--keep-byproducts", "--out-dir", "/tmp/viz", "/song.mp3"]
 #CMD "nvidia-smi && python3"
