@@ -11,9 +11,9 @@ import Box from "@mui/material/Box";
 import {Toasts} from "./toasts";
 import {DndProvider} from "react-dnd";
 import {HTML5Backend} from "react-dnd-html5-backend";
-import {VisualizerScreen} from "./visualizerScreen";
 import "./reactTransform.css";
 import GlobalStyles from "@mui/material/GlobalStyles";
+import { Environment } from "./environment";
 
 const SCROLLBAR_WIDTH = "10px";
 
@@ -92,7 +92,7 @@ const App: React.FC = () => {
       : null
     }
     <Toasts/>
-    <VisualizerScreen/>
+    <Environment/>
     </DndProvider>
   </ThemeProvider>;
 };
