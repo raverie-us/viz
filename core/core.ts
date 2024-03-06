@@ -1995,7 +1995,7 @@ export class RaverieVisualizer {
       ? this.createRenderTarget(targets)
       : targetsInternal.unusedTargets.pop() as RenderTarget;
 
-    if (newTarget.width !== targets.width || newTarget.height !== targets.height) {
+    if (newTarget.width !== targetsInternal.widthRender || newTarget.height !== targetsInternal.heightRender) {
       throw new Error("Expected new target to match RenderTargets dimensions");
     }
     ++newTarget.useCount;
