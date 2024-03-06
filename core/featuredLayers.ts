@@ -1,7 +1,5 @@
 import { LayerCode, LayerSDF, LayerShader } from "./core";
 import { connnectedPointsLayer } from "./layers/connectedPoints";
-import { emptyShaderLayer } from "./layers/emptyShader";
-import { emptyJavaScriptLayer } from "./layers/emptyJavaScript";
 import { glitchLayer } from "./layers/glitch";
 import { chromaticAberrationLayer } from "./layers/chromaticAberration";
 import { boxBlurLayer } from "./layers/boxBlur";
@@ -13,6 +11,7 @@ import { kaleidoscopeLayer } from "./layers/kaleidoscope";
 import { liquidLayer } from "./layers/liquid";
 import { spiralLayer } from "./layers/spiral";
 import { swirlLayer } from "./layers/swirl";
+import { lensLayer } from "./layers/lens";
 import { textureLayer } from "./layers/texture";
 import { tunnelLayer } from "./layers/tunnel";
 import { infiniteCaveLayer } from "./layers/cave";
@@ -22,7 +21,6 @@ import { repeaterLayer } from "./layers/repeater";
 import { fractalFlowLayer } from "./layers/fractalFlow";
 import { fractalCircuitLayer } from "./layers/fractalCircuit";
 import { fxaaLayer } from "./layers/fxaa";
-import { sdfRayMarchingLayer } from "./layers/sdfRayMarching";
 import { stageLayer } from "./layers/stage";
 import { perspective3DLayer } from "./layers/perspective3d";
 import {
@@ -102,6 +100,7 @@ export const effectLayers: LayerCode[] = [
   repeaterLayer,
   liquidLayer,
   swirlLayer,
+  lensLayer,
   tunnelLayer,
   fxaaLayer,
   perspective3DLayer,
@@ -124,6 +123,7 @@ export const featuredLayers: LayerCode[] = [
   liquidLayer,
   spiralLayer,
   swirlLayer,
+  lensLayer,
   tunnelLayer,
   infiniteCaveLayer,
   audioInputLayer,
@@ -150,6 +150,7 @@ export const visualLayers: LayerShader[] = [
   liquidLayer,
   spiralLayer,
   swirlLayer,
+  lensLayer,
   tunnelLayer,
   infiniteCaveLayer,
   audioWaveformLayer,
