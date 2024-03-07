@@ -20,11 +20,14 @@ vec4 render() {
   
   for (int y = -sampleRadiusInt; y <= sampleRadiusInt; ++y) {
     for (int x = -sampleRadiusInt; x <= sampleRadiusInt; ++x) {
-      color += texture(gPreviousLayer, gUV + (vec2(x, y) - vec2(0.5)) * texel);
+      vec4 s = texture(gPreviousLayer, gUV + (vec2(x, y) - vec2(0.5)) * texel);
+      color.rgb += s.rgb * s.a;
+      color.a += s.a;
     }
   }
   int sampleDiameter = sampleRadiusInt * 2 + 1;
-  color /= float(sampleDiameter * sampleDiameter);
+  color.rgb /= color.a;
+  color.a /= float(sampleDiameter * sampleDiameter);
   return color;
 }`.trim(),
   blendMode: "normal",
