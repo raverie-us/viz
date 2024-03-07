@@ -96,8 +96,7 @@ export const Environment: React.FC = () => {
   const [layout, setLayout] = React.useState<LayoutBase>(() => cloneObject(
     aspectRatio > 1.0
       ? desktopLayout
-      : desktopLayout));
-
+      : mobileLayout));
 
   //const onEditCode = (layerShader: CompiledLayerCode) => {
   //  const dock = dockLayout.current;
@@ -172,18 +171,6 @@ export const Environment: React.FC = () => {
       file.name.endsWith(".rvis");
   }
 
-  const doImport = async (file: File) => {
-    // Need to handle file import
-    // Should be along the lines of:
-    //  - First, did you drop it over a specific window, if so get the context and let the context handle it
-    //  - If not, then let the current context handle it
-    //  - If the context does not handle it, invoke a generic file import (may open a new context)
-  };
-
-  const doSave = async () => {
-    // Ask the current context
-  };
-
   React.useEffect(() => {
     const onDrop = async (event: DragEvent) => {
       if (!event.dataTransfer) {
@@ -196,8 +183,9 @@ export const Environment: React.FC = () => {
       if (files.length !== 0) {
         event.preventDefault();
 
+        // TODO(trevor): Get the context of whatever window we dropped it over and activate it before calling doImport
         for (const file of files) {
-          await doImport(file);
+          await Meta.instance.importFile(file, true);
         }
       }
     };
@@ -227,15 +215,23 @@ export const Environment: React.FC = () => {
             onClick: async () => {
               const file = await openFile(fileTypeAccept);
               if (file) {
-                await doImport(file);
+                await Meta.instance.importFile(file, false);
+              }
+            }
+          },
+          {
+            name: "Import",
+            onClick: async () => {
+              const file = await openFile(fileTypeAccept);
+              if (file) {
+                await Meta.instance.importFile(file, true);
               }
             }
           },
           {
             name: "Save",
             onClick: async () => {
-              await doSave();
-              setHasUnsavedChanges(false);
+              await Meta.instance.saveFile();
             }
           },
         ]
