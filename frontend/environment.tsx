@@ -1,10 +1,9 @@
 import React from "react";
 import Box from "@mui/material/Box";
-import { LayoutBase, DockLayout, TabData, PanelData, LayoutData } from "rc-dock";
+import { LayoutBase, DockLayout, TabData, LayoutData } from "rc-dock";
 import "./visualizerDockPanelTheme.less";
 import { AppMenu } from "./appMenu";
-import { openFile, saveFile, cloneObject, pass } from "./utility";
-import { setHasUnsavedChanges } from "./unload";
+import { openFile, cloneObject } from "./utility";
 import { Meta, MetaCreateTabEvent } from "./meta";
 
 const TAB_ID_WORKAREA = "workArea";
@@ -101,15 +100,11 @@ export const Environment: React.FC = () => {
   React.useEffect(() => {
     Meta.instance.addEventListener(Meta.CREATE_TAB, ((event: MetaCreateTabEvent) => {
       // event.mainWindow
-      const layoutFull = {...layout} as LayoutData;
+      const layoutFull = {...layout};
       layoutFull.dockbox.children.push({
-        id: event.tabId,
-        size: 200,
         tabs: [
           {
-            id: event.tabId,
-            content: event.content,
-            title: event.title
+            id: event.tabId
           }
         ]
       });
@@ -283,6 +278,7 @@ export const Environment: React.FC = () => {
         console.log(newLayout);
       }}
       loadTab={(tab) => {
+        console.log("LOAD TAB", tab.id);
         if (!tab.id) {
           throw new Error("Empty tab id");
         }
@@ -312,8 +308,12 @@ export const Environment: React.FC = () => {
           };
         }
 
-        //return (Meta.instance.context?.onLoadTab(tab.id) || null) as any as TabData;
-        return null as any as TabData;
+        const metaTab = Meta.instance.tabs[tab.id];
+        return {
+          id: tab.id,
+          title: metaTab.title,
+          content: metaTab.content
+        };
       }}
       afterPanelLoaded={(savedPanel, loadedPanel) => {
         if (savedPanel.id === TAB_ID_WORKAREA) {

@@ -5,8 +5,9 @@ import { CompiledLayerRoot, LayerRoot, RenderTargets, defaultEmptyCompiledLayerR
 import { RaverieVisualizerCustom } from "../visualizerCustom";
 import { VisualGenerator } from "../../core/generate";
 import { RaverieAudioAnalyserLive } from "../../core/browser";
+import { VisualizerCanvas } from "../visualizerCanvas";
 
-class VisualizerMetaContext extends MetaContext {
+export class VisualizerMetaContext extends MetaContext {
   public visualizer: RaverieVisualizerCustom;
   public generator: VisualGenerator;
   public audioAnalyser: RaverieAudioAnalyserLive;
@@ -15,23 +16,47 @@ class VisualizerMetaContext extends MetaContext {
   public renderTargets: RenderTargets;
   public compiledLayerRoot: CompiledLayerRoot = defaultEmptyCompiledLayerRoot();
 
+  /*
+  setPointerEvents: (onPosition: PositionCallback) => {
+    const onPointer = (e: PointerEvent) => {
+      if (e.button === 0 && e.type === "pointerdown") {
+        canvas.setPointerCapture(e.pointerId);
+      } else if (!canvas.hasPointerCapture(e.pointerId)) {
+        return;
+      }
+
+      if (e.buttons & 1) {
+        const rect = canvas.getBoundingClientRect();
+        const xNormalized = (e.clientX - rect.x) / rect.width * 2.0 - 1.0;
+        const yNormalized = -((e.clientY - rect.y) / rect.height * 2.0 - 1.0);
+        onPosition(xNormalized, yNormalized);
+      }
+    };
+
+    canvas.onpointerdown = onPointer;
+    canvas.onpointermove = onPointer;
+    canvas.onpointerup = onPointer;
+  },
+  setCompiledLayerRoot: (compiledLayerRoot: CompiledLayerRoot) => {
+    root = compiledLayerRoot;
+  },
+  cancelRendering: () => {
+    cancelAnimationFrame(animationFrame);
+  }
+  */
+
   public constructor() {
-    const canvas = document.createElement("canvas");
-    const visualizer = new RaverieVisualizerCustom(canvas);
-    const generator = new VisualGenerator(visualizer);
-    const audioAnalyser = new RaverieAudioAnalyserLive();
-    const renderTargets = visualizer.createRenderTargets(canvas.width, canvas.height);
+    super([]);
+    this.canvas = document.createElement("canvas");
+    this.visualizer = new RaverieVisualizerCustom(this.canvas);
+    this.gl = this.visualizer.gl;
+    this.generator = new VisualGenerator(this.visualizer);
+    this.audioAnalyser = new RaverieAudioAnalyserLive();
+    this.renderTargets = this.visualizer.createRenderTargets(this.canvas.width, this.canvas.height);
     //canvas.className = classes.focusOutline;
-    canvas.style.backgroundColor = "#333";
+    this.canvas.style.backgroundColor = "#333";
 
-    super("Canvas", <div>test</div>, []);
-
-    this.canvas = canvas;
-    this.visualizer = visualizer;
-    this.generator = generator;
-    this.audioAnalyser = audioAnalyser;
-    this.gl = visualizer.gl;
-    this.renderTargets = renderTargets;
+    this.createMainTab("Canvas", <VisualizerCanvas context={this} />);
   }
 }
 

@@ -8,17 +8,23 @@ export interface MetaSelection {
   properties: PropertyGeneric[];
 }
 
+export interface MetaTab {
+  title: string;
+  content: React.ReactElement;
+}
+
 export class MetaCreateTabEvent extends Event {
-  public constructor(public title: string, public content: React.ReactElement, public mainWindow: boolean, public tabId: string) {
+  public constructor(
+    public mainWindow: boolean,
+    public tabId: string) {
     super(Meta.CREATE_TAB);
   }
 }
 
 export class MetaContext {
-  private tabs: string[] = [];
+  public tabs: string[] = [];
 
-  public constructor(title: string, content: React.ReactElement, public readonly menuElements: MenuElement[]) {
-    this.createTabInternal(title, content, true);
+  public constructor(public readonly menuElements: MenuElement[]) {
   }
 
   protected onCloseTab(tabId: string) {
@@ -27,19 +33,15 @@ export class MetaContext {
   protected onCloseContext() {
   }
 
-  protected createTab(title: string, content: React.ReactElement): string {
-    return this.createTabInternal(title, content, false);
+  protected createMainTab(title: string, content: React.ReactElement): string {
+    if (this.tabs.length !== 0) {
+      throw new Error("Can only have one main tab, and it must be the first");
+    }
+    return Meta.instance.createTab(this, title, content, true);
   }
 
-  private createTabInternal(title: string, content: React.ReactElement, mainWindow: boolean): string {
-    const tabId = uuidv4();
-    this.tabs.push(tabId);
-    Meta.instance.dispatchEvent(new MetaCreateTabEvent(
-      title,
-      content,
-      mainWindow,
-      tabId));
-    return tabId;
+  protected createTab(title: string, content: React.ReactElement): string {
+    return Meta.instance.createTab(this, title, content, false);
   }
 }
 
@@ -59,9 +61,24 @@ export class Meta extends EventTarget {
   public selection: MetaSelection | null = null;
   public context: MetaContext | null = null;
 
+  public tabs: Record<string, MetaTab> = {};
+
   public static instance = new Meta();
 
   public readonly fileLoaders: MetaFileLoaderInfo[] = [];
+
+  public createTab(context: MetaContext, title: string, content: React.ReactElement, mainWindow: boolean): string {
+    const tabId = uuidv4();
+    context.tabs.push(tabId);
+    this.tabs[tabId] = {
+      title,
+      content
+    };
+    Meta.instance.dispatchEvent(new MetaCreateTabEvent(
+      mainWindow,
+      tabId));
+    return tabId;
+  }
 
   public setContext(context: MetaContext) {
     if (this.context === context) {

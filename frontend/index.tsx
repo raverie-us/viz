@@ -14,6 +14,7 @@ import {HTML5Backend} from "react-dnd-html5-backend";
 import "./reactTransform.css";
 import GlobalStyles from "@mui/material/GlobalStyles";
 import { Environment } from "./environment";
+import "./contexts"
 
 const SCROLLBAR_WIDTH = "10px";
 
