@@ -1,11 +1,11 @@
 import React from "react";
 import Box from "@mui/material/Box";
-import { LayoutBase, DockLayout, TabData, PanelData } from "rc-dock";
+import { LayoutBase, DockLayout, TabData, PanelData, LayoutData } from "rc-dock";
 import "./visualizerDockPanelTheme.less";
 import { AppMenu } from "./appMenu";
 import { openFile, saveFile, cloneObject, pass } from "./utility";
 import { setHasUnsavedChanges } from "./unload";
-import { Meta } from "./meta";
+import { Meta, MetaCreateTabEvent } from "./meta";
 
 const TAB_ID_WORKAREA = "workArea";
 const TAB_ID_LAYERS = "layers";
@@ -98,6 +98,25 @@ export const Environment: React.FC = () => {
       ? desktopLayout
       : mobileLayout));
 
+  React.useEffect(() => {
+    Meta.instance.addEventListener(Meta.CREATE_TAB, ((event: MetaCreateTabEvent) => {
+      // event.mainWindow
+      const layoutFull = {...layout} as LayoutData;
+      layoutFull.dockbox.children.push({
+        id: event.tabId,
+        size: 200,
+        tabs: [
+          {
+            id: event.tabId,
+            content: event.content,
+            title: event.title
+          }
+        ]
+      });
+      setLayout(layoutFull);
+    }) as any);
+  }, []);
+
   //const onEditCode = (layerShader: CompiledLayerCode) => {
   //  const dock = dockLayout.current;
   //  if (!dock) {
@@ -156,8 +175,6 @@ export const Environment: React.FC = () => {
   //  }
   //  return undefined;
   //}, [editCodeForSelectedLayer, selectedLayer]);
-
-
 
 
   const fileTypeAccept = ".rvis, .viz, .psd, image/vnd.adobe.photoshop, image/*";
@@ -295,7 +312,8 @@ export const Environment: React.FC = () => {
           };
         }
 
-        return (Meta.instance.context?.onLoadTab(tab.id) || null) as any as TabData;
+        //return (Meta.instance.context?.onLoadTab(tab.id) || null) as any as TabData;
+        return null as any as TabData;
       }}
       afterPanelLoaded={(savedPanel, loadedPanel) => {
         if (savedPanel.id === TAB_ID_WORKAREA) {
