@@ -1,21 +1,21 @@
 import React from "react";
-import {defaultFrameTime} from "../core/core";
-import {RaverieVisualizerCustom} from "./visualizerCustom";
+import {defaultFrameTime} from "../../core/core";
+import { VisualizerMetaContext } from "./visualizerMetaContext";
 
 interface VisualizerFpsCounterProps {
-  visualizer: RaverieVisualizerCustom;
+  context: VisualizerMetaContext;
 }
 
 const FRAME_TIME_AVERAGE_SAMPLES = 10;
 const FPS_UPDATE_MS = 1000;
 
-export const VisualizerFpsCounter: React.FC<VisualizerFpsCounterProps> = (props) => {
+export const VisualizerFpsCounter: React.FC<VisualizerFpsCounterProps> = ({context}) => {
   const [fps, setFps] = React.useState(1 / defaultFrameTime);
 
   React.useEffect(() => {
     let averageFrameTimeSeconds = defaultFrameTime;
 
-    props.visualizer.onBeforeRender = (newFrameTimeSeconds) => {
+    context.visualizer.onBeforeRender = (newFrameTimeSeconds) => {
       averageFrameTimeSeconds =
         (averageFrameTimeSeconds * (FRAME_TIME_AVERAGE_SAMPLES - 1) + newFrameTimeSeconds) / FRAME_TIME_AVERAGE_SAMPLES;
     };
@@ -25,12 +25,12 @@ export const VisualizerFpsCounter: React.FC<VisualizerFpsCounterProps> = (props)
     }, FPS_UPDATE_MS);
 
     return () => {
-      props.visualizer.onBeforeRender = null;
+      context.visualizer.onBeforeRender = null;
       clearInterval(interval);
     };
-  }, [props.visualizer]);
+  }, [context]);
 
-  if (props.visualizer.timePoint.isFixed) {
+  if (context.timePoint.isFixed) {
     return <>(FPS: Fixed)</>;
   }
 

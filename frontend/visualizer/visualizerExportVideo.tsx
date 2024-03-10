@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import React from "react";
-import {NumberInput} from "./numberInput";
-import {TooltipIconButton} from "./tooltipIconButton";
+import {NumberInput} from "../numberInput";
+import {TooltipIconButton} from "../tooltipIconButton";
 import DriveFileRenameOutlineIcon from "@mui/icons-material/DriveFileRenameOutline";
 import HighQualityIcon from "@mui/icons-material/HighQuality";
 import DiamondIcon from "@mui/icons-material/Diamond";
@@ -9,7 +9,7 @@ import InstagramIcon from "@mui/icons-material/Instagram";
 import MusicNoteIcon from "@mui/icons-material/MusicNote";
 import YouTubeIcon from "@mui/icons-material/YouTube";
 import Button from "@mui/material/Button";
-import {openFile} from "./utility";
+import {openFile} from "../utility";
 import Typography from "@mui/material/Typography";
 
 export interface VisualizerExportVideoSettings {

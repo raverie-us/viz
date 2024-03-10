@@ -3,14 +3,14 @@ import Box from "@mui/material/Box";
 import {TransformWrapper, TransformComponent, ReactZoomPanPinchContentRef} from "react-zoom-pan-pinch";
 import {useResizeDetector} from "react-resize-detector";
 import {VisualizerFpsCounter} from "./visualizerFpsCounter";
-import {scaleToFit, TimePoint} from "./utility";
-import {TooltipIconButton} from "./tooltipIconButton";
+import {scaleToFit, TimePoint} from "../utility";
+import {TooltipIconButton} from "../tooltipIconButton";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
-import {CustomTooltip} from "./customTooltip";
+import {CustomTooltip} from "../customTooltip";
 import Badge from "@mui/material/Badge";
 import {VisualizerTime} from "./visualizerTime";
-import { type VisualizerMetaContext } from "./visualizer/visualizerMetaContext";
+import { type VisualizerMetaContext } from "./visualizerMetaContext";
 
 export type PositionCallback = (xNormalized: number, yNormalized: number) => void;
 
@@ -47,7 +47,7 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({context}) => 
   const [firstResize, setFirstResize] = React.useState(true);
   const [audioInputStream, setAudioInputStream] = React.useState<MediaStream | null>(null);
   const [timePoint, setTimePoint] = React.useState<TimePoint>(
-    context.visualizer.timePoint);
+    context.timePoint);
   const [audioInputNotification, setAudioInputNotification] =
     React.useState<AudioNotificationState>(() => {
       const result = sessionStorage.getItem(AUDIO_INPUT_NOTIFICATION_KEY);
@@ -186,7 +186,7 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({context}) => 
       </TransformComponent>
     </TransformWrapper>
     <Box position="absolute" display="flex" alignItems="center" gap={1} top={0} right={0} m={0.5}>
-      <VisualizerFpsCounter visualizer={context.visualizer} />
+      <VisualizerFpsCounter context={context} />
       <VisualizerTime
         timePoint={timePoint}
         onChanged={(newTimePoint) => {

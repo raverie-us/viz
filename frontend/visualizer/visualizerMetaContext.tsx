@@ -1,20 +1,33 @@
 import React from "react";
 import { Meta, MetaContext, MetaFileLoader } from "../meta";
-import { convertImageToLayers, convertPSDToLayers } from "../visualizerImport";
+import { convertImageToLayers, convertPSDToLayers } from "./visualizerImport";
 import { CompiledLayerRoot, LayerRoot, RenderTargets, defaultEmptyCompiledLayerRoot } from "../../core/core";
-import { RaverieVisualizerCustom } from "../visualizerCustom";
 import { VisualGenerator } from "../../core/generate";
-import { RaverieAudioAnalyserLive } from "../../core/browser";
-import { VisualizerCanvas } from "../visualizerCanvas";
+import { RaverieAudioAnalyserLive, RaverieVisualizerBrowser } from "../../core/browser";
+import { VisualizerCanvas } from "./visualizerCanvas";
+import { TimePoint, computeTimePointNow } from "../utility";
 
 export class VisualizerMetaContext extends MetaContext {
-  public visualizer: RaverieVisualizerCustom;
+  public visualizer: RaverieVisualizerBrowser;
   public generator: VisualGenerator;
   public audioAnalyser: RaverieAudioAnalyserLive;
   public canvas: HTMLCanvasElement;
   public gl: WebGL2RenderingContext;
   public renderTargets: RenderTargets;
-  public compiledLayerRoot: CompiledLayerRoot = defaultEmptyCompiledLayerRoot();
+  public compiledLayerRoot: CompiledLayerRoot;
+  private animationFrame = -1;
+
+  public autoRender = true;
+
+  public timePoint: TimePoint = {
+    isFixed: false,
+    baseTimeMs: performance.now(),
+    offsetTimeMs: 0
+  };
+
+  protected onCloseContext(): void {
+    cancelAnimationFrame(this.animationFrame);
+  }
 
   /*
   setPointerEvents: (onPosition: PositionCallback) => {
@@ -45,10 +58,11 @@ export class VisualizerMetaContext extends MetaContext {
   }
   */
 
-  public constructor() {
+  public constructor(layerRoot: LayerRoot) {
     super([]);
     this.canvas = document.createElement("canvas");
-    this.visualizer = new RaverieVisualizerCustom(this.canvas);
+    this.visualizer = new RaverieVisualizerBrowser(this.canvas);
+    this.compiledLayerRoot = this.visualizer.compile(layerRoot);
     this.gl = this.visualizer.gl;
     this.generator = new VisualGenerator(this.visualizer);
     this.audioAnalyser = new RaverieAudioAnalyserLive();
@@ -56,7 +70,18 @@ export class VisualizerMetaContext extends MetaContext {
     //canvas.className = classes.focusOutline;
     this.canvas.style.backgroundColor = "#333";
 
-    this.createMainTab("Canvas", <VisualizerCanvas context={this} />);
+    const onUpdate = () => {
+      this.animationFrame = requestAnimationFrame(onUpdate);
+      if (this.autoRender) {
+        const timeMs = computeTimePointNow(this.timePoint);
+        this.audioAnalyser.updateVisualizerAudio(this.visualizer, timeMs);
+        this.visualizer.render(this.compiledLayerRoot, timeMs, this.renderTargets);
+      }
+    };
+    this.animationFrame = requestAnimationFrame(onUpdate);
+
+
+    this.openMainTab("Canvas", <VisualizerCanvas context={this} />);
   }
 }
 
@@ -73,12 +98,14 @@ const fileLoader: MetaFileLoader<VisualizerMetaContext> = async (file, importCon
   }
 
   if (importContext) {
-    //compiledLayerRoot.layer.layers.push(...newRoot.layers);
+    importContext.compiledLayerRoot.layer.layers.push(...newRoot.layers);
+    //TODO(trevor): Tell the meta context to recompile, but I kinda want to do it in a minimal way
+    // Like maybe we say "insert these layers" on the meta context object, and it handles events/recompile
+    // Maybe a structure changed event?
     //recompile();
     return importContext;
   } else {
-    //compileLayerGroup(visualizer, newRoot);
-    return new VisualizerMetaContext();
+    return new VisualizerMetaContext(newRoot);
   }
 };
 

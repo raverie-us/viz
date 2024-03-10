@@ -16,48 +16,48 @@ import {
   CompiledLayerRoot,
   LayerShader,
   canParentLayer
-} from "../core/core";
+} from "../../core/core";
 import {TreeView, TreeItem} from "@mui/x-tree-view";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import {LAYER_PREVIEW_SIZE, VisualizerShaderLayer} from "./visualizerShaderLayer";
-import {useStyles} from "./style";
-import {TooltipIconButton} from "./tooltipIconButton";
+import {useStyles} from "../style";
+import {TooltipIconButton} from "../tooltipIconButton";
 import Box from "@mui/material/Box";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddBoxIcon from "@mui/icons-material/AddBox";
 import FolderIcon from "@mui/icons-material/Folder";
 import {v4 as uuidv4} from "uuid";
 import MenuItem from "@mui/material/MenuItem";
-import { capCase } from "./textTransforms";
+import { capCase } from "../textTransforms";
 import Select from "@mui/material/Select";
 import Divider from "@mui/material/Divider";
-import {NumberInput} from "./numberInput";
+import {NumberInput} from "../numberInput";
 import Popover from "@mui/material/Popover";
 import Slider from "@mui/material/Slider";
 import {useDrag, useDrop} from "react-dnd";
-import {RaverieVisualizerCustom} from "./visualizerCustom";
-import {modalPropertyGrid} from "./modalPropertyGrid";
-import {generateGLSL, generateImage} from "./aiGeneration";
-import {spinner} from "./spinner";
-import {textureLayer} from "../core/layers/texture";
-import { PopMenu } from "./popMenu";
-import { MenuElement } from "./menuElement";
+import { RaverieVisualizerBrowser } from "../../core/browser";
+import {modalPropertyGrid} from "../modalPropertyGrid";
+import {generateGLSL, generateImage} from "../aiGeneration";
+import {spinner} from "../spinner";
+import {textureLayer} from "../../core/layers/texture";
+import { PopMenu } from "../popMenu";
+import { MenuElement } from "../menuElement";
 import {
   effectLayers,
   generatorLayers,
   sdfBooleanOperations,
   sdfModifiers,
   sdfShapes
-} from "../core/featuredLayers";
-import { sdfRayMarchingLayer } from "../core/layers/sdfRayMarching";
-import { emptyJavaScriptLayer } from "../core/layers/emptyJavaScript";
-import { emptyShaderLayer } from "../core/layers/emptyShader";
+} from "../../core/featuredLayers";
+import { sdfRayMarchingLayer } from "../../core/layers/sdfRayMarching";
+import { emptyJavaScriptLayer } from "../../core/layers/emptyJavaScript";
+import { emptyShaderLayer } from "../../core/layers/emptyShader";
 
 export interface VisualizerLayersProps {
-  visualizer: RaverieVisualizerCustom;
+  visualizer: RaverieVisualizerBrowser;
   compiledLayerRoot: CompiledLayerRoot;
   selectedLayer: CompiledLayer | null;
   onChangedRefresh: () => void;
@@ -234,7 +234,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
       let animationFrame = -1;
       const onUpdate = (time: DOMHighResTimeStamp) => {
         animationFrame = requestAnimationFrame(onUpdate);
-        if (visualizer.autoRender) {
+        if (context.autoRender) {
           if (!("idToLayer" in props.compiledLayerRoot) && !hasPrinted) {
             hasPrinted = true;
           }

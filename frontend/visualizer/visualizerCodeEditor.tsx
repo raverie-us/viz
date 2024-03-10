@@ -1,4 +1,4 @@
-import {CompiledLayerCode} from "../core/core";
+import {CompiledLayerCode} from "../../core/core";
 import React from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import {cpp} from "@codemirror/lang-cpp";

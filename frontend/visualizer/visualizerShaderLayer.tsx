@@ -1,9 +1,9 @@
 import Box from "@mui/material/Box";
 import React from "react";
-import {CompiledLayerJavaScript, CompiledLayerSDF, CompiledLayerShader} from "../core/core";
+import {CompiledLayerJavaScript, CompiledLayerSDF, CompiledLayerShader} from "../../core/core";
 import WarningIcon from "@mui/icons-material/Warning";
 import TerminalIcon from "@mui/icons-material/Terminal";
-import {TooltipIconButton} from "./tooltipIconButton";
+import {TooltipIconButton} from "../tooltipIconButton";
 import TextField from "@mui/material/TextField";
 import {useTheme} from "@mui/material/styles";
 

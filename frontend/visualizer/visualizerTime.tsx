@@ -1,6 +1,6 @@
 import React from "react";
-import {NumberInput} from "./numberInput";
-import {TimePoint, computeTimePointNow} from "./utility";
+import {NumberInput} from "../numberInput";
+import {TimePoint, computeTimePointNow} from "../utility";
 
 interface VisualizerTimeProps {
   timePoint: TimePoint;

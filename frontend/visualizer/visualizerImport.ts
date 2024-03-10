@@ -1,8 +1,8 @@
 import {readPsd, Layer as PsdLayer, Psd} from "ag-psd";
 import {v4 as uuidv4} from "uuid";
-import {defaultEmptyLayerGroup, defaultEmptyLayerRoot, Layer, LayerGroup, LayerRoot, LayerShader} from "../core/core";
-import {textureLayer} from "../core/layers/texture";
-import {fileToDataUrl} from "./utility";
+import {defaultEmptyLayerGroup, defaultEmptyLayerRoot, Layer, LayerGroup, LayerRoot, LayerShader} from "../../core/core";
+import {textureLayer} from "../../core/layers/texture";
+import {fileToDataUrl} from "../utility";
 
 const copyLayerProperties = (fromPsdLayer: PsdLayer, toLayer: Layer) => {
   toLayer.visible = !fromPsdLayer.hidden;

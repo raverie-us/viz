@@ -7,7 +7,7 @@ import {
   Layer,
   LayerRoot,
   RaverieVisualizer
-} from "../core/core";
+} from "../../core/core";
 import React from "react";
 import Box from "@mui/material/Box";
 import {useThrottleCallback} from "@react-hook/throttle";
@@ -15,20 +15,19 @@ import {VisualizerLayers} from "./visualizerLayers";
 import {VisualizerLayerProperties} from "./visualizerLayerProperties";
 import {VisualizerCodeEditor} from "./visualizerCodeEditor";
 import {LayoutBase, DockLayout, TabData} from "rc-dock";
-import "./visualizerDockPanelTheme.less";
 import {useVisualizer, VisualizerCanvas, VisualizerCanvasInterations} from "./visualizerCanvas";
-import {AppMenu} from "./appMenu";
-import {modalPropertyGrid} from "./modalPropertyGrid";
-import {spinner} from "./spinner";
-import {openFile, saveFile, saveFileUrl, cloneObject, sleep} from "./utility";
-import {Modal} from "./modal";
+import {AppMenu} from "../appMenu";
+import {modalPropertyGrid} from "../modalPropertyGrid";
+import {spinner} from "../spinner";
+import {openFile, saveFile, saveFileUrl, cloneObject, sleep} from "../utility";
+import {Modal} from "../modal";
 import {VisualizerExportVideo, VisualizerExportVideoSettings} from "./visualizerExportVideo";
 import {VisualizerExportImage, VisualizerExportImageSettings} from "./visualizerExportImage";
 import {convertImageToLayers, convertPSDToLayers} from "./visualizerImport";
-import {RaverieAudioAnalyserOffline} from "../core/browser";
+import {RaverieAudioAnalyserOffline} from "../../core/browser";
 import {v4 as uuidv4} from "uuid";
-import {setHasUnsavedChanges} from "./unload";
-import {h264Mp4EncoderPromise} from "./videoEncode";
+import {setHasUnsavedChanges} from "../unload";
+import {h264Mp4EncoderPromise} from "../videoEncode";
 
 const TAB_ID_LAYERS = "layers";
 const TAB_ID_PROPERTIES = "properties";

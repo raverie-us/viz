@@ -1,10 +1,10 @@
 import React from "react";
 import Box from "@mui/material/Box";
-import { LayoutBase, DockLayout, TabData, LayoutData } from "rc-dock";
-import "./visualizerDockPanelTheme.less";
+import { LayoutBase, DockLayout, TabData, LayoutData, PanelData, PanelBase } from "rc-dock";
+import "./dockPanelTheme.less";
 import { AppMenu } from "./appMenu";
 import { openFile, cloneObject } from "./utility";
-import { Meta, MetaCreateTabEvent } from "./meta";
+import { Meta, MetaTabEvent } from "./meta";
 
 const TAB_ID_WORKAREA = "workArea";
 const TAB_ID_LAYERS = "layers";
@@ -98,62 +98,56 @@ export const Environment: React.FC = () => {
       : mobileLayout));
 
   React.useEffect(() => {
-    Meta.instance.addEventListener(Meta.CREATE_TAB, ((event: MetaCreateTabEvent) => {
-      // event.mainWindow
-      const layoutFull = {...layout};
-      layoutFull.dockbox.children.push({
-        tabs: [
-          {
-            id: event.tabId
+    Meta.instance.addEventListener(Meta.OPEN_TAB, ((event: MetaTabEvent) => {
+      const dock = dockLayout.current;
+      if (!dock) {
+        return;
+      }
+      const tab = event.tab;
+
+      if (tab.tabType === "main") {
+        const workArea = dock.find(TAB_ID_WORKAREA) as PanelData;
+        const newTab = { id: tab.tabId } as TabData;
+        dock.dockMove(newTab, workArea, "middle");
+      } else {
+        // If we don't already have a window for this id, then we need to open a temporary one
+        const foundTab = dock.find(tab.tabId) as TabData | null;
+        if (foundTab) {
+          dock.dockMove(foundTab, null, "front");
+        } else {
+          let foundTab: TabData | null = null;
+          let foundHighestTabIndex = -1;
+
+          // Walk all possible tabs of the same type
+          for (const metaTab of tab.context.tabs) {
+            if (metaTab.tabType === tab.tabType) {
+              const found = dock.find(metaTab.tabId) as TabData | null;
+              if (found && found.parent) {
+                const tabIndex = found.parent.tabs.indexOf(found);
+                if (tabIndex > foundHighestTabIndex) {
+                  foundTab = found;
+                  foundHighestTabIndex = tabIndex;
+                }
+              }
+            }
           }
-        ]
-      });
-      setLayout(layoutFull);
+
+          const newTab = { id: tab.tabId } as TabData;
+
+          if (foundTab) {
+            dock.dockMove(newTab, foundTab, "after-tab");
+          } else {
+            const canvas = dock.find(tab.context.contextId);
+            if (canvas && canvas.parent) {
+              dock.dockMove(newTab, canvas.parent, "bottom");
+            } else {
+              dock.dockMove(newTab, tab.context.contextId, "bottom");
+            }
+          }
+        }
+      }
     }) as any);
   }, []);
-
-  //const onEditCode = (layerShader: CompiledLayerCode) => {
-  //  const dock = dockLayout.current;
-  //  if (!dock) {
-  //    return;
-  //  }
-  //  const id = layerShader.layer.id;
-  //
-  //  // If we don't already have a window for this id, then we need to open a temporary one
-  //  const foundTab = dock.find(id) as TabData | null;
-  //  if (foundTab) {
-  //    dock.dockMove(foundTab, null, "front");
-  //  } else {
-  //    let foundTab: TabData | null = null;
-  //    let foundHighestTabIndex = -1;
-  //
-  //    // Walk all possible code tabs
-  //    for (const id of Object.keys(compiledLayerRoot.idToLayer)) {
-  //      const found = dock.find(id) as TabData | null;
-  //
-  //      if (found && found.parent) {
-  //        const tabIndex = found.parent.tabs.indexOf(found);
-  //        if (tabIndex > foundHighestTabIndex) {
-  //          foundTab = found;
-  //          foundHighestTabIndex = tabIndex;
-  //        }
-  //      }
-  //    }
-  //
-  //    const newTab = {id} as TabData;
-  //
-  //    if (foundTab) {
-  //      dock.dockMove(newTab, foundTab, "after-tab");
-  //    } else {
-  //      const canvas = dock.find(TAB_ID_CANVAS);
-  //      if (canvas && canvas.parent) {
-  //        dock.dockMove(newTab, canvas.parent, "bottom");
-  //      } else {
-  //        dock.dockMove(newTab, TAB_ID_CANVAS, "bottom");
-  //      }
-  //    }
-  //  }
-  //};
 
   //React.useEffect(() => {
   //  if (editCodeForSelectedLayer && selectedLayer && (selectedLayer.type === "shader" || selectedLayer.type === "js")) {
@@ -275,10 +269,8 @@ export const Environment: React.FC = () => {
       ref={dockLayout}
       onLayoutChange={(newLayout) => {
         setLayout(newLayout);
-        console.log(newLayout);
       }}
       loadTab={(tab) => {
-        console.log("LOAD TAB", tab.id);
         if (!tab.id) {
           throw new Error("Empty tab id");
         }

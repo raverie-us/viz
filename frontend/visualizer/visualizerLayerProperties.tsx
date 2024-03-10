@@ -1,5 +1,5 @@
 import React from "react";
-import {CompiledLayer, CompiledUniform} from "../core/core";
+import {CompiledLayer, CompiledUniform} from "../../core/core";
 import {
   PropertyBase,
   PropertyGeneric,
@@ -13,8 +13,8 @@ import {
   PropertyEnum,
   PropertyButton,
   PropertyAxis
-} from "./propertyGrid";
-import {pass} from "./utility";
+} from "../propertyGrid";
+import {pass} from "../utility";
 
 export interface VisualizerLayerPropertiesProps {
   compiledLayer: CompiledLayer | null;

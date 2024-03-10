@@ -9,20 +9,25 @@ export interface MetaSelection {
 }
 
 export interface MetaTab {
+  context: MetaContext;
+  tabId: string;
+  tabType: MetaTabType;
   title: string;
   content: React.ReactElement;
 }
 
-export class MetaCreateTabEvent extends Event {
+export type MetaTabType = "main" | "code";
+
+export class MetaTabEvent extends Event {
   public constructor(
-    public mainWindow: boolean,
-    public tabId: string) {
-    super(Meta.CREATE_TAB);
+    public tab: MetaTab) {
+    super(Meta.OPEN_TAB);
   }
 }
 
 export class MetaContext {
-  public tabs: string[] = [];
+  public readonly contextId = uuidv4();
+  public tabs: MetaTab[] = [];
 
   public constructor(public readonly menuElements: MenuElement[]) {
   }
@@ -33,15 +38,12 @@ export class MetaContext {
   protected onCloseContext() {
   }
 
-  protected createMainTab(title: string, content: React.ReactElement): string {
-    if (this.tabs.length !== 0) {
-      throw new Error("Can only have one main tab, and it must be the first");
-    }
-    return Meta.instance.createTab(this, title, content, true);
+  protected openMainTab(title: string, content: React.ReactElement): string {
+    return Meta.instance.openTab(this, this.contextId, title, content, "main");
   }
 
-  protected createTab(title: string, content: React.ReactElement): string {
-    return Meta.instance.createTab(this, title, content, false);
+  protected openTab(uniqueName: string, title: string, content: React.ReactElement): string {
+    return Meta.instance.openTab(this, `${this.contextId}_${uniqueName}`, title, content, "code");
   }
 }
 
@@ -56,7 +58,7 @@ interface MetaFileLoaderInfo {
 export class Meta extends EventTarget {
   public static SELECTION_CHANGED = "sectionChanged";
   public static CONTEXT_CHANGED = "contextChanged";
-  public static CREATE_TAB = "createTab";
+  public static OPEN_TAB = "openTab";
 
   public selection: MetaSelection | null = null;
   public context: MetaContext | null = null;
@@ -67,16 +69,35 @@ export class Meta extends EventTarget {
 
   public readonly fileLoaders: MetaFileLoaderInfo[] = [];
 
-  public createTab(context: MetaContext, title: string, content: React.ReactElement, mainWindow: boolean): string {
-    const tabId = uuidv4();
-    context.tabs.push(tabId);
-    this.tabs[tabId] = {
+  public openTab(
+    context: MetaContext,
+    tabId: string,
+    title: string,
+    content: React.ReactElement,
+    tabType: MetaTabType): string {
+
+    if (tabType === "main") {
+      if (context.tabs.length !== 0) {
+        throw new Error("Can only have one main tab, and it must be the first");
+      }
+    } else {
+      if (context.tabs.length === 0) {
+        throw new Error("The first tab must be the main tab");
+      }
+    }
+
+    const metaTab: MetaTab = {
+      context,
+      tabId,
+      tabType,
       title,
       content
     };
-    Meta.instance.dispatchEvent(new MetaCreateTabEvent(
-      mainWindow,
-      tabId));
+    if (!this.tabs[tabId]) {
+      context.tabs.push(metaTab);
+    }
+    this.tabs[tabId] = metaTab;
+    Meta.instance.dispatchEvent(new MetaTabEvent(metaTab));
     return tabId;
   }
 
