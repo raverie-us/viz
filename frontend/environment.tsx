@@ -4,7 +4,7 @@ import { LayoutBase, DockLayout, TabData, LayoutData, PanelData, PanelBase } fro
 import "./dockPanelTheme.less";
 import { AppMenu } from "./appMenu";
 import { openFile, cloneObject } from "./utility";
-import { Meta, MetaTabEvent } from "./meta";
+import { Meta, MetaContext, MetaTabEvent } from "./meta";
 
 const TAB_ID_WORKAREA = "workArea";
 const TAB_ID_LAYERS = "layers";
@@ -88,6 +88,23 @@ const mobileLayout: LayoutBase = {
     ]
   }
 };
+
+export const getMetaContextFromTarget = (target: HTMLElement | null): MetaContext | null => {
+  const regex = /meta\(([^\)]+)\)/g;
+  while (target) {
+    const targetMatch = regex.exec(target.id);
+    if (targetMatch) {
+      const contextId = targetMatch[1];
+      const context = Meta.instance.contexts[contextId];
+      if (!context) {
+        throw new Error("Found an html element with a meta context id that doesn't exist");
+      }
+      return context;
+    }
+    target = target.parentElement;
+  }
+  return null;
+}
 
 export const Environment: React.FC = () => {
   const dockLayout = React.useRef<DockLayout>(null);
@@ -189,9 +206,9 @@ export const Environment: React.FC = () => {
       if (files.length !== 0) {
         event.preventDefault();
 
-        // TODO(trevor): Get the context of whatever window we dropped it over and activate it before calling doImport
+        const importContext = getMetaContextFromTarget(event.target as HTMLElement);
         for (const file of files) {
-          await Meta.instance.importFile(file, true);
+          await Meta.instance.importFile(file, importContext);
         }
       }
     };
@@ -221,7 +238,7 @@ export const Environment: React.FC = () => {
             onClick: async () => {
               const file = await openFile(fileTypeAccept);
               if (file) {
-                await Meta.instance.importFile(file, false);
+                await Meta.instance.importFile(file);
               }
             }
           },
@@ -230,7 +247,7 @@ export const Environment: React.FC = () => {
             onClick: async () => {
               const file = await openFile(fileTypeAccept);
               if (file) {
-                await Meta.instance.importFile(file, true);
+                await Meta.instance.importFile(file, Meta.instance.context);
               }
             }
           },
@@ -240,28 +257,6 @@ export const Environment: React.FC = () => {
               await Meta.instance.saveFile();
             }
           },
-        ]
-      },
-      {
-        name: "View",
-        menuElements: [
-          {
-            name: "Editor Layout",
-            menuElements: [
-              {
-                name: "Reset to Desktop Layout",
-                onClick: () => {
-                  setLayout(cloneObject(desktopLayout));
-                }
-              },
-              {
-                name: "Reset to Mobile Layout",
-                onClick: () => {
-                  setLayout(cloneObject(mobileLayout));
-                }
-              },
-            ]
-          }
         ]
       }
     ]} />

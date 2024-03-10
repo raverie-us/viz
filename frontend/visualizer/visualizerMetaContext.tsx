@@ -85,7 +85,7 @@ export class VisualizerMetaContext extends MetaContext {
   }
 }
 
-const fileLoader: MetaFileLoader<VisualizerMetaContext> = async (file, importContext?: VisualizerMetaContext) => {
+const fileLoader: MetaFileLoader<VisualizerMetaContext> = async (file, importContext?: VisualizerMetaContext | null) => {
   let newRoot: LayerRoot | null = null;
 
   if (file.type === "image/vnd.adobe.photoshop") {

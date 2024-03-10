@@ -30,24 +30,26 @@ export class MetaContext {
   public tabs: MetaTab[] = [];
 
   public constructor(public readonly menuElements: MenuElement[]) {
+    Meta.instance.contexts[this.contextId] = this;
   }
 
   protected onCloseTab(tabId: string) {
   }
 
   protected onCloseContext() {
+    delete Meta.instance.contexts[this.contextId];
   }
 
   protected openMainTab(title: string, content: React.ReactElement): string {
-    return Meta.instance.openTab(this, this.contextId, title, content, "main");
+    return Meta.instance.openTab(this, `meta(${this.contextId})`, title, content, "main");
   }
 
   protected openTab(uniqueName: string, title: string, content: React.ReactElement): string {
-    return Meta.instance.openTab(this, `${this.contextId}_${uniqueName}`, title, content, "code");
+    return Meta.instance.openTab(this, `${uniqueName}_meta(${this.contextId})`, title, content, "code");
   }
 }
 
-export type MetaFileLoader<T extends MetaContext> = (file: File, importContext?: T) => Promise<T | null>;
+export type MetaFileLoader<T extends MetaContext> = (file: File, importContext?: T | null) => Promise<T | null>;
 
 interface MetaFileLoaderInfo {
   type: "mime" | "extension";
@@ -63,6 +65,7 @@ export class Meta extends EventTarget {
   public selection: MetaSelection | null = null;
   public context: MetaContext | null = null;
 
+  public contexts: Record<string, MetaContext> = {};
   public tabs: Record<string, MetaTab> = {};
 
   public static instance = new Meta();
@@ -137,28 +140,22 @@ export class Meta extends EventTarget {
     });
   }
 
-  public async importFile(file: File, importIntoCurrentContext: boolean) {
-    // Need to handle file import
-    // Should be along the lines of:
-    //  - First, did you drop it over a specific window, if so get the context and let the context handle it
-    //  - If not, then let the current context handle it
-    //  - If the context does not handle it, invoke a generic file import (may open a new context)
-
+  public async importFile(file: File, importContext?: MetaContext | null) {
     let newContext: MetaContext | null = null;
     for (const fileLoader of this.fileLoaders) {
       switch (fileLoader.type) {
         case "mime":
           if (fileLoader.value.endsWith("/*")) {
             if (file.type.startsWith(fileLoader.value.substring(0, fileLoader.value.length - 1))) {
-              newContext = await fileLoader.loader(file);
+              newContext = await fileLoader.loader(file, importContext);
             }
           } else if (file.type === fileLoader.value) {
-            newContext = await fileLoader.loader(file);
+            newContext = await fileLoader.loader(file, importContext);
           }
           break;
         case "extension":
           if (file.name.endsWith(`.${fileLoader.value}`)) {
-            newContext = await fileLoader.loader(file);
+            newContext = await fileLoader.loader(file, importContext);
           }
           break;
       }
