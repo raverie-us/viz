@@ -59,19 +59,11 @@ const mobileLayout: LayoutBase = {
     mode: "vertical",
     children: [
       {
-        id: "workArea",
+        id: TAB_ID_WORKAREA,
         size: 400,
         mode: "vertical",
-        children: [
-          //{
-          //  id: "canvasPanel",
-          //  tabs: [
-          //    {
-          //      id: TAB_ID_CANVAS
-          //    }
-          //  ]
-          //}
-        ]
+        tabs: [],
+        children: []
       },
       {
         id: "layerAndPropertiesBox",
@@ -268,14 +260,6 @@ export const Environment: React.FC = () => {
       loadTab={(tab) => {
         if (!tab.id) {
           throw new Error("Empty tab id");
-        }
-
-        if (tab.id === TAB_ID_WORKAREA) {
-          return {
-            id: tab.id,
-            title: "Test",
-            content: <></>
-          };
         }
 
         if (tab.id === TAB_ID_LAYERS) {
