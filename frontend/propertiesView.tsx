@@ -2,17 +2,15 @@ import React from "react";
 import { Meta, MetaContext, MetaSelection } from "./meta";
 import { PropertyGrid } from "./propertyGrid";
 import Box from "@mui/material/Box";
-
-let changeCounter = 0;
+import {useRefresh} from "./useRefresh";
 
 export const PropertiesView: React.FC = () => {
   const [selection, setSelection] = React.useState<MetaSelection | null>(null);
-  const [, setChangeCounter] = React.useState(0);
+  const refresh = useRefresh();
 
   React.useEffect(() => {
     const onValuesChanged = (() => {
-      ++changeCounter;
-      setChangeCounter(changeCounter);
+      refresh();
     });
     const onSelectionChanged = (() => {
       setSelection(Meta.instance.selection);
