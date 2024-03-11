@@ -13,36 +13,35 @@ import {
   defaultEmptyLayerShader,
   CompiledLayerCode,
   CompiledLayerWithChildren,
-  CompiledLayerRoot,
   LayerShader,
-  canParentLayer
+  canParentLayer,
+  CompiledLayerRoot
 } from "../../core/core";
-import {TreeView, TreeItem} from "@mui/x-tree-view";
+import { TreeView, TreeItem } from "@mui/x-tree-view";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
-import {LAYER_PREVIEW_SIZE, VisualizerShaderLayer} from "./visualizerShaderLayer";
-import {useStyles} from "../style";
-import {TooltipIconButton} from "../tooltipIconButton";
+import { LAYER_PREVIEW_SIZE, VisualizerShaderLayer } from "./visualizerShaderLayer";
+import { useStyles } from "../style";
+import { TooltipIconButton } from "../tooltipIconButton";
 import Box from "@mui/material/Box";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddBoxIcon from "@mui/icons-material/AddBox";
 import FolderIcon from "@mui/icons-material/Folder";
-import {v4 as uuidv4} from "uuid";
+import { v4 as uuidv4 } from "uuid";
 import MenuItem from "@mui/material/MenuItem";
 import { capCase } from "../textTransforms";
 import Select from "@mui/material/Select";
 import Divider from "@mui/material/Divider";
-import {NumberInput} from "../numberInput";
+import { NumberInput } from "../numberInput";
 import Popover from "@mui/material/Popover";
 import Slider from "@mui/material/Slider";
-import {useDrag, useDrop} from "react-dnd";
-import { RaverieVisualizerBrowser } from "../../core/browser";
-import {modalPropertyGrid} from "../modalPropertyGrid";
-import {generateGLSL, generateImage} from "../aiGeneration";
-import {spinner} from "../spinner";
-import {textureLayer} from "../../core/layers/texture";
+import { useDrag, useDrop } from "react-dnd";
+import { modalPropertyGrid } from "../modalPropertyGrid";
+import { generateGLSL, generateImage } from "./visualizerAiGeneration";
+import { spinner } from "../spinner";
+import { textureLayer } from "../../core/layers/texture";
 import { PopMenu } from "../popMenu";
 import { MenuElement } from "../menuElement";
 import {
@@ -55,23 +54,20 @@ import {
 import { sdfRayMarchingLayer } from "../../core/layers/sdfRayMarching";
 import { emptyJavaScriptLayer } from "../../core/layers/emptyJavaScript";
 import { emptyShaderLayer } from "../../core/layers/emptyShader";
+import { CompiledLayerRootType, VisualizerMetaContext } from "./visualizerMetaContext";
+import { Meta, MetaType, instanceOfMetaType } from "../meta";
 
 export interface VisualizerLayersProps {
-  visualizer: RaverieVisualizerBrowser;
-  compiledLayerRoot: CompiledLayerRoot;
-  selectedLayer: CompiledLayer | null;
-  onChangedRefresh: () => void;
-  onChangedRecompile: () => void;
-  onLayerSelected: (id: string, editCode: boolean) => void;
-  onEditCode: (layerShader: CompiledLayerCode) => void;
+  context: VisualizerMetaContext;
+  //onEditCode: (layerShader: CompiledLayerCode) => void;
 }
 
 type LayerDropDirection = "above" | "into" | "below" | "invalid";
 
 interface VisualizerTreeItemProps {
+  context: VisualizerMetaContext;
   compiledLayer: CompiledLayer;
   parentVisible: boolean;
-  onChangedRefresh: () => void;
   onToggleExpand: () => void;
   onEditCode: (layerShader: CompiledLayerCode) => void;
   onOtherLayerDropped: (target: CompiledLayer, sourceToBeMoved: CompiledLayer, direction: LayerDropDirection) => void;
@@ -82,7 +78,7 @@ interface VisualizerTreeItemProps {
 const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
   const [dropDirection, setDropDirection] = React.useState<LayerDropDirection>("invalid");
   const ref = React.useRef<HTMLLIElement>(null);
-  const [{opacity}, dragRef] = useDrag(() => ({
+  const [{ opacity }, dragRef] = useDrag(() => ({
     type: "layer",
     item: props.compiledLayer,
     collect: (monitor) => ({
@@ -91,10 +87,10 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
   }), [props.compiledLayer]);
   dragRef(ref);
 
-  const [{isOver}, dropRef] = useDrop(() => ({
+  const [{ isOver }, dropRef] = useDrop(() => ({
     accept: "layer",
     drop: (item: CompiledLayer, monitor) => {
-      if (monitor.isOver({shallow: true})) {
+      if (monitor.isOver({ shallow: true })) {
         props.onOtherLayerDropped(props.compiledLayer, item, dropDirection);
       }
     },
@@ -136,7 +132,7 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
       }
     },
     collect: (monitor) => ({
-      isOver: monitor.isOver({shallow: true})
+      isOver: monitor.isOver({ shallow: true })
     })
   }), [dropDirection, props.compiledLayer, ref.current]);
   dropRef(ref);
@@ -148,21 +144,21 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
   const parentVisibleOpacity = props.parentVisible ? 1.0 : 0.5;
 
   const visibilityIcon =
-  <TooltipIconButton
-    tooltip="Toggle Visiblity"
-    size="small"
-    tooltipPlacement="left"
-    onClick={(e) => {
-      e.stopPropagation();
-      compiledLayer.layer.visible = !compiledLayer.layer.visible;
-      props.onChangedRefresh();
-    }}>
-    {
-      compiledLayer.layer.visible
-        ? <VisibilityIcon opacity={parentVisibleOpacity}/>
-        : <CheckBoxOutlineBlankIcon opacity={parentVisibleOpacity}/>
-    }
-  </TooltipIconButton>;
+    <TooltipIconButton
+      tooltip="Toggle Visiblity"
+      size="small"
+      tooltipPlacement="left"
+      onClick={(e) => {
+        e.stopPropagation();
+        compiledLayer.layer.visible = !compiledLayer.layer.visible;
+        props.context.valuesChanged();
+      }}>
+      {
+        compiledLayer.layer.visible
+          ? <VisibilityIcon opacity={parentVisibleOpacity} />
+          : <CheckBoxOutlineBlankIcon opacity={parentVisibleOpacity} />
+      }
+    </TooltipIconButton>;
 
   let boxShadow: string | null = null;
   if (isOver) {
@@ -182,7 +178,7 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
   const treeItemProps = {
     nodeId: id,
     ref,
-    sx: {opacity, boxShadow},
+    sx: { opacity, boxShadow },
     // MUI sets tabIndex to -1 which breaks drag and drop, so override it with undefined / default
     tabIndex: undefined
   };
@@ -192,11 +188,11 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
       return <TreeItem
         {...treeItemProps}
         icon={compiledLayer.layers.length === 0
-          ? <>{visibilityIcon}<FolderIcon opacity={0.54}/></>
+          ? <>{visibilityIcon}<FolderIcon opacity={0.54} /></>
           : null}
-        collapseIcon={<>{visibilityIcon}<ExpandMoreIcon opacity={0.54} onClick={props.onToggleExpand}/></>}
-        expandIcon={<>{visibilityIcon}<ChevronRightIcon opacity={0.54} onClick={props.onToggleExpand}/></>}
-        classes={{iconContainer: classes.visualizerGroupTreeItem}}
+        collapseIcon={<>{visibilityIcon}<ExpandMoreIcon opacity={0.54} onClick={props.onToggleExpand} /></>}
+        expandIcon={<>{visibilityIcon}<ChevronRightIcon opacity={0.54} onClick={props.onToggleExpand} /></>}
+        classes={{ iconContainer: classes.visualizerGroupTreeItem }}
         label={compiledLayer.layer.name}>
         {props.children}
       </TreeItem>;
@@ -204,21 +200,21 @@ const VisualizerTreeItem: React.FC<VisualizerTreeItemProps> = (props) => {
       return <TreeItem
         {...treeItemProps}
         icon={visibilityIcon}
-        classes={{iconContainer: classes.visualizerShaderLayerTreeItem}}
+        classes={{ iconContainer: classes.visualizerShaderLayerTreeItem }}
         label={<VisualizerShaderLayer
+          context={props.context}
           compiledLayerShader={compiledLayer}
           onPreviewCreated={props.onPreviewCreated}
           onPreviewDestroyed={props.onPreviewDestroyed}
-          onChangedRefresh={props.onChangedRefresh}
           onEditCode={() => {
             props.onEditCode(compiledLayer);
-          }}/>}>
+          }} />}>
         {props.children}
       </TreeItem>;
   }
 };
-let hasPrinted = false;
-export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
+
+export const VisualizerLayers: React.FC<VisualizerLayersProps> = ({ context }) => {
   const [previewContexts] = React.useState<Record<string, CanvasRenderingContext2D>>({});
   const addLayerMenuAnchor = React.useRef<HTMLElement>(null);
   const [addLayerMenuOpen, setAddLayerMenuOpen] = React.useState(false);
@@ -226,7 +222,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
   const [opacitySliderAnchor, setOpacitySliderAnchor] = React.useState<null | HTMLElement>(null);
   // Must be a layout effect or the animation frame could happen before the root is updated (using a bad deleted root)
   React.useLayoutEffect(() => {
-    const visualizer = props.visualizer;
+    const visualizer = context.visualizer;
     if (visualizer) {
       const renderTargets = visualizer.createRenderTargets(LAYER_PREVIEW_SIZE, LAYER_PREVIEW_SIZE);
 
@@ -235,11 +231,8 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
       const onUpdate = (time: DOMHighResTimeStamp) => {
         animationFrame = requestAnimationFrame(onUpdate);
         if (context.autoRender) {
-          if (!("idToLayer" in props.compiledLayerRoot) && !hasPrinted) {
-            hasPrinted = true;
-          }
           visualizer.renderLayerShaderPreviews(
-            props.compiledLayerRoot,
+            context.compiledLayerRoot,
             time,
             renderTargets,
             (compiledLayerShader, gl) => {
@@ -261,21 +254,27 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
       };
     }
     return undefined;
-  }, [props.visualizer, previewContexts, props.compiledLayerRoot]);
+  }, [context, previewContexts/*, context.compiledLayerRoot*/]);
 
   React.useEffect(() => {
-    let newlyExpandedNodes = false;
-    for (const id of Object.keys(props.compiledLayerRoot.idToLayer)) {
-      if (expandedIds[id] === undefined) {
-        // By default we expand all new ids
-        newlyExpandedNodes = true;
-        expandedIds[id] = true;
+    const onStructureChanged = () => {
+      let newlyExpandedNodes = false;
+      for (const id of Object.keys(context.compiledLayerRoot.idToLayer)) {
+        if (expandedIds[id] === undefined) {
+          // By default we expand all new ids
+          newlyExpandedNodes = true;
+          expandedIds[id] = true;
+        }
       }
+      if (newlyExpandedNodes) {
+        setExpandedIds({ ...expandedIds });
+      }
+    };
+    context.addEventListener(Meta.STRUCTURE_CHANGED, onStructureChanged);
+    return () => {
+      context.removeEventListener(Meta.STRUCTURE_CHANGED, onStructureChanged);
     }
-    if (newlyExpandedNodes) {
-      setExpandedIds({...expandedIds});
-    }
-  }, [props.compiledLayerRoot]);
+  }, []);
 
   const closeAddLayerMenu = () => {
     setAddLayerMenuOpen(false);
@@ -293,11 +292,12 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
 
       const toggleExpand = () => {
         expandedIds[id] = !expandedIds[id];
-        setExpandedIds({...expandedIds});
+        setExpandedIds({ ...expandedIds });
       };
 
       childLayers.push(<VisualizerTreeItem
         key={id}
+        context={context}
         compiledLayer={compiledLayer}
         parentVisible={parentVisible}
         onPreviewCreated={(id, context) => {
@@ -307,8 +307,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           delete previewContexts[id];
         }}
         onToggleExpand={toggleExpand}
-        onChangedRefresh={props.onChangedRefresh}
-        onEditCode={props.onEditCode}
+        onEditCode={() => 0} // TODO(trevor): Open a new code tab
         onOtherLayerDropped={(target, sourceToBeMoved, direction) => {
           // Don't allow moving over itself or invalid moves
           if (target === sourceToBeMoved || direction === "invalid") {
@@ -355,10 +354,10 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
             // Insert the layer either above or below the target
             targetParentLayers.splice(insertIndex, 0, sourceToBeMoved.layer as any);
           }
-          props.onChangedRecompile();
+          context.structureChanged();
         }}
       >
-        { compiledLayer.type === "group" || compiledLayer.type === "shader" || compiledLayer.type === "sdf"
+        {compiledLayer.type === "group" || compiledLayer.type === "shader" || compiledLayer.type === "sdf"
           ? createLayerNodes(compiledLayer, parentVisible && compiledLayer.layer.visible)
           : null
         }
@@ -367,35 +366,49 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
     return childLayers;
   };
 
-  const layerNodes = createLayerNodes(props.compiledLayerRoot, true);
-  const rootGroup = props.compiledLayerRoot.layer;
+  const layerNodes = createLayerNodes(context.compiledLayerRoot, true);
+  const rootGroup = context.compiledLayerRoot.layer;
+
+  const selectLayer = (compiledLayer: CompiledLayer | null) => {
+    Meta.instance.setSelection(compiledLayer
+      ? {
+        object: compiledLayer,
+        type: VisualizerMetaContext.createMetaType(compiledLayer)
+      }
+      : null, context);
+  };
+
+  const selectedLayer = Meta.instance.selectionDynamicCast<CompiledLayerRootType, CompiledLayerRoot>(CompiledLayerRootType);
 
   const addNewLayer = (layerToAdd: Layer, editCode: boolean) => {
-    if (addLayer(rootGroup, layerToAdd, props.selectedLayer?.layer.id)) {
-      props.onLayerSelected(layerToAdd.id, editCode);
-      props.onChangedRecompile();
+    
+    instanceOfMetaType(Meta.instance.selection?.type, CompiledLayerRootType);
+
+    if (addLayer(rootGroup, layerToAdd, selectedLayer?.layer.id)) {
+      context.structureChanged();
+      selectLayer(context.queryLayer(layerToAdd.id));
     }
   };
 
-  const blendMode: LayerBlendMode = props.selectedLayer && "blendMode" in props.selectedLayer.layer
-    ? props.selectedLayer.layer.blendMode
+  const blendMode: LayerBlendMode = selectedLayer && "blendMode" in selectedLayer.layer
+    ? selectedLayer.layer.blendMode
     : "normal";
 
-  const opacityPercent = props.selectedLayer && "opacity" in props.selectedLayer.layer
-    ? Math.floor(props.selectedLayer.layer.opacity * 100)
+  const opacityPercent = selectedLayer && "opacity" in selectedLayer.layer
+    ? Math.floor(selectedLayer.layer.opacity * 100)
     : 100;
 
   const updateOpacity = (newOpacityPercent: number) => {
-    if (props.selectedLayer && "opacity" in props.selectedLayer.layer) {
-      props.selectedLayer.layer.opacity = Math.min(Math.max(newOpacityPercent / 100, 0), 1);
-      props.onChangedRefresh();
+    if (selectedLayer && "opacity" in selectedLayer.layer) {
+      selectedLayer.layer.opacity = Math.min(Math.max(newOpacityPercent / 100, 0), 1);
+      context.valuesChanged();
     }
   };
 
-  const blendModeOptions = props.selectedLayer?.type === "group"
+  const blendModeOptions = selectedLayer?.type === "group"
     ? blendModeDisplayGroup
     : blendModeDisplay;
-  
+
   const layerToMenuElement = (layer: LayerCode): MenuElement => ({
     name: layer.name,
     onClick: () => {
@@ -417,14 +430,14 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           name: "AI Generated Shader",
           onClick: async () => {
             closeAddLayerMenu();
-    
+
             const result = await modalPropertyGrid({
               name: "Generate Shader From AI",
               object: {
                 prompt: ""
               }
             });
-    
+
             if (result.success) {
               spinner.show("AI Generating GLSL Shader...");
               try {
@@ -445,14 +458,14 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           name: "AI Generated Image",
           onClick: async () => {
             closeAddLayerMenu();
-    
+
             const result = await modalPropertyGrid({
               name: "Generate Image From AI",
               object: {
                 prompt: ""
               }
             });
-    
+
             if (result.success) {
               spinner.show("AI Generating Image...");
               try {
@@ -539,20 +552,20 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           size="small"
           value={blendMode}
           onChange={(e) => {
-            if (props.selectedLayer && "blendMode" in props.selectedLayer.layer) {
-              const layer = props.selectedLayer.layer;
+            if (selectedLayer && "blendMode" in selectedLayer.layer) {
+              const layer = selectedLayer.layer;
               layer.blendMode = e.target.value as LayerBlendMode;
-              props.onChangedRefresh();
+              context.valuesChanged();
             }
           }}
         >
           {blendModeOptions.map((blendMode, index) => blendMode === null
-            ? <Divider key={index}/>
+            ? <Divider key={index} />
             : <MenuItem key={index} value={blendMode}>{capCase(blendMode)}</MenuItem>)}
         </Select>
         <Box ml={1} mr="2px">Opacity:</Box>
         <NumberInput
-          sx={{width: "70px"}}
+          sx={{ width: "70px" }}
           value={opacityPercent}
           postfix="%"
           onChange={updateOpacity}
@@ -564,15 +577,15 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           onClick={(e) => {
             setOpacitySliderAnchor(e.target as HTMLElement);
           }}>
-          <ExpandMoreIcon/>
+          <ExpandMoreIcon />
         </TooltipIconButton>
         <Popover
-          sx={{overflow: "hidden"}}
+          sx={{ overflow: "hidden" }}
           open={Boolean(opacitySliderAnchor)}
           anchorEl={opacitySliderAnchor}
           onClose={closeOpacitySlider}
-          anchorOrigin={{vertical: "bottom", horizontal: "right"}}
-          transformOrigin={{vertical: "top", horizontal: "right"}}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
         >
           <Box width="100px" height="35px" ml={1.5} mr={1.5} mt={0.5} mb={0}>
             <Slider size="small" value={opacityPercent} min={0} max={100} onChange={(e, newValue) => {
@@ -584,9 +597,9 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
       </Box>
       <Box flexGrow={1} overflow="auto">
         <TreeView
-          selected={props.selectedLayer?.layer.id || ""}
+          selected={selectedLayer?.layer.id || ""}
           onNodeSelect={(e: any, id: string) => {
-            props.onLayerSelected(id, false);
+            selectLayer(context.queryLayer(id));
           }}
           expanded={Object.keys(expandedIds).filter((id) => expandedIds[id])}>
           {layerNodes}
@@ -594,17 +607,17 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
       </Box>
       <Box width="100%" display="flex" flexDirection="row-reverse">
         <TooltipIconButton tooltip="Delete" size="small" onClick={() => {
-          if (props.selectedLayer) {
-            removeLayer(rootGroup, props.selectedLayer.layer.id);
-            props.onChangedRecompile();
+          if (selectedLayer) {
+            removeLayer(rootGroup, selectedLayer.layer.id);
+            context.structureChanged();
           }
         }}>
-          <DeleteIcon/>
+          <DeleteIcon />
         </TooltipIconButton>
         <TooltipIconButton tooltip="New Layer" size="small" ref={addLayerMenuAnchor} onClick={(e) => {
           setAddLayerMenuOpen(true);
         }}>
-          <AddBoxIcon/>
+          <AddBoxIcon />
         </TooltipIconButton>
         <TooltipIconButton tooltip="New Folder" size="small" onClick={() => {
           const emptyLayer: LayerGroup = {
@@ -614,9 +627,9 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = (props) => {
           };
           addNewLayer(emptyLayer, false);
         }}>
-          <FolderIcon/>
+          <FolderIcon />
         </TooltipIconButton>
-        <Box flexGrow={1}/>
+        <Box flexGrow={1} />
       </Box>
     </Box>
     <PopMenu

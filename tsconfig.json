@@ -22,5 +22,5 @@
       "dist",
       "docker"
   ],
-  "files": ["./frontend/index.tsx"]
+  "files": ["./frontend/index.tsx", "./frontend/global.d.ts"]
 }

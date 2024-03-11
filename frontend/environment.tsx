@@ -5,9 +5,11 @@ import "./dockPanelTheme.less";
 import { AppMenu } from "./appMenu";
 import { openFile, cloneObject } from "./utility";
 import { Meta, MetaContext, MetaTabEvent } from "./meta";
+import { ObjectsView } from "./objectsView";
+import { PropertiesView } from "./propertiesView";
 
 const TAB_ID_WORKAREA = "workArea";
-const TAB_ID_LAYERS = "layers";
+const TAB_ID_OBJECTS = "objects";
 const TAB_ID_PROPERTIES = "properties";
 
 const APP_BAR_HEIGHT = "30px";
@@ -39,11 +41,11 @@ const desktopLayout: LayoutBase = {
             ]
           },
           {
-            id: "layersPanel",
+            id: "objectsPanel",
             size: 200,
             tabs: [
               {
-                id: TAB_ID_LAYERS
+                id: TAB_ID_OBJECTS
               }
             ]
           }
@@ -66,11 +68,11 @@ const mobileLayout: LayoutBase = {
         children: []
       },
       {
-        id: "layerAndPropertiesBox",
+        id: "objectAndPropertiesBox",
         size: 200,
         tabs: [
           {
-            id: TAB_ID_LAYERS
+            id: TAB_ID_OBJECTS
           },
           {
             id: TAB_ID_PROPERTIES
@@ -107,7 +109,7 @@ export const Environment: React.FC = () => {
       : mobileLayout));
 
   React.useEffect(() => {
-    Meta.instance.addEventListener(Meta.OPEN_TAB, ((event: MetaTabEvent) => {
+    const onOpenTab = ((event: MetaTabEvent) => {
       const dock = dockLayout.current;
       if (!dock) {
         return;
@@ -155,7 +157,11 @@ export const Environment: React.FC = () => {
           }
         }
       }
-    }) as any);
+    }) as any;
+    Meta.instance.addEventListener(Meta.OPEN_TAB, onOpenTab);
+    return () => {
+      Meta.instance.removeEventListener(Meta.OPEN_TAB, onOpenTab);
+    };
   }, []);
 
   //React.useEffect(() => {
@@ -262,11 +268,11 @@ export const Environment: React.FC = () => {
           throw new Error("Empty tab id");
         }
 
-        if (tab.id === TAB_ID_LAYERS) {
+        if (tab.id === TAB_ID_OBJECTS) {
           return {
             id: tab.id,
-            title: "Layers",
-            content: <></>
+            title: "Layers / Objects",
+            content: <ObjectsView/>
           };
         }
 
@@ -274,8 +280,7 @@ export const Environment: React.FC = () => {
           return {
             id: tab.id,
             title: "Properties",
-            content: <Box width="100%" height="100%" sx={{ overflowX: "hidden", overflowY: "auto" }} mb={1}>
-            </Box>
+            content: <PropertiesView/>
           };
         }
 

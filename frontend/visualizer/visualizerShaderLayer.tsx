@@ -6,14 +6,15 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import {TooltipIconButton} from "../tooltipIconButton";
 import TextField from "@mui/material/TextField";
 import {useTheme} from "@mui/material/styles";
+import { VisualizerMetaContext } from "./visualizerMetaContext";
 
 export const LAYER_PREVIEW_SIZE = 32;
 const LAYER_PREVIEW_SIZE_PX = `${LAYER_PREVIEW_SIZE}px`;
 
 export interface VisualizerShaderLayerProps {
+  context: VisualizerMetaContext;
   compiledLayerShader: CompiledLayerShader | CompiledLayerJavaScript | CompiledLayerSDF;
   onEditCode: () => void;
-  onChangedRefresh: () => void;
   onPreviewCreated: (id: string, context: CanvasRenderingContext2D) => void;
   onPreviewDestroyed: (id: string) => void;
 }
@@ -85,7 +86,7 @@ export const VisualizerShaderLayer: React.FC<VisualizerShaderLayerProps> = (prop
       }}
       onChange={(e) => {
         props.compiledLayerShader.layer.name = e.target.value;
-        props.onChangedRefresh();
+        props.context.valuesChanged();
       }}
     />
     <Box flexGrow={1}/>

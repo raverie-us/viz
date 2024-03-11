@@ -3,9 +3,24 @@ import { type PropertyGeneric } from "./propertyGrid";
 import { setHasUnsavedChanges } from "./unload";
 import { v4 as uuidv4 } from "uuid";
 
+export type MetaConstructor<T extends Object> = { new(): T };
+
+export interface MetaType {
+  classType: MetaConstructor<any>;
+  properties: PropertyGeneric[];
+};
+
+export const instanceOfMetaType =
+  <T extends Object,>(toCheck: MetaType | null | undefined, baseType: MetaConstructor<T>): boolean => {
+    if (!toCheck) {
+      return false;
+    }
+    return toCheck.classType === baseType || toCheck.classType.prototype instanceof baseType;
+  }
+
 export interface MetaSelection {
   object: any;
-  properties: PropertyGeneric[];
+  type: MetaType;
 }
 
 export interface MetaTab {
@@ -25,12 +40,31 @@ export class MetaTabEvent extends Event {
   }
 }
 
-export class MetaContext {
+export class MetaContext extends EventTarget {
+
   public readonly contextId = uuidv4();
   public tabs: MetaTab[] = [];
 
   public constructor(public readonly menuElements: MenuElement[]) {
+    super();
     Meta.instance.contexts[this.contextId] = this;
+  }
+
+  public structureChanged() {
+    this.dispatchEvent(new Event(Meta.STRUCTURE_CHANGED));
+    if (Meta.instance.context === this) {
+      Meta.instance.dispatchEvent(new Event(Meta.STRUCTURE_CHANGED));
+    }
+  }
+  public valuesChanged() {
+    this.dispatchEvent(new Event(Meta.VALUES_CHANGED));
+    if (Meta.instance.context === this) {
+      Meta.instance.dispatchEvent(new Event(Meta.VALUES_CHANGED));
+    }
+  }
+
+  public get objectsView(): React.ReactElement | null {
+    return null;
   }
 
   protected onCloseTab(tabId: string) {
@@ -62,6 +96,10 @@ export class Meta extends EventTarget {
   public static CONTEXT_CHANGED = "contextChanged";
   public static OPEN_TAB = "openTab";
 
+  // Meta context events
+  public static STRUCTURE_CHANGED = "structureChanged";
+  public static VALUES_CHANGED = "valuesChanged";
+
   public selection: MetaSelection | null = null;
   public context: MetaContext | null = null;
 
@@ -71,6 +109,17 @@ export class Meta extends EventTarget {
   public static instance = new Meta();
 
   public readonly fileLoaders: MetaFileLoaderInfo[] = [];
+
+  public selectionInstanceOfMetaType(baseType: MetaConstructor<any>): boolean {
+    return instanceOfMetaType(this.selection?.type, baseType);
+  }
+
+  public selectionDynamicCast<T extends Object, TInterface = T>(baseType: MetaConstructor<T>): TInterface | null {
+    if (this.selection && this.selectionInstanceOfMetaType(baseType)) {
+      return this.selection.object as TInterface;
+    }
+    return null;
+  }
 
   public openTab(
     context: MetaContext,
@@ -112,12 +161,13 @@ export class Meta extends EventTarget {
     this.dispatchEvent(new Event(Meta.CONTEXT_CHANGED));
   }
 
-  public setSelection(selection: MetaSelection, context: MetaContext) {
+  public setSelection(selection: MetaSelection | null, context: MetaContext) {
     this.setContext(context);
 
-    if (this.selection === selection || this.selection?.object === selection.object) {
+    if (this.selection === selection || this.selection?.object === selection?.object) {
       return;
     }
+    this.selection = selection;
     this.dispatchEvent(new Event(Meta.SELECTION_CHANGED));
   }
 

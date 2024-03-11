@@ -16,11 +16,6 @@ import {
 } from "../propertyGrid";
 import {pass} from "../utility";
 
-export interface VisualizerLayerPropertiesProps {
-  compiledLayer: CompiledLayer | null;
-  onChanged: () => void;
-}
-
 const uniformToProperty = (uniform: CompiledUniform): PropertyGeneric => {
   const type = uniform.type;
 
@@ -143,10 +138,9 @@ const uniformToProperty = (uniform: CompiledUniform): PropertyGeneric => {
   throw new Error(`Unexpected uniform type '${type}'`);
 };
 
-export const VisualizerLayerProperties: React.FC<VisualizerLayerPropertiesProps> = (props) => {
-  if (props.compiledLayer === null || props.compiledLayer.type === "group") {
-    return null;
+export const propertiesFromCompiledLayer = (compiledLayer: CompiledLayer): PropertyGeneric[] => {
+  if (compiledLayer === null || compiledLayer.type === "group") {
+    return [];
   }
-
-  return <PropertyGrid properties={props.compiledLayer.uniforms.map(uniformToProperty)} onChanged={props.onChanged}/>;
-};
+  return compiledLayer.uniforms.map(uniformToProperty);
+}

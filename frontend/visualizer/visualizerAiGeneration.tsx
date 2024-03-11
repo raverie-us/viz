@@ -1,4 +1,4 @@
-import aiPromptGLSL from "./aiPromptGLSL.txt";
+import aiPromptGLSL from "./visualizerAiPromptGLSL.txt";
 
 const OPENAI_API_KEY = "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";
 const OPENAI_ORG_KEY = "org-fOy80wD4goyZzQNVqywahJYq";
