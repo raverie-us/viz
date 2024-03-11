@@ -60,10 +60,18 @@ export class VisualizerMetaContext extends MetaContext {
     offsetTimeMs: 0
   };
 
-  public static createMetaType(compiledLayer: CompiledLayer): MetaType {
+  public createMetaType(compiledLayer: CompiledLayer): MetaType {
     return {
       classType: CompiledLayerType,
-      properties: propertiesFromCompiledLayer(compiledLayer)
+      properties: propertiesFromCompiledLayer(compiledLayer),
+      resolveHandle: (handle: any) => {
+        // Since the core of viz clears out any previously compiled layers that are no longer used
+        // we can rely on the fact that the "type" field no longer exists
+        if ("type" in handle) {
+          return handle;
+        }
+        return null;
+      }
     };
   }
 
@@ -92,8 +100,8 @@ export class VisualizerMetaContext extends MetaContext {
     Meta.instance.selection = compiledLayer
       ? {
         context: this,
-        object: compiledLayer,
-        type: VisualizerMetaContext.createMetaType(compiledLayer)
+        handle: compiledLayer,
+        type: this.createMetaType(compiledLayer)
       }
       : null;
   }

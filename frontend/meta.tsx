@@ -8,6 +8,7 @@ export type MetaConstructor<T extends Object> = { new(): T };
 export interface MetaType {
   classType: MetaConstructor<any>;
   properties: PropertyGeneric[];
+  resolveHandle: (handle: any) => {} | null;
 };
 
 export const instanceOfMetaType =
@@ -19,7 +20,7 @@ export const instanceOfMetaType =
   }
 
 export interface MetaSelection {
-  object: any;
+  handle: any;
   context: MetaContext;
   type: MetaType;
 }
@@ -113,17 +114,6 @@ export class Meta extends EventTarget {
 
   public readonly fileLoaders: MetaFileLoaderInfo[] = [];
 
-  public selectionInstanceOfMetaType(baseType: MetaConstructor<any>): boolean {
-    return instanceOfMetaType(this.selectionInternal?.type, baseType);
-  }
-
-  public selectionDynamicCast<T extends Object, TInterface = T>(baseType: MetaConstructor<T>): TInterface | null {
-    if (this.selectionInternal && this.selectionInstanceOfMetaType(baseType)) {
-      return this.selectionInternal.object as TInterface;
-    }
-    return null;
-  }
-
   public openTab(
     context: MetaContext,
     tabId: string,
@@ -169,7 +159,13 @@ export class Meta extends EventTarget {
   }
 
   public get selection(): MetaSelection | null {
-    return this.selectionInternal;
+    const selection = this.selectionInternal;
+    if (selection) {
+      if (selection.type.resolveHandle(selection.handle)) {
+        return selection;
+      }
+    }
+    return null;
   }
 
   public set selection(selection: MetaSelection | null) {
@@ -177,11 +173,23 @@ export class Meta extends EventTarget {
       this.context = selection.context;
     }
 
-    if (this.selectionInternal === selection || this.selectionInternal?.object === selection?.object) {
+    if (this.selectionInternal === selection) {
       return;
     }
     this.selectionInternal = selection;
     this.dispatchEvent(new Event(Meta.SELECTION_CHANGED));
+  }
+
+  public selectionInstanceOfMetaType(baseType: MetaConstructor<any>): boolean {
+    return instanceOfMetaType(this.selection?.type, baseType);
+  }
+
+  public selectionDynamicCast<T extends Object, TInterface = T>(baseType: MetaConstructor<T>): TInterface | null {
+    const selection = this.selection;
+    if (selection && this.selectionInstanceOfMetaType(baseType)) {
+      return selection.type.resolveHandle(selection.handle) as TInterface;
+    }
+    return null;
   }
 
   public registerFileType<T extends MetaContext>(mimeType: string, loader: MetaFileLoader<T>) {
