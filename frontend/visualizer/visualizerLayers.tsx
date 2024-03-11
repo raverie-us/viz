@@ -54,8 +54,8 @@ import {
 import { sdfRayMarchingLayer } from "../../core/layers/sdfRayMarching";
 import { emptyJavaScriptLayer } from "../../core/layers/emptyJavaScript";
 import { emptyShaderLayer } from "../../core/layers/emptyShader";
-import { CompiledLayerRootType, VisualizerMetaContext } from "./visualizerMetaContext";
-import { Meta, MetaType, instanceOfMetaType } from "../meta";
+import { VisualizerMetaContext } from "./visualizerMetaContext";
+import { Meta } from "../meta";
 
 export interface VisualizerLayersProps {
   context: VisualizerMetaContext;
@@ -284,7 +284,6 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = ({ context }) =
     setOpacitySliderAnchor(null);
   };
 
-  const classes = useStyles();
   const createLayerNodes = (parent: CompiledLayerWithChildren, parentVisible: boolean): React.ReactNode[] => {
     const childLayers: React.ReactNode[] = [];
     for (const compiledLayer of parent.layers) {
@@ -369,24 +368,12 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = ({ context }) =
   const layerNodes = createLayerNodes(context.compiledLayerRoot, true);
   const rootGroup = context.compiledLayerRoot.layer;
 
-  const selectLayer = (compiledLayer: CompiledLayer | null) => {
-    Meta.instance.setSelection(compiledLayer
-      ? {
-        object: compiledLayer,
-        type: VisualizerMetaContext.createMetaType(compiledLayer)
-      }
-      : null, context);
-  };
-
-  const selectedLayer = Meta.instance.selectionDynamicCast<CompiledLayerRootType, CompiledLayerRoot>(CompiledLayerRootType);
+  const selectedLayer = context.layerSelection;
 
   const addNewLayer = (layerToAdd: Layer, editCode: boolean) => {
-    
-    instanceOfMetaType(Meta.instance.selection?.type, CompiledLayerRootType);
-
     if (addLayer(rootGroup, layerToAdd, selectedLayer?.layer.id)) {
       context.structureChanged();
-      selectLayer(context.queryLayer(layerToAdd.id));
+      context.layerSelection = layerToAdd.id;
     }
   };
 
@@ -599,7 +586,7 @@ export const VisualizerLayers: React.FC<VisualizerLayersProps> = ({ context }) =
         <TreeView
           selected={selectedLayer?.layer.id || ""}
           onNodeSelect={(e: any, id: string) => {
-            selectLayer(context.queryLayer(id));
+            context.layerSelection = id;
           }}
           expanded={Object.keys(expandedIds).filter((id) => expandedIds[id])}>
           {layerNodes}

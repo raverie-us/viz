@@ -20,6 +20,7 @@ export const instanceOfMetaType =
 
 export interface MetaSelection {
   object: any;
+  context: MetaContext;
   type: MetaType;
 }
 
@@ -44,8 +45,9 @@ export class MetaContext extends EventTarget {
 
   public readonly contextId = uuidv4();
   public tabs: MetaTab[] = [];
+  public menuElements: MenuElement[] = [];
 
-  public constructor(public readonly menuElements: MenuElement[]) {
+  public constructor() {
     super();
     Meta.instance.contexts[this.contextId] = this;
   }
@@ -56,6 +58,7 @@ export class MetaContext extends EventTarget {
       Meta.instance.dispatchEvent(new Event(Meta.STRUCTURE_CHANGED));
     }
   }
+
   public valuesChanged() {
     this.dispatchEvent(new Event(Meta.VALUES_CHANGED));
     if (Meta.instance.context === this) {
@@ -100,8 +103,8 @@ export class Meta extends EventTarget {
   public static STRUCTURE_CHANGED = "structureChanged";
   public static VALUES_CHANGED = "valuesChanged";
 
-  public selection: MetaSelection | null = null;
-  public context: MetaContext | null = null;
+  private selectionInternal: MetaSelection | null = null;
+  private contextInternal: MetaContext | null = null;
 
   public contexts: Record<string, MetaContext> = {};
   public tabs: Record<string, MetaTab> = {};
@@ -111,12 +114,12 @@ export class Meta extends EventTarget {
   public readonly fileLoaders: MetaFileLoaderInfo[] = [];
 
   public selectionInstanceOfMetaType(baseType: MetaConstructor<any>): boolean {
-    return instanceOfMetaType(this.selection?.type, baseType);
+    return instanceOfMetaType(this.selectionInternal?.type, baseType);
   }
 
   public selectionDynamicCast<T extends Object, TInterface = T>(baseType: MetaConstructor<T>): TInterface | null {
-    if (this.selection && this.selectionInstanceOfMetaType(baseType)) {
-      return this.selection.object as TInterface;
+    if (this.selectionInternal && this.selectionInstanceOfMetaType(baseType)) {
+      return this.selectionInternal.object as TInterface;
     }
     return null;
   }
@@ -153,21 +156,31 @@ export class Meta extends EventTarget {
     return tabId;
   }
 
-  public setContext(context: MetaContext) {
-    if (this.context === context) {
+  public get context(): MetaContext | null {
+    return this.contextInternal;
+  }
+
+  public set context(context: MetaContext) {
+    if (this.contextInternal === context) {
       return;
     }
-    this.context = context;
+    this.contextInternal = context;
     this.dispatchEvent(new Event(Meta.CONTEXT_CHANGED));
   }
 
-  public setSelection(selection: MetaSelection | null, context: MetaContext) {
-    this.setContext(context);
+  public get selection(): MetaSelection | null {
+    return this.selectionInternal;
+  }
 
-    if (this.selection === selection || this.selection?.object === selection?.object) {
+  public set selection(selection: MetaSelection | null) {
+    if (selection) {
+      this.context = selection.context;
+    }
+
+    if (this.selectionInternal === selection || this.selectionInternal?.object === selection?.object) {
       return;
     }
-    this.selection = selection;
+    this.selectionInternal = selection;
     this.dispatchEvent(new Event(Meta.SELECTION_CHANGED));
   }
 
@@ -212,7 +225,7 @@ export class Meta extends EventTarget {
     }
 
     if (newContext) {
-      this.setContext(newContext);
+      this.context = newContext;
     }
   };
 

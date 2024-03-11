@@ -7,6 +7,7 @@ import { openFile, cloneObject } from "./utility";
 import { Meta, MetaContext, MetaTabEvent } from "./meta";
 import { ObjectsView } from "./objectsView";
 import { PropertiesView } from "./propertiesView";
+import { MenuElement, mergeMenuElements } from "./menuElement";
 
 const TAB_ID_WORKAREA = "workArea";
 const TAB_ID_OBJECTS = "objects";
@@ -100,6 +101,49 @@ export const getMetaContextFromTarget = (target: HTMLElement | null): MetaContex
   return null;
 }
 
+const fileTypeAccept = ".rvis, .viz, .psd, image/vnd.adobe.photoshop, image/*";
+const canImport = (file?: File | null | undefined) => {
+  if (!file || file.size === 0) {
+    return false;
+  }
+  return file.type === "image/vnd.adobe.photoshop" ||
+    file.type.startsWith("image/") ||
+    file.name.endsWith(".viz") ||
+    file.name.endsWith(".rvis");
+}
+
+const baseMenuElements: MenuElement[] = [
+  {
+    name: "File",
+    menuElements: [
+      {
+        name: "Open",
+        onClick: async () => {
+          const file = await openFile(fileTypeAccept);
+          if (file) {
+            await Meta.instance.importFile(file);
+          }
+        }
+      },
+      {
+        name: "Import",
+        onClick: async () => {
+          const file = await openFile(fileTypeAccept);
+          if (file) {
+            await Meta.instance.importFile(file, Meta.instance.context);
+          }
+        }
+      },
+      {
+        name: "Save",
+        onClick: async () => {
+          await Meta.instance.saveFile();
+        }
+      },
+    ]
+  }
+];
+
 export const Environment: React.FC = () => {
   const dockLayout = React.useRef<DockLayout>(null);
   const aspectRatio = window.innerWidth / window.innerHeight;
@@ -107,6 +151,7 @@ export const Environment: React.FC = () => {
     aspectRatio > 1.0
       ? desktopLayout
       : mobileLayout));
+  const [menuElements, setMenuElements] = React.useState<MenuElement[]>(baseMenuElements);
 
   React.useEffect(() => {
     const onOpenTab = ((event: MetaTabEvent) => {
@@ -164,6 +209,17 @@ export const Environment: React.FC = () => {
     };
   }, []);
 
+
+  React.useEffect(() => {
+    const onContextChanged = () => {
+      setMenuElements(mergeMenuElements(baseMenuElements, Meta.instance.context?.menuElements || []));
+    };
+    Meta.instance.addEventListener(Meta.CONTEXT_CHANGED, onContextChanged);
+    return () => {
+      Meta.instance.removeEventListener(Meta.CONTEXT_CHANGED, onContextChanged);
+    };
+  }, []);
+
   //React.useEffect(() => {
   //  if (editCodeForSelectedLayer && selectedLayer && (selectedLayer.type === "shader" || selectedLayer.type === "js")) {
   //    // We have to delay this by one frame because we update the
@@ -179,18 +235,6 @@ export const Environment: React.FC = () => {
   //  }
   //  return undefined;
   //}, [editCodeForSelectedLayer, selectedLayer]);
-
-
-  const fileTypeAccept = ".rvis, .viz, .psd, image/vnd.adobe.photoshop, image/*";
-  const canImport = (file?: File | null | undefined) => {
-    if (!file || file.size === 0) {
-      return false;
-    }
-    return file.type === "image/vnd.adobe.photoshop" ||
-      file.type.startsWith("image/") ||
-      file.name.endsWith(".viz") ||
-      file.name.endsWith(".rvis");
-  }
 
   React.useEffect(() => {
     const onDrop = async (event: DragEvent) => {
@@ -225,39 +269,8 @@ export const Environment: React.FC = () => {
     };
   }, []);
 
-
   return <Box display="contents">
-    <AppMenu sx={{ height: APP_BAR_HEIGHT }} menuElements={[
-      {
-        name: "File",
-        menuElements: [
-          {
-            name: "Open",
-            onClick: async () => {
-              const file = await openFile(fileTypeAccept);
-              if (file) {
-                await Meta.instance.importFile(file);
-              }
-            }
-          },
-          {
-            name: "Import",
-            onClick: async () => {
-              const file = await openFile(fileTypeAccept);
-              if (file) {
-                await Meta.instance.importFile(file, Meta.instance.context);
-              }
-            }
-          },
-          {
-            name: "Save",
-            onClick: async () => {
-              await Meta.instance.saveFile();
-            }
-          },
-        ]
-      }
-    ]} />
+    <AppMenu sx={{ height: APP_BAR_HEIGHT }} menuElements={menuElements} />
     <DockLayout
       ref={dockLayout}
       onLayoutChange={(newLayout) => {

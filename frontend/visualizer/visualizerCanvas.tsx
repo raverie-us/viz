@@ -21,14 +21,17 @@ export interface VisualizerCanvasInterations {
   pixelToPixel(): void;
 }
 
+export type VisualizerCanvasInterationsRef = React.MutableRefObject<VisualizerCanvasInterations | undefined>;
+
 export interface VisualizerCanvasProps {
   context: VisualizerMetaContext;
+  canvasInteractionsOut: VisualizerCanvasInterationsRef;
 }
 
 const AUDIO_INPUT_NOTIFICATION_KEY = "audioInputNotification";
 type AudioNotificationState = "none" | "visible" | "complete";
 
-export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({context}) => {
+export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({context, canvasInteractionsOut}) => {
 
   // Basically we need to listen to all changes on the meta context
   // We need to be self contained, we don't want to have to rely on updating the dock layout
@@ -104,19 +107,19 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({context}) => 
     }
   });
 
-  //React.useEffect(() => {
-  //  const zoomIn = () => zoomPanPinch.current?.zoomIn();
-  //  const zoomOut = () => zoomPanPinch.current?.zoomOut();
-  //  const fitTheArea = () => fitTheAreaInternal(screenWidth, screenHeight, true);
-  //  const pixelToPixel = () => zoomPanPinch.current?.centerView(1);
-//
-  //  props.refOut.current = {
-  //    zoomIn,
-  //    zoomOut,
-  //    fitTheArea,
-  //    pixelToPixel
-  //  };
-  //}, [zoomPanPinch.current, screenWidth, screenHeight, layerWidth, layerHeight, props.refOut]);
+  React.useEffect(() => {
+    const zoomIn = () => zoomPanPinch.current?.zoomIn();
+    const zoomOut = () => zoomPanPinch.current?.zoomOut();
+    const fitTheArea = () => fitTheAreaInternal(screenWidth, screenHeight, true);
+    const pixelToPixel = () => zoomPanPinch.current?.centerView(1);
+
+    canvasInteractionsOut.current = {
+      zoomIn,
+      zoomOut,
+      fitTheArea,
+      pixelToPixel
+    };
+  }, [zoomPanPinch.current, screenWidth, screenHeight, layerWidth, layerHeight, canvasInteractionsOut]);
 
   React.useEffect(() => {
     if (canvasParentRef.current) {
