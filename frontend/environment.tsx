@@ -269,6 +269,19 @@ export const Environment: React.FC = () => {
     };
   }, []);
 
+  React.useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const context = getMetaContextFromTarget(e.target as HTMLElement);
+      if (context) {
+        Meta.instance.context = context;
+      }
+    };
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("click", onClick, true);
+    };
+  }, []);
+
   return <Box display="contents">
     <AppMenu sx={{ height: APP_BAR_HEIGHT }} menuElements={menuElements} />
     <DockLayout
